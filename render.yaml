@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vrindavan-estates-crm-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        value: https://rxfopkfocniynlyijpox.supabase.co
+      - key: SUPABASE_KEY
+        value: sb_publishable_V4pq11-uAuTzySbBv-q9pg_RGvGbet4

@@ -1,0 +1,15 @@
+{
+  "name": "vrindavan-estates-crm",
+  "version": "1.0.0",
+  "description": "Vrindavan Estates CRM Project",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend",
+    "start:backend": "npm start --prefix backend",
+    "start:frontend": "npm run dev --prefix frontend"
+  }
+}

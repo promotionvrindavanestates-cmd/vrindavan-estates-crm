@@ -1,0 +1,82 @@
+{
+  "users": [
+    {
+      "id": "admin-id-1",
+      "username": "admin",
+      "password_hash": "$2a$10$duf2.Cgb9qdFkR5FGWgYQe6uLFcQExcHep.UHWXjrnSdmtCEbizsu",
+      "role": "admin",
+      "full_name": "Vrindavan Admin",
+      "phone": "9999999999",
+      "created_at": "2026-06-19T04:23:44.568Z"
+    },
+    {
+      "id": "employee-id-1",
+      "username": "employee",
+      "password_hash": "$2a$10$duf2.Cgb9qdFkR5FGWgYQeCMct.izQCaNPt6FXSUaga./YxMXx3iC",
+      "role": "employee",
+      "full_name": "Gopal Sharma",
+      "phone": "8888888888",
+      "created_at": "2026-06-19T04:23:44.569Z"
+    },
+    {
+      "id": "9vvehra3nx5sdevp1liqoh",
+      "username": "kajal51",
+      "password_hash": "$2a$10$xxMXeK0YGaYDgNwf4kWwY.t77LacMYoToF9RUaw94WPH/PoK6vwvq",
+      "role": "employee",
+      "full_name": "KAJAL SHARMA",
+      "phone": "7037033351",
+      "created_at": "2026-06-19T04:26:03.609Z"
+    }
+  ],
+  "leads": [
+    {
+      "id": "lead-id-1",
+      "created_at": "2026-06-19T04:23:44.569Z",
+      "name": "Rajesh Kumar",
+      "city": "Delhi",
+      "phone1": "9876543210",
+      "phone2": "9876543211",
+      "budget": "50-70 Lakhs",
+      "project": "Vrindavan Heights",
+      "requirement": "Looking for a 2 BHK apartment near Temple area.",
+      "comments": "Interested in early possession.",
+      "status": "Hot",
+      "follow_up_date": "2026-06-19",
+      "assigned_employee_id": "employee-id-1",
+      "lead_source": "Facebook Ads",
+      "last_call_date": "2026-06-19T04:23:44.569Z",
+      "last_response": "Interested",
+      "site_visit_date": null,
+      "site_visit_status": "None",
+      "site_visit_remarks": "",
+      "booking_token_amount": 0,
+      "booking_date": null,
+      "booking_status": "None"
+    },
+    {
+      "id": "lead-id-2",
+      "created_at": "2026-06-19T04:23:44.569Z",
+      "name": "Aarti Sharma",
+      "city": "Mathura",
+      "phone1": "9988776655",
+      "phone2": "",
+      "budget": "1.2-1.5 Crore",
+      "project": "Krishna County Villas",
+      "requirement": "3 BHK Villa, east facing.",
+      "comments": "Requested brochure and site layout map.",
+      "status": "Warm",
+      "follow_up_date": "2026-06-20",
+      "assigned_employee_id": "employee-id-1",
+      "lead_source": "Google Ads",
+      "last_call_date": "2026-06-19T04:23:44.569Z",
+      "last_response": "Connected",
+      "site_visit_date": null,
+      "site_visit_status": "None",
+      "site_visit_remarks": "",
+      "booking_token_amount": 0,
+      "booking_date": null,
+      "booking_status": "None"
+    }
+  ],
+  "call_logs": []
+}
