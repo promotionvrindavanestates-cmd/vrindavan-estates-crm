@@ -63,6 +63,14 @@ async function runTests() {
   await testEndpoint('/api/whatsapp/templates');
   await testEndpoint('/api/activities/recent');
   await testEndpoint('/api/payments');
+  
+  const empRes = await testEndpoint('/api/employees');
+  if (empRes.ok && Array.isArray(empRes.data) && empRes.data.length > 0) {
+    const testEmpId = empRes.data[0].id;
+    await testEndpoint(`/api/employees/${testEmpId}/performance`);
+  } else {
+    console.log('⚠️ [SKIP] Skipping employee performance test: No employees found');
+  }
 }
 
 runTests();
