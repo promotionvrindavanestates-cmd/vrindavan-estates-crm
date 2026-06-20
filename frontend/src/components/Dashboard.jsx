@@ -171,11 +171,11 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
           {stats && stats.funnel ? (
             (() => {
               const funnelStages = [
-                { key: 'new', label: 'New Inquiries', count: stats.funnel.new, color: '#6366f1', description: 'Fresh incoming leads' },
-                { key: 'contacted', label: 'Contacted / Engaged', count: stats.funnel.contacted, color: '#06b6d4', description: 'Calls made & warm prospects' },
-                { key: 'visit', label: 'Site Visits', count: stats.funnel.visit, color: '#f59e0b', description: 'Visits scheduled or done' },
-                { key: 'negotiation', label: 'Negotiations', count: stats.funnel.negotiation, color: '#ec4899', description: 'Hot leads in discussions' },
-                { key: 'booked', label: 'Bookings Confirmed', count: stats.funnel.booked, color: '#10b981', description: 'Converted customers' }
+                { key: 'new', label: 'New Inquiries', count: stats.funnel.new, color: '#6366f1', description: 'Fresh incoming leads', filter: { status: 'New' } },
+                { key: 'contacted', label: 'Contacted / Engaged', count: stats.funnel.contacted, color: '#06b6d4', description: 'Calls made & warm prospects', filter: { status: 'Connected' } },
+                { key: 'visit', label: 'Site Visits', count: stats.funnel.visit, color: '#f59e0b', description: 'Visits scheduled or done', filter: { site_visit_completed: 'true' } },
+                { key: 'negotiation', label: 'Negotiations', count: stats.funnel.negotiation, color: '#ec4899', description: 'Hot leads in discussions', filter: { status: 'Negotiation' } },
+                { key: 'booked', label: 'Bookings Confirmed', count: stats.funnel.booked, color: '#10b981', description: 'Converted customers', filter: { status: 'Booked' } }
               ];
               const maxCount = Math.max(...funnelStages.map(s => s.count), 1);
               
@@ -184,7 +184,24 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                 const conversionFromPrevious = idx === 0 ? 100 : (funnelStages[idx - 1].count > 0 ? Math.round((stage.count / funnelStages[idx - 1].count) * 100) : 0);
                 
                 return (
-                  <div key={stage.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255, 255, 255, 0.01)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+                  <div 
+                    key={stage.key} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px', 
+                      background: 'rgba(255, 255, 255, 0.01)', 
+                      padding: '10px 14px', 
+                      borderRadius: 'var(--radius-md)', 
+                      border: '1px solid var(--border-color)', 
+                      flexWrap: 'wrap',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s'
+                    }}
+                    onClick={() => onDrillDown && onDrillDown(stage.label, stage.filter)}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(223, 177, 91, 0.04)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)'}
+                  >
                     <div style={{ width: '180px', minWidth: '150px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>{stage.label}</span>
                       <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)' }}>{stage.description}</span>
@@ -224,159 +241,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
         </div>
       </div>
 
-      {/* Follow-up Alerts & Reminders */}
-      <div class="alerts-section">
-        {/* Today's Follow-Ups Panel */}
-        <div class="alerts-panel">
-          <div class="alerts-header">
-            <h3 class="alerts-title">
-              <Calendar size={18} style={{ color: 'var(--color-info)' }} />
-              Today's Scheduled Follow-Ups
-            </h3>
-            <span class="alerts-count" style={{ borderColor: 'rgba(6, 182, 212, 0.3)', color: 'var(--color-info)' }}>
-              {todayFollowUps.length} Due
-            </span>
-          </div>
-          <div class="alerts-list">
-            {todayFollowUps.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                No follow-ups scheduled for today.
-              </div>
-            ) : (
-              todayFollowUps.map(l => (
-                <div key={l.id} class="alert-item" onClick={() => onSelectLead(l)}>
-                  <div class="alert-info">
-                    <span class="alert-name">{l.name}</span>
-                    <span class="alert-subtext">{l.project || 'No project'} | {l.phone1}</span>
-                  </div>
-                  <span class={`badge badge-${l.status.toLowerCase()}`}>{l.status}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
 
-        {/* Overdue Follow-Ups Panel */}
-        <div class="alerts-panel">
-          <div class="alerts-header">
-            <h3 class="alerts-title">
-              <AlertTriangle size={18} style={{ color: 'var(--color-hot)' }} />
-              Missed & Overdue Follow-Ups
-            </h3>
-            <span class="alerts-count" style={{ borderColor: 'rgba(255, 94, 94, 0.3)', color: 'var(--color-hot)' }}>
-              {overdueFollowUps.length} Overdue
-            </span>
-          </div>
-          <div class="alerts-list">
-            {overdueFollowUps.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                No overdue follow-ups. Outstanding progress!
-              </div>
-            ) : (
-              overdueFollowUps.map(l => (
-                <div key={l.id} class="alert-item" onClick={() => onSelectLead(l)}>
-                  <div class="alert-info">
-                    <span class="alert-name">{l.name}</span>
-                    <span class="alert-subtext" style={{ color: 'var(--color-hot)' }}>
-                      Missed on: {l.follow_up_date}
-                    </span>
-                  </div>
-                  <span class={`badge badge-${l.status.toLowerCase()}`}>{l.status}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* SVG Dashboard Charts Grid */}
-      <div class="charts-grid" style={{ marginBottom: '24px' }}>
-        {/* Leads by Source Chart */}
-        <div class="chart-card">
-          <h3 class="chart-title">
-            <TrendingUp size={16} style={{ verticalAlign: 'middle', marginRight: '6px', color: 'var(--primary)' }} />
-            Leads by Source Distribution
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>Loading...</div>
-            ) : sourceCounts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>No source data.</div>
-            ) : (
-              sourceCounts.map((s) => {
-                const widthPct = (s.count / maxSourceCount) * 80;
-                return (
-                  <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '100px', fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {s.name}
-                    </div>
-                    <div style={{ flex: 1, background: 'var(--bg-input)', height: '12px', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ 
-                        width: `${Math.max(widthPct, 2)}%`, 
-                        background: 'linear-gradient(90deg, var(--primary) 0%, #b88e3c 100%)', 
-                        height: '100%', 
-                        borderRadius: '4px',
-                      }}></div>
-                    </div>
-                    <div style={{ width: '25px', fontSize: '11px', fontWeight: '600', textAlign: 'right' }}>
-                      {s.count}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Monthly Trend Area Chart */}
-        <div class="chart-card">
-          <h3 class="chart-title">
-            <BarChart2 size={16} style={{ verticalAlign: 'middle', marginRight: '6px', color: 'var(--primary)' }} />
-            Monthly Lead Acquisition Trends
-          </h3>
-          <div style={{ height: '160px', width: '100%', position: 'relative' }}>
-            <svg viewBox="0 0 500 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
-              <defs>
-                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <line x1="40" y1="20" x2="480" y2="20" stroke="var(--border-color)" strokeWidth="0.5" strokeDasharray="4 4" />
-              <line x1="40" y1="70" x2="480" y2="70" stroke="var(--border-color)" strokeWidth="0.5" strokeDasharray="4 4" />
-              <line x1="40" y1="120" x2="480" y2="120" stroke="var(--border-color)" strokeWidth="0.5" />
-
-              {(() => {
-                const points = trendData.map((t, idx) => {
-                  const x = 40 + (idx * (440 / (trendData.length - 1 || 1)));
-                  const y = 120 - ((t.count / maxTrendCount) * 100);
-                  return { x, y, label: t.label, count: t.count };
-                });
-                if (points.length === 0) return null;
-                const pathD = `M ${points.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-                const areaD = `${pathD} L ${points[points.length - 1].x} 120 L ${points[0].x} 120 Z`;
-                return (
-                  <>
-                    <path d={areaD} fill="url(#trendGradient)" />
-                    <path d={pathD} fill="none" stroke="var(--primary)" strokeWidth="2.5" />
-                    {points.map((p, idx) => (
-                      <g key={idx}>
-                        <circle cx={p.x} cy={p.y} r="4" fill="var(--bg-card)" stroke="var(--primary)" strokeWidth="2" />
-                        <text x={p.x} y={p.y - 10} fill="var(--text-main)" fontSize="9" textAnchor="middle" fontWeight="bold">
-                          {p.count}
-                        </text>
-                        <text x={p.x} y="138" fill="var(--text-muted)" fontSize="9" textAnchor="middle">
-                          {p.label}
-                        </text>
-                      </g>
-                    ))}
-                  </>
-                );
-              })()}
-            </svg>
-          </div>
-        </div>
-      </div>
 
       {/* Operations & Analytics Section (Replacing Heatmaps) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
@@ -430,6 +295,14 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                           title="Send WhatsApp"
                         >
                           <MessageSquare size={10} /> WA
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(r.leads.id)}
+                          title="Open Lead Details"
+                        >
+                          <Eye size={10} /> Open
                         </button>
                       </td>
                     </tr>
