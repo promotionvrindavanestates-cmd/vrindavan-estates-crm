@@ -209,31 +209,29 @@ export default function App() {
           </div>
           
           <div class="user-controls">
-            {todayReminderCount > 0 && (
-              <div 
-                onClick={() => {
-                  console.log("Reminder clicked");
-                  setRemindersOpen(true);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'var(--color-info-bg)',
-                  color: 'var(--color-info)',
-                  padding: '6px 12px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  border: '1px solid rgba(6, 182, 212, 0.2)',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-                title={`${todayReminderCount} follow-ups scheduled for today`}
-              >
-                <BellRing size={14} class="bell-animation" />
-                <span>{todayReminderCount} Reminders</span>
-              </div>
-            )}
+            <div 
+              onClick={() => {
+                console.log("Reminder clicked");
+                setRemindersOpen(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: todayReminderCount > 0 ? 'var(--color-info-bg)' : 'var(--bg-card)',
+                color: todayReminderCount > 0 ? 'var(--color-info)' : 'var(--text-muted)',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                border: todayReminderCount > 0 ? '1px solid rgba(6, 182, 212, 0.2)' : '1px solid var(--border-color)',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+              title={`${todayReminderCount} follow-ups scheduled for today`}
+            >
+              <BellRing size={14} class={todayReminderCount > 0 ? "bell-animation" : ""} />
+              <span>{todayReminderCount} Reminders</span>
+            </div>
 
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 600, fontSize: '14px' }}>{currentUser.full_name}</div>
