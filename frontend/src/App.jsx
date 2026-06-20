@@ -25,6 +25,17 @@ export default function App() {
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [kpiFilters, setKpiFilters] = useState(null);
+
+  const handleDrillDown = (metricName, filterParams) => {
+    if (metricName === 'Total Revenue') {
+      setActiveTab('bookings');
+    } else {
+      setKpiFilters(filterParams);
+      setActiveTab('leads');
+    }
+  };
+
 
   // Core Data
   const [leads, setLeads] = useState([]);
@@ -473,6 +484,7 @@ export default function App() {
                 leads={leads} 
                 employees={employees} 
                 onSelectLead={handleSelectLeadFromDashboard} 
+                onDrillDown={handleDrillDown}
               />
             )}
 
@@ -481,6 +493,8 @@ export default function App() {
                 leads={leads} 
                 employees={employees} 
                 currentUser={currentUser}
+                initialFilters={kpiFilters}
+                onClearInitialFilters={() => setKpiFilters(null)}
                 onAddLead={() => {
                   setSelectedLeadForEdit(null);
                   setLeadModalOpen(true);

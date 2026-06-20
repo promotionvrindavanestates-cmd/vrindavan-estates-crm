@@ -334,6 +334,10 @@ const DB = {
         query = query.lte('follow_up_date', todayStr);
       }
       if (filters.site_visit_completed) query = query.eq('site_visit_status', 'Completed');
+      if (filters.calls_today === 'true') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        query = query.gte('last_call_date', `${todayStr}T00:00:00.000Z`).lte('last_call_date', `${todayStr}T23:59:59.999Z`);
+      }
       if (filters.phone) {
         const p = `%${filters.phone}%`;
         query = query.or(`phone1.ilike.${p},phone2.ilike.${p},phone_whatsapp.ilike.${p}`);
@@ -408,6 +412,10 @@ const DB = {
       }
       if (filters.site_visit_completed) {
         results = results.filter(l => l.site_visit_status === 'Completed');
+      }
+      if (filters.calls_today === 'true') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        results = results.filter(l => l.last_call_date && l.last_call_date.startsWith(todayStr));
       }
       if (filters.phone) {
         const p = filters.phone.replace(/\D/g, '');

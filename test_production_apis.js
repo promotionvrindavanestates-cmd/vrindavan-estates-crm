@@ -3,7 +3,7 @@ const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 
 async function runTests() {
-  console.log(`Starting Production CRM Pagination and API Audit on: ${BACKEND_URL}`);
+  console.log(`Starting Production Phase 4A API Verification on: ${BACKEND_URL}`);
   
   // 1. Authenticate
   let token;
@@ -32,29 +32,35 @@ async function runTests() {
     'Content-Type': 'application/json'
   };
 
-  // Test paginated leads endpoint
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/leads?page=1&limit=2`, { headers });
-    if (res.ok) {
-      const data = await res.json();
-      console.log('--- PAGINATED LEADS RESPONSE ---');
-      console.log('Type of response:', typeof data, 'IsArray:', Array.isArray(data));
-      console.log('Keys in response:', Object.keys(data).join(', '));
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        console.log('✅ latest commit 851a0d3 (Server-side Pagination) is LIVE on Render!');
-        console.log(`- Page: ${data.page}`);
-        console.log(`- Limit: ${data.limit}`);
-        console.log(`- Total count: ${data.total}`);
-        console.log(`- Number of leads returned: ${data.leads ? data.leads.length : 0}`);
+  const testEndpoint = async (urlPath) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}${urlPath}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`✅ [SUCCESS] ${urlPath}`);
+        console.log(`  - Type: ${typeof data}`);
+        console.log(`  - Sample Keys/Data:`, Object.keys(data).slice(0, 8).join(', '));
+        if (urlPath.includes('advanced')) {
+          console.log(`  - Sales Funnel Counts:`, JSON.stringify(data.funnel));
+        }
+        return { ok: true, data };
       } else {
-        console.log('⚠️ Old commit is still running (Render is building the new deployment).');
+        const txt = await res.text();
+        console.log(`❌ [FAILED] ${urlPath} - Status: ${res.status}`);
+        console.log(`  - Error: ${txt}`);
+        return { ok: false };
       }
-    } else {
-      console.error('❌ Paginated leads request failed with status:', res.status);
+    } catch (e) {
+      console.log(`❌ [ERROR] ${urlPath} - Exception: ${e.message}`);
+      return { ok: false };
     }
-  } catch (e) {
-    console.error('❌ Exception during paginated leads test:', e.message);
-  }
+  };
+
+  console.log('\n--- TESTING PHASE 4A ENDPOINTS ---');
+  await testEndpoint('/api/notifications/alerts');
+  await testEndpoint('/api/reminders/widgets');
+  await testEndpoint('/api/dashboard/advanced');
+  await testEndpoint('/api/whatsapp/templates');
 }
 
 runTests();

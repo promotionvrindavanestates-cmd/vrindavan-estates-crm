@@ -244,6 +244,7 @@ h1 {
   transition: var(--transition);
   position: relative;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .metric-card::before {
@@ -264,9 +265,10 @@ h1 {
 .metric-card.info::before { background: var(--color-info); }
 
 .metric-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px);
   background: var(--bg-card-hover);
-  border-color: rgba(223, 177, 91, 0.3);
+  border-color: var(--primary);
+  box-shadow: 0 10px 20px var(--primary-glow);
 }
 
 .metric-label {

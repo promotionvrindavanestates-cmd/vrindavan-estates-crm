@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy } from 'lucide-react';
 
-export default function Dashboard({ leads = [], employees = [], onSelectLead }) {
+export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown }) {
   const [stats, setStats] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,27 +73,27 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead }) 
     <div>
       {/* Metric Cards Grid */}
       <div class="dashboard-grid">
-        <div class="metric-card primary">
+        <div class="metric-card primary" onClick={() => onDrillDown && onDrillDown('Total Leads', {})}>
           <div class="metric-label">Total Leads</div>
           <div class="metric-value">{stats ? stats.summary.totalLeads : leads.length}</div>
         </div>
-        <div class="metric-card hot">
+        <div class="metric-card hot" onClick={() => onDrillDown && onDrillDown('New Leads', { status: 'New' })}>
           <div class="metric-label">New Leads</div>
           <div class="metric-value">{stats ? stats.summary.newLeads : leads.filter(l => l.status === 'New').length}</div>
         </div>
-        <div class="metric-card warm">
+        <div class="metric-card warm" onClick={() => onDrillDown && onDrillDown('Calls Today', { calls_today: 'true' })}>
           <div class="metric-label">Calls Today</div>
           <div class="metric-value">{stats ? stats.summary.callsToday : 0}</div>
         </div>
-        <div class="metric-card info">
+        <div class="metric-card info" onClick={() => onDrillDown && onDrillDown('Completed Visits', { site_visit_completed: 'true' })}>
           <div class="metric-label">Completed Visits</div>
           <div class="metric-value">{stats ? stats.summary.completedVisits : 0}</div>
         </div>
-        <div class="metric-card success">
+        <div class="metric-card success" onClick={() => onDrillDown && onDrillDown('Bookings Confirmed', { status: 'Booked' })}>
           <div class="metric-label">Bookings Confirmed</div>
           <div class="metric-value">{stats ? stats.summary.totalBookedCount : 0}</div>
         </div>
-        <div class="metric-card primary">
+        <div class="metric-card primary" onClick={() => onDrillDown && onDrillDown('Total Revenue', {})}>
           <div class="metric-label">Total Revenue (Token)</div>
           <div class="metric-value">₹{(stats ? stats.summary.revenueEarned : 0).toLocaleString()}</div>
         </div>

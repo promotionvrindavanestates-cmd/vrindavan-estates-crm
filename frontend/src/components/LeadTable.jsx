@@ -6,6 +6,8 @@ export default function LeadTable({
   leads = [], 
   employees = [], 
   currentUser = {}, 
+  initialFilters = null,
+  onClearInitialFilters = () => {},
   onAddLead, 
   onEditLead, 
   onDeleteLead, 
@@ -29,6 +31,8 @@ export default function LeadTable({
   const [followupEnd, setFollowupEnd] = useState('');
   const [siteVisitStart, setSiteVisitStart] = useState('');
   const [siteVisitEnd, setSiteVisitEnd] = useState('');
+  const [callsToday, setCallsToday] = useState('');
+  const [siteVisitCompleted, setSiteVisitCompleted] = useState('');
 
   // Server-side Pagination & Query States
   const [leadsState, setLeadsState] = useState([]);
@@ -64,6 +68,43 @@ export default function LeadTable({
   const uniqueSources = ['Facebook', 'Instagram', 'Google', 'Website', 'WhatsApp', 'Walk-In', 'Referral', 'MagicBricks', '99acres', 'Housing'];
 
   // Fetch leads dynamically from backend server
+  // Handle initial filters passed from Dashboard drill-down
+  useEffect(() => {
+    if (initialFilters) {
+      // Clear out general filter fields
+      setSearchTerm('');
+      setSelectedCity('');
+      setSelectedBudget('');
+      setSelectedProject('');
+      setSelectedEmployee('');
+      setSelectedSource('');
+      setCreatedStart('');
+      setCreatedEnd('');
+      setFollowupStart('');
+      setFollowupEnd('');
+      setSiteVisitStart('');
+      setSiteVisitEnd('');
+
+      // Set target fields
+      const targetStatus = initialFilters.status || '';
+      const targetCallsToday = initialFilters.calls_today || '';
+      const targetSiteVisitCompleted = initialFilters.site_visit_completed || '';
+
+      setSelectedStatus(targetStatus);
+      setCallsToday(targetCallsToday);
+      setSiteVisitCompleted(targetSiteVisitCompleted);
+
+      // If either advanced filter is activated, open the advanced section
+      if (targetCallsToday || targetSiteVisitCompleted) {
+        setShowAdvanced(true);
+      }
+
+      setCurrentPage(1);
+      onClearInitialFilters();
+    }
+  }, [initialFilters, onClearInitialFilters]);
+
+  // Fetch leads dynamically from backend server
   const fetchLeads = async () => {
     setLoadingLeads(true);
     try {
@@ -77,6 +118,8 @@ export default function LeadTable({
         source: selectedSource,
         created_start: createdStart,
         created_end: createdEnd,
+        calls_today: callsToday,
+        site_visit_completed: siteVisitCompleted,
         page: currentPage,
         limit: limit
       });
@@ -111,6 +154,8 @@ export default function LeadTable({
     selectedSource,
     createdStart,
     createdEnd,
+    callsToday,
+    siteVisitCompleted,
     limit
   ]);
 
@@ -127,6 +172,8 @@ export default function LeadTable({
     selectedSource,
     createdStart,
     createdEnd,
+    callsToday,
+    siteVisitCompleted,
     currentPage,
     limit,
     leads.length
@@ -409,6 +456,31 @@ export default function LeadTable({
             <Filter size={12} /> {showAdvanced ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
             {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
+          
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            style={{ padding: '6px 12px', fontSize: '12px' }}
+            onClick={() => {
+              setSearchTerm('');
+              setSelectedCity('');
+              setSelectedBudget('');
+              setSelectedProject('');
+              setSelectedStatus('');
+              setSelectedEmployee('');
+              setSelectedSource('');
+              setCreatedStart('');
+              setCreatedEnd('');
+              setFollowupStart('');
+              setFollowupEnd('');
+              setSiteVisitStart('');
+              setSiteVisitEnd('');
+              setCallsToday('');
+              setSiteVisitCompleted('');
+            }}
+          >
+            Reset All Filters
+          </button>
         </div>
 
         {/* Advanced Filters Panel */}
@@ -447,6 +519,22 @@ export default function LeadTable({
             <div class="form-group">
               <label>Site Visit To</label>
               <input type="date" class="form-control" value={siteVisitEnd} onChange={(e) => setSiteVisitEnd(e.target.value)} />
+            </div>
+
+            <div class="form-group">
+              <label>Calls Logged Today</label>
+              <select class="form-control" value={callsToday} onChange={(e) => setCallsToday(e.target.value)}>
+                <option value="">All Leads</option>
+                <option value="true">Calls Logged Today Only</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Site Visit Status</label>
+              <select class="form-control" value={siteVisitCompleted} onChange={(e) => setSiteVisitCompleted(e.target.value)}>
+                <option value="">All Leads</option>
+                <option value="true">Completed Visits Only</option>
+              </select>
             </div>
           </div>
         )}

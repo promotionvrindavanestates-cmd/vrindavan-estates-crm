@@ -225,6 +225,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       created_end: req.query.created_end,
       follow_up_due: req.query.follow_up_due === 'true',
       site_visit_completed: req.query.site_visit_completed === 'true',
+      calls_today: req.query.calls_today,
       phone: req.query.phone,
       executive: req.query.executive,
       // Pagination parameters
