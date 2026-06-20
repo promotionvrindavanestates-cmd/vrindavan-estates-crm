@@ -182,3 +182,97 @@ ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE device_sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_visits DISABLE ROW LEVEL SECURITY;
 
+-- =========================================================================
+-- PHASE 2 DATABASE MIGRATIONS UPGRADES
+-- =========================================================================
+
+-- 1. Extend Leads Table
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_activity_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- 2. Extend Projects Table with Description, Coordinates and Media
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS approval_details TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS images TEXT[];
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS videos TEXT[];
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS latitude NUMERIC(10, 8);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS longitude NUMERIC(11, 8);
+
+-- 3. Extend Inventory Table with property type, price and details
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS property_type VARCHAR(100) CHECK (property_type IN ('Plot', 'Flat', 'Villa', 'Commercial'));
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2) DEFAULT 0.00;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb;
+
+-- 4. Extend Bookings Table with relations
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS inventory_id UUID REFERENCES inventory(id) ON DELETE SET NULL;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'Token Received' CHECK (status IN ('Token Received', 'Booked', 'Agreement Pending', 'Registered', 'Cancelled'));
+
+-- 5. Create Payment Installments History
+CREATE TABLE IF NOT EXISTS payment_installments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    payment_id UUID REFERENCES payments(id) ON DELETE CASCADE,
+    amount_paid NUMERIC(12, 2) NOT NULL,
+    payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    payment_mode VARCHAR(100) CHECK (payment_mode IN ('Cash', 'Cheque', 'NEFT/RTGS', 'UPI', 'Other')),
+    remarks TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Create WhatsApp Automation Templates & Campaigns
+CREATE TABLE IF NOT EXISTS whatsapp_templates (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    body_text TEXT NOT NULL,
+    media_url TEXT,
+    variables TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    template_id UUID REFERENCES whatsapp_templates(id) ON DELETE SET NULL,
+    filters_used JSONB DEFAULT '{}'::jsonb,
+    status VARCHAR(50) DEFAULT 'Completed' CHECK (status IN ('Pending', 'Sending', 'Completed', 'Failed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_campaign_logs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    campaign_id UUID REFERENCES whatsapp_campaigns(id) ON DELETE CASCADE,
+    lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
+    phone VARCHAR(50) NOT NULL,
+    message_text TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'Sent' CHECK (status IN ('Sent', 'Delivered', 'Read', 'Replied', 'Failed')),
+    response_details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Create Smart Assignment Engine Rules Config
+CREATE TABLE IF NOT EXISTS distribution_rules (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    method VARCHAR(50) DEFAULT 'Round Robin' CHECK (method IN ('Round Robin', 'Equal Distribution', 'Project Wise', 'Manual')),
+    is_active BOOLEAN DEFAULT TRUE,
+    config JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Extend Site Visits with Coordinates and Check-in/out
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_in_lat NUMERIC(10, 8);
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_in_lng NUMERIC(11, 8);
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_out_lat NUMERIC(10, 8);
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_out_lng NUMERIC(11, 8);
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_in_address TEXT;
+ALTER TABLE site_visits ADD COLUMN IF NOT EXISTS check_out_address TEXT;
+
+-- Disable RLS on new tables
+ALTER TABLE payment_installments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE whatsapp_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE whatsapp_campaigns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE whatsapp_campaign_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE distribution_rules DISABLE ROW LEVEL SECURITY;
+
+

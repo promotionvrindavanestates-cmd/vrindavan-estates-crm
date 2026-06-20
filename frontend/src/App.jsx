@@ -8,7 +8,13 @@ import CallLogModal from './components/CallLogModal';
 import EmployeeMgmt from './components/EmployeeMgmt';
 import BackupMgmt from './components/BackupMgmt';
 import AuditTrailModal from './components/AuditTrailModal';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing } from 'lucide-react';
+import ProjectMaster from './components/ProjectMaster';
+import InventoryMgmt from './components/InventoryMgmt';
+import BookingsRegistry from './components/BookingsRegistry';
+import WhatsAppCampaigns from './components/WhatsAppCampaigns';
+import ReportsAnalytics from './components/ReportsAnalytics';
+import LeadDetailsModal from './components/LeadDetailsModal';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -226,25 +232,55 @@ export default function App() {
         </div>
 
         {/* Navigation Tabs */}
-        <div class="nav-tabs">
+        <div class="nav-tabs" style={{ flexWrap: 'wrap', gap: '8px' }}>
           <div 
             class={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
           >
-            <Home size={16} /> Dashboard
+            <Home size={15} /> Dashboard
           </div>
           <div 
             class={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
             onClick={() => setActiveTab('leads')}
           >
-            <FileSpreadsheet size={16} /> Leads Manager
+            <FileSpreadsheet size={15} /> Leads Manager
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'projects' ? 'active' : ''}`}
+            onClick={() => setActiveTab('projects')}
+          >
+            <Building size={15} /> Projects
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'inventory' ? 'active' : ''}`}
+            onClick={() => setActiveTab('inventory')}
+          >
+            <LayoutGrid size={15} /> Inventory
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'bookings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('bookings')}
+          >
+            <Receipt size={15} /> Bookings
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'whatsapp' ? 'active' : ''}`}
+            onClick={() => setActiveTab('whatsapp')}
+          >
+            <MessageSquare size={15} /> WhatsApp
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => setActiveTab('reports')}
+          >
+            <BarChart3 size={15} /> Reports
           </div>
           {currentUser.role === 'admin' && (
             <div 
               class={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
               onClick={() => setActiveTab('employees')}
             >
-              <Users size={16} /> Employees
+              <Users size={15} /> Employees
             </div>
           )}
           {currentUser.role === 'admin' && (
@@ -252,7 +288,7 @@ export default function App() {
               class={`nav-tab ${activeTab === 'backup' ? 'active' : ''}`}
               onClick={() => setActiveTab('backup')}
             >
-              <Database size={16} /> Imports & Backups
+              <Database size={15} /> Imports & Backups
             </div>
           )}
         </div>
@@ -298,6 +334,26 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'projects' && (
+              <ProjectMaster currentUser={currentUser} />
+            )}
+
+            {activeTab === 'inventory' && (
+              <InventoryMgmt currentUser={currentUser} />
+            )}
+
+            {activeTab === 'bookings' && (
+              <BookingsRegistry currentUser={currentUser} />
+            )}
+
+            {activeTab === 'whatsapp' && (
+              <WhatsAppCampaigns currentUser={currentUser} />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportsAnalytics currentUser={currentUser} />
+            )}
+
             {activeTab === 'employees' && currentUser.role === 'admin' && (
               <EmployeeMgmt 
                 employees={employees} 
@@ -332,11 +388,12 @@ export default function App() {
           onSaveSuccess={fetchCRMData}
         />
 
-        {/* Audit Trails Timeline Modal */}
-        <AuditTrailModal 
+        {/* Lead Journey details & GPS verification Modal */}
+        <LeadDetailsModal 
           isOpen={historyModalOpen} 
           onClose={() => setHistoryModalOpen(false)} 
           lead={selectedLeadForHistory}
+          onSaveSuccess={fetchCRMData}
         />
 
       </div>

@@ -102,6 +102,16 @@ function loadLocalDb() {
     // Ensure migrations exist in local DB JSON structure
     if (!data.lead_transfers) data.lead_transfers = [];
     if (!data.audit_trails) data.audit_trails = [];
+    if (!data.projects) data.projects = [];
+    if (!data.inventory) data.inventory = [];
+    if (!data.bookings) data.bookings = [];
+    if (!data.payments) data.payments = [];
+    if (!data.payment_installments) data.payment_installments = [];
+    if (!data.whatsapp_templates) data.whatsapp_templates = [];
+    if (!data.whatsapp_campaigns) data.whatsapp_campaigns = [];
+    if (!data.whatsapp_campaign_logs) data.whatsapp_campaign_logs = [];
+    if (!data.distribution_rules) data.distribution_rules = [];
+    if (!data.site_visits) data.site_visits = [];
     data.users.forEach(u => {
       if (!u.status) u.status = 'active';
       if (!u.token_version) u.token_version = 1;
@@ -805,6 +815,840 @@ const DB = {
     } else {
       saveLocalDb(backupData);
       return true;
+    }
+  },
+
+  // --- PHASE 2: PROJECTS ---
+  async getProjects() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.projects.sort((a, b) => a.name.localeCompare(b.name));
+    }
+  },
+
+  async getProjectById(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.projects.find(p => p.id === id) || null;
+    }
+  },
+
+  async createProject(projectData) {
+    const formatted = {
+      name: projectData.name,
+      type: projectData.type || '',
+      location: projectData.location || '',
+      rera: projectData.rera || '',
+      mvda: projectData.mvda || '',
+      price_list_url: projectData.price_list_url || '',
+      brochure_url: projectData.brochure_url || '',
+      map_link: projectData.map_link || '',
+      description: projectData.description || '',
+      approval_details: projectData.approval_details || '',
+      images: projectData.images || [],
+      videos: projectData.videos || []
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('projects').insert([formatted]).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const newProj = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.projects.push(newProj);
+      saveLocalDb(db);
+      return newProj;
+    }
+  },
+
+  async updateProject(id, projectData) {
+    const formatted = {
+      name: projectData.name,
+      type: projectData.type,
+      location: projectData.location,
+      rera: projectData.rera,
+      mvda: projectData.mvda,
+      price_list_url: projectData.price_list_url,
+      brochure_url: projectData.brochure_url,
+      map_link: projectData.map_link,
+      description: projectData.description,
+      approval_details: projectData.approval_details,
+      images: projectData.images,
+      videos: projectData.videos
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('projects').update(formatted).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.projects.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        db.projects[idx] = { ...db.projects[idx], ...formatted };
+        saveLocalDb(db);
+        return db.projects[idx];
+      }
+      throw new Error('Project not found');
+    }
+  },
+
+  async deleteProject(id) {
+    if (this.isCloud()) {
+      const { error } = await supabase.from('projects').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const db = loadLocalDb();
+      db.projects = db.projects.filter(p => p.id !== id);
+      saveLocalDb(db);
+      return true;
+    }
+  },
+
+  // --- PHASE 2: INVENTORY ---
+  async getInventory(projectId = null) {
+    if (this.isCloud()) {
+      let query = supabase.from('inventory').select('*, projects(*)');
+      if (projectId) {
+        query = query.eq('project_id', projectId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      let list = db.inventory;
+      if (projectId) {
+        list = list.filter(i => i.project_id === projectId);
+      }
+      return list.map(i => {
+        const proj = db.projects.find(p => p.id === i.project_id);
+        return { ...i, projects: proj || null };
+      });
+    }
+  },
+
+  async getInventoryById(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('inventory').select('*, projects(*)').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const item = db.inventory.find(i => i.id === id);
+      if (!item) return null;
+      const proj = db.projects.find(p => p.id === item.project_id);
+      return { ...item, projects: proj || null };
+    }
+  },
+
+  async createInventory(invData) {
+    const formatted = {
+      project_id: invData.project_id,
+      unit_number: invData.unit_number,
+      status: invData.status || 'Available',
+      property_type: invData.property_type || 'Flat',
+      price: invData.price ? parseFloat(invData.price) : 0.00,
+      details: invData.details || {}
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('inventory').insert([formatted]).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const newItem = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.inventory.push(newItem);
+      saveLocalDb(db);
+      return newItem;
+    }
+  },
+
+  async updateInventory(id, invData) {
+    const formatted = {
+      project_id: invData.project_id,
+      unit_number: invData.unit_number,
+      status: invData.status,
+      property_type: invData.property_type,
+      price: invData.price ? parseFloat(invData.price) : 0.00,
+      details: invData.details
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('inventory').update(formatted).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.inventory.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        db.inventory[idx] = { ...db.inventory[idx], ...formatted };
+        saveLocalDb(db);
+        return db.inventory[idx];
+      }
+      throw new Error('Inventory unit not found');
+    }
+  },
+
+  async updateInventoryStatus(id, status) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('inventory').update({ status }).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.inventory.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        db.inventory[idx].status = status;
+        saveLocalDb(db);
+        return db.inventory[idx];
+      }
+      throw new Error('Inventory unit not found');
+    }
+  },
+
+  async deleteInventory(id) {
+    if (this.isCloud()) {
+      const { error } = await supabase.from('inventory').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const db = loadLocalDb();
+      db.inventory = db.inventory.filter(i => i.id !== id);
+      saveLocalDb(db);
+      return true;
+    }
+  },
+
+  // --- PHASE 2: BOOKINGS ---
+  async getBookings() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, leads(*), users!executive_id(*), projects(*), inventory(*)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.bookings.map(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        const exec = db.users.find(u => u.id === b.executive_id);
+        const proj = db.projects.find(p => p.id === b.project_id);
+        const inv = db.inventory.find(i => i.id === b.inventory_id);
+        return {
+          ...b,
+          leads: lead || null,
+          users: exec ? { id: exec.id, full_name: exec.full_name, username: exec.username } : null,
+          projects: proj || null,
+          inventory: inv || null
+        };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async createBooking(bookingData, createdByUserId) {
+    const formatted = {
+      lead_id: bookingData.lead_id,
+      project_id: bookingData.project_id || null,
+      inventory_id: bookingData.inventory_id || null,
+      unit_number: bookingData.unit_number || '',
+      token_amount: bookingData.token_amount ? parseFloat(bookingData.token_amount) : 0.00,
+      booking_amount: bookingData.booking_amount ? parseFloat(bookingData.booking_amount) : 0.00,
+      booking_date: bookingData.booking_date || new Date().toISOString().split('T')[0],
+      executive_id: bookingData.executive_id || createdByUserId,
+      status: bookingData.status || 'Token Received'
+    };
+
+    if (this.isCloud()) {
+      // 1. Create Booking
+      const { data: booking, error: bErr } = await supabase.from('bookings').insert([formatted]).select().single();
+      if (bErr) throw bErr;
+
+      // 2. Initialize Payment Tracking
+      const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
+      const initialReceived = formatted.booking_amount + formatted.token_amount;
+      const balance = totalCost - initialReceived;
+      const dueDays = bookingData.due_days ? parseInt(bookingData.due_days) : 30;
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + dueDays);
+
+      const payFormatted = {
+        booking_id: booking.id,
+        total_cost: totalCost,
+        amount_received: initialReceived,
+        balance: balance,
+        due_date: dueDate.toISOString().split('T')[0],
+        status: balance <= 0 ? 'Completed' : (initialReceived > 0 ? 'Partial' : 'Pending')
+      };
+
+      const { data: payment, error: pErr } = await supabase.from('payments').insert([payFormatted]).select().single();
+      if (pErr) throw pErr;
+
+      // 3. Mark inventory status as Booked
+      if (formatted.inventory_id) {
+        await supabase.from('inventory').update({ status: 'Booked' }).eq('id', formatted.inventory_id);
+      }
+
+      // 4. Update lead status to Booked
+      await supabase.from('leads').update({
+        status: 'Booked',
+        booking_token_amount: formatted.token_amount,
+        booking_date: formatted.booking_date,
+        booking_status: 'Confirmed'
+      }).eq('id', formatted.lead_id);
+
+      return { booking, payment };
+    } else {
+      const db = loadLocalDb();
+      const newBooking = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.bookings.push(newBooking);
+
+      const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
+      const initialReceived = formatted.booking_amount + formatted.token_amount;
+      const balance = totalCost - initialReceived;
+      const dueDays = bookingData.due_days ? parseInt(bookingData.due_days) : 30;
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + dueDays);
+
+      const newPayment = {
+        id: generateUuid(),
+        booking_id: newBooking.id,
+        total_cost: totalCost,
+        amount_received: initialReceived,
+        balance: balance,
+        due_date: dueDate.toISOString().split('T')[0],
+        status: balance <= 0 ? 'Completed' : (initialReceived > 0 ? 'Partial' : 'Pending'),
+        created_at: new Date().toISOString()
+      };
+      db.payments.push(newPayment);
+
+      if (formatted.inventory_id) {
+        const invIdx = db.inventory.findIndex(i => i.id === formatted.inventory_id);
+        if (invIdx !== -1) db.inventory[invIdx].status = 'Booked';
+      }
+
+      const leadIdx = db.leads.findIndex(l => l.id === formatted.lead_id);
+      if (leadIdx !== -1) {
+        db.leads[leadIdx].status = 'Booked';
+        db.leads[leadIdx].booking_token_amount = formatted.token_amount;
+        db.leads[leadIdx].booking_date = formatted.booking_date;
+        db.leads[leadIdx].booking_status = 'Confirmed';
+      }
+
+      saveLocalDb(db);
+      return { booking: newBooking, payment: newPayment };
+    }
+  },
+
+  async updateBookingStatus(id, status, adminUserId) {
+    if (this.isCloud()) {
+      const { data: booking, error: bErr } = await supabase.from('bookings').update({ status }).eq('id', id).select().single();
+      if (bErr) throw bErr;
+
+      // Handle Cancelled booking inventory release
+      if (status === 'Cancelled' && booking.inventory_id) {
+        await supabase.from('inventory').update({ status: 'Available' }).eq('id', booking.inventory_id);
+        await supabase.from('leads').update({ status: 'Lost', booking_status: 'Cancelled' }).eq('id', booking.lead_id);
+      } else if (status === 'Registered' && booking.lead_id) {
+        // Keep status as Booked, lead is converted completely
+        await supabase.from('leads').update({ booking_status: 'Confirmed' }).eq('id', booking.lead_id);
+      }
+
+      return booking;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.bookings.findIndex(b => b.id === id);
+      if (idx !== -1) {
+        db.bookings[idx].status = status;
+        const booking = db.bookings[idx];
+
+        if (status === 'Cancelled') {
+          if (booking.inventory_id) {
+            const invIdx = db.inventory.findIndex(i => i.id === booking.inventory_id);
+            if (invIdx !== -1) db.inventory[invIdx].status = 'Available';
+          }
+          const leadIdx = db.leads.findIndex(l => l.id === booking.lead_id);
+          if (leadIdx !== -1) {
+            db.leads[leadIdx].status = 'Lost';
+            db.leads[leadIdx].booking_status = 'Cancelled';
+          }
+        } else if (status === 'Registered') {
+          const leadIdx = db.leads.findIndex(l => l.id === booking.lead_id);
+          if (leadIdx !== -1) {
+            db.leads[leadIdx].booking_status = 'Confirmed';
+          }
+        }
+        saveLocalDb(db);
+        return booking;
+      }
+      throw new Error('Booking not found');
+    }
+  },
+
+  // --- PHASE 2: PAYMENTS & INSTALLMENTS ---
+  async getPayments() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*, bookings(*, leads(*), projects(*), inventory(*))')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.payments.map(p => {
+        const booking = db.bookings.find(b => b.id === p.booking_id);
+        let bkWithJoins = null;
+        if (booking) {
+          const lead = db.leads.find(l => l.id === booking.lead_id);
+          const proj = db.projects.find(pr => pr.id === booking.project_id);
+          const inv = db.inventory.find(i => i.id === booking.inventory_id);
+          bkWithJoins = { ...booking, leads: lead || null, projects: proj || null, inventory: inv || null };
+        }
+        return { ...p, bookings: bkWithJoins };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async getPaymentById(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*, bookings(*, leads(*), projects(*), inventory(*))')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const p = db.payments.find(p => p.id === id);
+      if (!p) return null;
+      const booking = db.bookings.find(b => b.id === p.booking_id);
+      let bkWithJoins = null;
+      if (booking) {
+        const lead = db.leads.find(l => l.id === booking.lead_id);
+        const proj = db.projects.find(pr => pr.id === booking.project_id);
+        const inv = db.inventory.find(i => i.id === booking.inventory_id);
+        bkWithJoins = { ...booking, leads: lead || null, projects: proj || null, inventory: inv || null };
+      }
+      return { ...p, bookings: bkWithJoins };
+    }
+  },
+
+  async createPaymentInstallment(paymentId, amountPaid, paymentMode, remarks = '') {
+    const formatted = {
+      payment_id: paymentId,
+      amount_paid: parseFloat(amountPaid),
+      payment_mode: paymentMode || 'UPI',
+      remarks: remarks || '',
+      payment_date: new Date().toISOString().split('T')[0]
+    };
+
+    if (this.isCloud()) {
+      // 1. Fetch current payment details
+      const { data: pay, error: fetchErr } = await supabase.from('payments').select('*').eq('id', paymentId).single();
+      if (fetchErr) throw fetchErr;
+
+      // 2. Add installment
+      const { data: installment, error: insErr } = await supabase.from('payment_installments').insert([formatted]).select().single();
+      if (insErr) throw insErr;
+
+      // 3. Update payment running balance
+      const newReceived = (pay.amount_received || 0) + formatted.amount_paid;
+      const newBalance = pay.total_cost - newReceived;
+      const newStatus = newBalance <= 0 ? 'Completed' : (newReceived > 0 ? 'Partial' : 'Pending');
+
+      const { data: updatedPay, error: upErr } = await supabase
+        .from('payments')
+        .update({ amount_received: newReceived, balance: newBalance, status: newStatus })
+        .eq('id', paymentId)
+        .select()
+        .single();
+      if (upErr) throw upErr;
+
+      return { installment, payment: updatedPay };
+    } else {
+      const db = loadLocalDb();
+      const payIdx = db.payments.findIndex(p => p.id === paymentId);
+      if (payIdx === -1) throw new Error('Payment schedule not found');
+
+      const pay = db.payments[payIdx];
+      const newInstallment = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.payment_installments.push(newInstallment);
+
+      const newReceived = (pay.amount_received || 0) + formatted.amount_paid;
+      const newBalance = pay.total_cost - newReceived;
+      const newStatus = newBalance <= 0 ? 'Completed' : (newReceived > 0 ? 'Partial' : 'Pending');
+
+      db.payments[payIdx].amount_received = newReceived;
+      db.payments[payIdx].balance = newBalance;
+      db.payments[payIdx].status = newStatus;
+
+      saveLocalDb(db);
+      return { installment: newInstallment, payment: db.payments[payIdx] };
+    }
+  },
+
+  async getPaymentInstallments(paymentId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('payment_installments')
+        .select('*')
+        .eq('payment_id', paymentId)
+        .order('payment_date', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.payment_installments
+        .filter(pi => pi.payment_id === paymentId)
+        .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
+    }
+  },
+
+  // --- PHASE 2: WHATSAPP AUTOMATION ---
+  async getWhatsAppTemplates() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('whatsapp_templates').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.whatsapp_templates.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async getWhatsAppTemplateById(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('whatsapp_templates').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.whatsapp_templates.find(t => t.id === id) || null;
+    }
+  },
+
+  async createWhatsAppTemplate(templateData) {
+    const formatted = {
+      name: templateData.name,
+      category: templateData.category || 'Utility',
+      body_text: templateData.body_text,
+      media_url: templateData.media_url || '',
+      variables: templateData.variables || []
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('whatsapp_templates').insert([formatted]).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const newTemp = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.whatsapp_templates.push(newTemp);
+      saveLocalDb(db);
+      return newTemp;
+    }
+  },
+
+  async getWhatsAppCampaigns() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_campaigns')
+        .select('*, whatsapp_templates(*)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.whatsapp_campaigns.map(c => {
+        const temp = db.whatsapp_templates.find(t => t.id === c.template_id);
+        return { ...c, whatsapp_templates: temp || null };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async createWhatsAppCampaign(campaignData, logsList) {
+    const formatted = {
+      name: campaignData.name,
+      template_id: campaignData.template_id,
+      filters_used: campaignData.filters_used || {},
+      status: 'Completed'
+    };
+
+    if (this.isCloud()) {
+      // 1. Insert Campaign
+      const { data: campaign, error: cErr } = await supabase.from('whatsapp_campaigns').insert([formatted]).select().single();
+      if (cErr) throw cErr;
+
+      // 2. Insert Logs
+      const logsToInsert = logsList.map(log => ({
+        campaign_id: campaign.id,
+        lead_id: log.lead_id,
+        phone: log.phone,
+        message_text: log.message_text,
+        status: log.status || 'Sent'
+      }));
+
+      const { data: campaignLogs, error: lErr } = await supabase.from('whatsapp_campaign_logs').insert(logsToInsert).select();
+      if (lErr) throw lErr;
+
+      return { campaign, campaignLogs };
+    } else {
+      const db = loadLocalDb();
+      const newCamp = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.whatsapp_campaigns.push(newCamp);
+
+      const logsToInsert = logsList.map(log => ({
+        id: generateUuid(),
+        campaign_id: newCamp.id,
+        lead_id: log.lead_id,
+        phone: log.phone,
+        message_text: log.message_text,
+        status: log.status || 'Sent',
+        created_at: new Date().toISOString()
+      }));
+      db.whatsapp_campaign_logs.push(...logsToInsert);
+
+      saveLocalDb(db);
+      return { campaign: newCamp, campaignLogs: logsToInsert };
+    }
+  },
+
+  async getWhatsAppCampaignLogs(campaignId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_campaign_logs')
+        .select('*, leads(*)')
+        .eq('campaign_id', campaignId);
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.whatsapp_campaign_logs
+        .filter(l => l.campaign_id === campaignId)
+        .map(l => {
+          const lead = db.leads.find(le => le.id === l.lead_id);
+          return { ...l, leads: lead || null };
+        });
+    }
+  },
+
+  async updateWhatsAppLogStatus(logId, status, responseDetails = '') {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_campaign_logs')
+        .update({ status, response_details: responseDetails })
+        .eq('id', logId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.whatsapp_campaign_logs.findIndex(l => l.id === logId);
+      if (idx !== -1) {
+        db.whatsapp_campaign_logs[idx].status = status;
+        db.whatsapp_campaign_logs[idx].response_details = responseDetails;
+        saveLocalDb(db);
+        return db.whatsapp_campaign_logs[idx];
+      }
+      throw new Error('Log entry not found');
+    }
+  },
+
+  // --- PHASE 2: SMART DISTRIBUTION RULES ---
+  async getDistributionRules() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('distribution_rules').select('*').limit(1).maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        // Seed default
+        const defaultRule = { method: 'Round Robin', is_active: true, config: {} };
+        const { data: seeded, error: seedErr } = await supabase.from('distribution_rules').insert([defaultRule]).select().single();
+        if (seedErr) throw seedErr;
+        return seeded;
+      }
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (db.distribution_rules.length === 0) {
+        const defaultRule = { id: generateUuid(), method: 'Round Robin', is_active: true, config: {}, updated_at: new Date().toISOString() };
+        db.distribution_rules.push(defaultRule);
+        saveLocalDb(db);
+        return defaultRule;
+      }
+      return db.distribution_rules[0];
+    }
+  },
+
+  async updateDistributionRules(method, isActive, config) {
+    const rules = await this.getDistributionRules();
+    const updated = {
+      method,
+      is_active: isActive,
+      config,
+      updated_at: new Date().toISOString()
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('distribution_rules').update(updated).eq('id', rules.id).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.distribution_rules.findIndex(r => r.id === rules.id);
+      db.distribution_rules[idx] = { ...db.distribution_rules[idx], ...updated };
+      saveLocalDb(db);
+      return db.distribution_rules[idx];
+    }
+  },
+
+  // --- PHASE 2: GEOLOCATION SITE VISITS ---
+  async checkInSiteVisit(leadId, checkInTime, lat, lng, address) {
+    const timeStr = new Date(checkInTime).toTimeString().split(' ')[0]; // HH:MM:SS
+    const dateStr = new Date(checkInTime).toISOString().split('T')[0];  // YYYY-MM-DD
+    const formatted = {
+      lead_id: leadId,
+      visit_date: dateStr,
+      visit_time: timeStr,
+      check_in_time: checkInTime,
+      check_in_lat: parseFloat(lat),
+      check_in_lng: parseFloat(lng),
+      check_in_address: address || '',
+      outcome: 'Scheduled',
+      media_urls: [],
+      feedback: ''
+    };
+
+    if (this.isCloud()) {
+      const { data: visit, error: vErr } = await supabase.from('site_visits').insert([formatted]).select().single();
+      if (vErr) throw vErr;
+
+      // Update lead site visit details
+      await supabase.from('leads').update({
+        site_visit_date: dateStr,
+        site_visit_status: 'Scheduled',
+        site_visit_remarks: 'Checked-in. Site visit in progress.'
+      }).eq('id', leadId);
+
+      return visit;
+    } else {
+      const db = loadLocalDb();
+      const newVisit = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.site_visits.push(newVisit);
+
+      const leadIdx = db.leads.findIndex(l => l.id === leadId);
+      if (leadIdx !== -1) {
+        db.leads[leadIdx].site_visit_date = dateStr;
+        db.leads[leadIdx].site_visit_status = 'Scheduled';
+        db.leads[leadIdx].site_visit_remarks = 'Checked-in. Site visit in progress.';
+      }
+      saveLocalDb(db);
+      return newVisit;
+    }
+  },
+
+  async checkOutSiteVisit(visitId, checkOutTime, lat, lng, address, feedback, outcome, mediaUrls = []) {
+    if (this.isCloud()) {
+      // 1. Fetch check-in details
+      const { data: visit, error: fErr } = await supabase.from('site_visits').select('*').eq('id', visitId).single();
+      if (fErr) throw fErr;
+
+      // 2. Perform check-out updates
+      const formatted = {
+        check_out_time: checkOutTime,
+        check_out_lat: parseFloat(lat),
+        check_out_lng: parseFloat(lng),
+        check_out_address: address || '',
+        feedback: feedback || '',
+        outcome: outcome || 'Interested',
+        media_urls: mediaUrls || []
+      };
+
+      const { data: updatedVisit, error: uErr } = await supabase
+        .from('site_visits')
+        .update(formatted)
+        .eq('id', visitId)
+        .select()
+        .single();
+      if (uErr) throw uErr;
+
+      // 3. Update lead values based on outcome
+      let leadStatus = 'Warm';
+      if (outcome === 'Negotiation') leadStatus = 'Negotiation';
+      else if (outcome === 'Booking Expected') leadStatus = 'Hot';
+      else if (outcome === 'Not Interested') leadStatus = 'Cold';
+      else if (outcome === 'Interested') leadStatus = 'Hot';
+
+      await supabase.from('leads').update({
+        status: leadStatus,
+        site_visit_status: 'Completed',
+        site_visit_remarks: `Completed. Outcome: ${outcome}. Feedback: ${feedback}`
+      }).eq('id', visit.lead_id);
+
+      return updatedVisit;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.site_visits.findIndex(v => v.id === visitId);
+      if (idx === -1) throw new Error('Site visit not found');
+
+      const visit = db.site_visits[idx];
+      const formatted = {
+        check_out_time: checkOutTime,
+        check_out_lat: parseFloat(lat),
+        check_out_lng: parseFloat(lng),
+        check_out_address: address || '',
+        feedback: feedback || '',
+        outcome: outcome || 'Interested',
+        media_urls: mediaUrls || []
+      };
+
+      db.site_visits[idx] = { ...db.site_visits[idx], ...formatted };
+
+      let leadStatus = 'Warm';
+      if (outcome === 'Negotiation') leadStatus = 'Negotiation';
+      else if (outcome === 'Booking Expected') leadStatus = 'Hot';
+      else if (outcome === 'Not Interested') leadStatus = 'Cold';
+      else if (outcome === 'Interested') leadStatus = 'Hot';
+
+      const leadIdx = db.leads.findIndex(l => l.id === visit.lead_id);
+      if (leadIdx !== -1) {
+        db.leads[leadIdx].status = leadStatus;
+        db.leads[leadIdx].site_visit_status = 'Completed';
+        db.leads[leadIdx].site_visit_remarks = `Completed. Outcome: ${outcome}. Feedback: ${feedback}`;
+      }
+
+      saveLocalDb(db);
+      return db.site_visits[idx];
+    }
+  },
+
+  async getSiteVisits(leadId = null) {
+    if (this.isCloud()) {
+      let query = supabase.from('site_visits').select('*, leads(*)').order('created_at', { ascending: false });
+      if (leadId) {
+        query = query.eq('lead_id', leadId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      let list = db.site_visits;
+      if (leadId) {
+        list = list.filter(v => v.lead_id === leadId);
+      }
+      return list.map(v => {
+        const lead = db.leads.find(l => l.id === v.lead_id);
+        return { ...v, leads: lead || null };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
   }
 };

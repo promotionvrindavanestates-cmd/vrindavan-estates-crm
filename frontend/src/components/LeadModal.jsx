@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 
 const SOURCES = ['Facebook', 'Instagram', 'Google', 'Website', 'WhatsApp', 'Walk-In', 'Referral', 'MagicBricks', '99acres', 'Housing'];
-const STATUSES = ['Hot', 'Warm', 'Cold'];
+const STATUSES = ['New', 'Attempted', 'Connected', 'Interested', 'Hot', 'Warm', 'Cold', 'Site Visit Scheduled', 'Site Visit Done', 'Negotiation', 'Booked', 'Lost'];
 const VISIT_STATUSES = ['None', 'Scheduled', 'Completed', 'Cancelled'];
 const BOOKING_STATUSES = ['None', 'Pending', 'Confirmed', 'Cancelled'];
 

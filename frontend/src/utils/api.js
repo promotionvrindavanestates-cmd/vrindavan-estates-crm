@@ -221,5 +221,68 @@ export const api = {
     request(`/api/employees/${fromId}/transfer-leads`, {
       method: 'POST',
       body: JSON.stringify({ to_employee_id: toId })
-    })
+    }),
+
+  // --- PHASE 2: PROJECTS ---
+  getProjects: () => request('/api/projects'),
+  getProjectById: (id) => request(`/api/projects/${id}`),
+  createProject: (data) => request('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
+  updateProject: (id, data) => request(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
+
+  // --- PHASE 2: INVENTORY ---
+  getInventory: (projectId) => request(`/api/inventory${projectId ? `?project_id=${projectId}` : ''}`),
+  getInventoryById: (id) => request(`/api/inventory/${id}`),
+  createInventory: (data) => request('/api/inventory', { method: 'POST', body: JSON.stringify(data) }),
+  updateInventory: (id, data) => request(`/api/inventory/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteInventory: (id) => request(`/api/inventory/${id}`, { method: 'DELETE' }),
+
+  // --- PHASE 2: BOOKINGS ---
+  getBookings: () => request('/api/bookings'),
+  createBooking: (data) => request('/api/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  updateBookingStatus: (id, status) => request(`/api/bookings/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+
+  // --- PHASE 2: PAYMENTS ---
+  getPayments: () => request('/api/payments'),
+  getPaymentById: (id) => request(`/api/payments/${id}`),
+  createPaymentInstallment: (paymentId, amountPaid, paymentMode, remarks) => 
+    request(`/api/payments/${paymentId}/installments`, { method: 'POST', body: JSON.stringify({ amount_paid: amountPaid, payment_mode: paymentMode, remarks }) }),
+  getPaymentInstallments: (paymentId) => request(`/api/payments/${paymentId}/installments`),
+
+  // --- PHASE 2: WHATSAPP ---
+  getWhatsAppTemplates: () => request('/api/whatsapp/templates'),
+  createWhatsAppTemplate: (data) => request('/api/whatsapp/templates', { method: 'POST', body: JSON.stringify(data) }),
+  getWhatsAppCampaigns: () => request('/api/whatsapp/campaigns'),
+  getWhatsAppCampaignLogs: (campaignId) => request(`/api/whatsapp/campaigns/${campaignId}/logs`),
+  createWhatsAppCampaign: (name, templateId, filters, leads) => 
+    request('/api/whatsapp/campaigns', { method: 'POST', body: JSON.stringify({ name, template_id: templateId, filters, leads }) }),
+
+  // --- PHASE 2: SMART DISTRIBUTION RULES ---
+  getDistributionRules: () => request('/api/distribution/rules'),
+  updateDistributionRules: (method, isActive, config) => 
+    request('/api/distribution/rules', { method: 'PUT', body: JSON.stringify({ method, is_active: isActive, config }) }),
+
+  // --- PHASE 2: SITE VISITS (GEOFENCED) ---
+  getSiteVisits: (leadId) => request(`/api/site-visits${leadId ? `?lead_id=${leadId}` : ''}`),
+  checkInSiteVisit: (leadId, lat, lng, address) => 
+    request(`/api/leads/${leadId}/site-visits/check-in`, { method: 'POST', body: JSON.stringify({ lat, lng, address }) }),
+  checkOutSiteVisit: (leadId, visitId, lat, lng, address, feedback, outcome, mediaUrls) => 
+    request(`/api/leads/${leadId}/site-visits/${visitId}/check-out`, { method: 'POST', body: JSON.stringify({ lat, lng, address, feedback, outcome, media_urls: mediaUrls }) }),
+
+  // --- PHASE 2: INACTIVE QUEUE & ADVANCED DASHBOARD ---
+  getInactiveLeadsQueue: () => request('/api/leads/inactive-queue'),
+  getAdvancedDashboardStats: () => request('/api/dashboard/advanced'),
+
+  // --- PHASE 2: REPORTS EXPORT ---
+  exportReport: async (type = 'bookings') => {
+    const blob = await request(`/api/reports/export?type=${type}`);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_report_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }
 };

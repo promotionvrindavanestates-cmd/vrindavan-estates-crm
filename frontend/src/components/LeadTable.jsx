@@ -47,9 +47,21 @@ export default function LeadTable({
   });
 
   const getStatusBadgeClass = (status) => {
-    if (status === 'Hot') return 'badge badge-hot';
-    if (status === 'Warm') return 'badge badge-warm';
-    return 'badge badge-cold';
+    switch (status) {
+      case 'New': return 'badge badge-cold';
+      case 'Attempted': return 'badge badge-cold';
+      case 'Connected': return 'badge badge-warm';
+      case 'Interested': return 'badge badge-hot';
+      case 'Hot': return 'badge badge-hot';
+      case 'Warm': return 'badge badge-warm';
+      case 'Cold': return 'badge badge-cold';
+      case 'Site Visit Scheduled': return 'badge badge-warm';
+      case 'Site Visit Done': return 'badge badge-warm';
+      case 'Negotiation': return 'badge badge-hot';
+      case 'Booked': return 'badge badge-success';
+      case 'Lost': return 'badge badge-cold';
+      default: return 'badge badge-cold';
+    }
   };
 
   const formatPhoneNumber = (num) => {
@@ -143,9 +155,18 @@ export default function LeadTable({
               onChange={(e) => setSelectedStatus(e.target.value)}
             >
               <option value="">All Statuses</option>
+              <option value="New">New</option>
+              <option value="Attempted">Attempted</option>
+              <option value="Connected">Connected</option>
+              <option value="Interested">Interested</option>
               <option value="Hot">Hot</option>
               <option value="Warm">Warm</option>
               <option value="Cold">Cold</option>
+              <option value="Site Visit Scheduled">Site Visit Scheduled</option>
+              <option value="Site Visit Done">Site Visit Done</option>
+              <option value="Negotiation">Negotiation</option>
+              <option value="Booked">Booked</option>
+              <option value="Lost">Lost</option>
             </select>
           </div>
 
