@@ -57,8 +57,8 @@ export default function RemindersModal({ isOpen, onClose, onSelectLead, currentU
   const upcoming = displayedReminders.filter(r => r.reminder_date > todayStr || r.is_read);
 
   return (
-    <div class="modal-backdrop">
-      <div class="modal-card" style={{ maxWidth: '600px' }}>
+    <div class="modal-overlay">
+      <div class="modal-content" style={{ maxWidth: '600px' }}>
         <div class="modal-header">
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Bell size={20} style={{ color: 'var(--primary)' }} />

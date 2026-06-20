@@ -211,7 +211,10 @@ export default function App() {
           <div class="user-controls">
             {todayReminderCount > 0 && (
               <div 
-                onClick={() => setRemindersOpen(true)}
+                onClick={() => {
+                  console.log("Reminder clicked");
+                  setRemindersOpen(true);
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

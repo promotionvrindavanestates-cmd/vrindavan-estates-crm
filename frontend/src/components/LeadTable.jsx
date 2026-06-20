@@ -693,8 +693,8 @@ export default function LeadTable({
 
       {/* Bulk Assignment Modal */}
       {bulkModalOpen && (
-        <div class="modal-backdrop">
-          <div class="modal-card" style={{ maxWidth: '540px' }}>
+        <div class="modal-overlay">
+          <div class="modal-content" style={{ maxWidth: '540px' }}>
             <div class="modal-header">
               <h2>Bulk Assignment Wizard ({selectedLeadIds.length} Leads Selected)</h2>
               <button class="close-btn" onClick={() => setBulkModalOpen(false)}>×</button>
