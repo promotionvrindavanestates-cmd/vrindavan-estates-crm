@@ -3,10 +3,10 @@ let customBaseUrl = localStorage.getItem('backend_url') || '';
 
 export const getBaseUrl = () => {
   if (customBaseUrl) return customBaseUrl;
-  if (window.Capacitor) {
-    return 'https://vrindavan-estates-crm-backend.onrender.com'; // Default to Render production cloud backend
+  if (window.Capacitor || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+    return 'https://vrindavan-estates-crm-backend.onrender.com'; // Production cloud backend URL
   }
-  return ''; // Default to proxy
+  return ''; // Default to local proxy
 };
 
 export const setBackendUrl = (url) => {
