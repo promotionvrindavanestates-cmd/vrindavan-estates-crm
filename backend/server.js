@@ -1818,6 +1818,18 @@ app.get('/api/notifications/alerts', authenticateToken, async (req, res) => {
   }
 });
 
+// Recent Activities Feed API
+app.get('/api/activities/recent', authenticateToken, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const activities = await DB.getRecentActivities(limit);
+    res.json(activities);
+  } catch (error) {
+    console.error('Failed to fetch recent activities:', error);
+    res.status(500).json({ error: 'Failed to fetch recent activities' });
+  }
+});
+
 // --- PHASE 3: UNIFIED TIMELINE API ---
 
 app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
@@ -1993,6 +2005,7 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
       const empConnectedCalls = empCalls.filter(c => !['Not Picked', 'Busy', 'Failed', 'Not Connected'].includes(c.response));
       const empVisits = siteVisits.filter(v => v.leads && v.leads.assigned_employee_id === emp.id && v.outcome && v.outcome !== 'Scheduled');
       const conversionRate = empLeads.length > 0 ? (empBookings.length / empLeads.length) * 100 : 0;
+      const revenueClosed = empBookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
       return {
         id: emp.id,
         name: emp.full_name,
@@ -2001,6 +2014,7 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         connectedCallsCount: empConnectedCalls.length,
         siteVisitsCount: empVisits.length,
         bookingsCount: empBookings.length,
+        revenueClosed,
         conversionRate: Math.round(conversionRate * 10) / 10
       };
     });

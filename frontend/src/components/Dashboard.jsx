@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy } from 'lucide-react';
+import HeatMapWidgets from './HeatMapWidgets';
+import RecentActivities from './RecentActivities';
 
 export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown }) {
   const [stats, setStats] = useState(null);
@@ -316,6 +318,17 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
         </div>
       </div>
 
+      {/* CRM Activity & Heatmaps */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'stretch' }}>
+        <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
+          <RecentActivities limit={10} />
+        </div>
+      </div>
+      
+      <div style={{ marginBottom: '24px' }}>
+        <HeatMapWidgets leads={leads} />
+      </div>
+
       {/* Employee Performance Dashboard: Leaderboard Ranking Board */}
       <div class="table-panel" style={{ margin: 0 }}>
         <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -346,6 +359,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                   <th style={{ textAlign: 'center' }}>Connected Calls</th>
                   <th style={{ textAlign: 'center' }}>Site Visits Completed</th>
                   <th style={{ textAlign: 'center' }}>Bookings Confirmed</th>
+                  <th style={{ textAlign: 'right', paddingRight: '15px' }}>Revenue Closed</th>
                   <th style={{ textAlign: 'center' }}>Conversion %</th>
                 </tr>
               </thead>
@@ -387,6 +401,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                       <td style={{ textAlign: 'center', color: 'var(--color-info)' }}>{emp.connectedCallsCount}</td>
                       <td style={{ textAlign: 'center', color: 'var(--primary)' }}>{emp.siteVisitsCount}</td>
                       <td style={{ textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{emp.bookingsCount}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold', color: '#22c55e', paddingRight: '15px' }}>₹{(emp.revenueClosed || 0).toLocaleString()}</td>
                       <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
                         <span class={`badge ${emp.conversionRate >= 15 ? 'badge-success' : (emp.conversionRate >= 5 ? 'badge-warm' : 'badge-cold')}`}>
                           {emp.conversionRate}%

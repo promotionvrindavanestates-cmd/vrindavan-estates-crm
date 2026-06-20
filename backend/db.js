@@ -828,7 +828,7 @@ const DB = {
   },
 
   // --- AUDIT TRAILS ---
-  async logAudit(leadId, action, details, userId, userName) {
+  async logAudit(leadId, action, details, userId, userName, device = 'Web Portal') {
     if (this.isCloud()) {
       const { error } = await supabase
         .from('audit_trails')
@@ -837,7 +837,8 @@ const DB = {
           action,
           details,
           user_id: userId,
-          user_name: userName
+          user_name: userName,
+          device: device
         }]);
       if (error) throw error;
     } else {
@@ -849,6 +850,7 @@ const DB = {
         details,
         user_id: userId,
         user_name: userName,
+        device: device,
         created_at: new Date().toISOString()
       });
       saveLocalDb(db);
@@ -869,6 +871,30 @@ const DB = {
       return db.audit_trails
         .filter(a => a.lead_id === leadId)
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async getRecentActivities(limit = 30) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('audit_trails')
+        .select('*, leads(name)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const audits = [...db.audit_trails];
+      audits.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const sliced = audits.slice(0, limit);
+      return sliced.map(a => {
+        const lead = db.leads.find(l => l.id === a.lead_id);
+        return {
+          ...a,
+          leads: lead ? { name: lead.name } : null
+        };
+      });
     }
   },
 

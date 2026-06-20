@@ -8,6 +8,7 @@ export default function LeadTable({
   currentUser = {}, 
   initialFilters = null,
   onClearInitialFilters = () => {},
+  onOpenLeadDrawer = () => {},
   onAddLead, 
   onEditLead, 
   onDeleteLead, 
@@ -630,7 +631,13 @@ export default function LeadTable({
                       )}
                       
                       <td data-label="Lead Info">
-                        <div style={{ fontWeight: 600 }}>{l.name}</div>
+                        <div 
+                          style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--primary)' }}
+                          onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
+                          title="Click to view details side drawer"
+                        >
+                          {l.name}
+                        </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>
                         <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px' }}>Src: {l.lead_source || 'Website'}</div>
                       </td>

@@ -15,7 +15,9 @@ import WhatsAppCampaigns from './components/WhatsAppCampaigns';
 import ReportsAnalytics from './components/ReportsAnalytics';
 import LeadDetailsModal from './components/LeadDetailsModal';
 import RemindersModal from './components/RemindersModal';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt } from 'lucide-react';
+import LeadDetailDrawer from './components/LeadDetailDrawer';
+import LeadPipeline from './components/LeadPipeline';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello } from 'lucide-react';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -26,6 +28,13 @@ export default function App() {
   // Active View Tab
   const [activeTab, setActiveTab] = useState('dashboard');
   const [kpiFilters, setKpiFilters] = useState(null);
+  const [drawerLeadId, setDrawerLeadId] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handleOpenLeadDrawer = (leadId) => {
+    setDrawerLeadId(leadId);
+    setDrawerOpen(true);
+  };
 
   const handleDrillDown = (metricName, filterParams) => {
     if (metricName === 'Total Revenue') {
@@ -425,6 +434,12 @@ export default function App() {
             <FileSpreadsheet size={15} /> Leads Manager
           </div>
           <div 
+            class={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pipeline')}
+          >
+            <Trello size={15} /> Pipeline
+          </div>
+          <div 
             class={`nav-tab ${activeTab === 'projects' ? 'active' : ''}`}
             onClick={() => setActiveTab('projects')}
           >
@@ -495,6 +510,7 @@ export default function App() {
                 currentUser={currentUser}
                 initialFilters={kpiFilters}
                 onClearInitialFilters={() => setKpiFilters(null)}
+                onOpenLeadDrawer={handleOpenLeadDrawer}
                 onAddLead={() => {
                   setSelectedLeadForEdit(null);
                   setLeadModalOpen(true);
@@ -513,6 +529,13 @@ export default function App() {
                   setSelectedLeadForHistory(lead);
                   setHistoryModalOpen(true);
                 }}
+              />
+            )}
+
+            {activeTab === 'pipeline' && (
+              <LeadPipeline 
+                currentUser={currentUser}
+                onOpenLeadDrawer={handleOpenLeadDrawer}
               />
             )}
 
@@ -584,6 +607,16 @@ export default function App() {
           onClose={() => setRemindersOpen(false)}
           onSelectLead={handleSelectLeadFromDashboard}
           currentUser={currentUser}
+        />
+
+        {/* Lead Detail Side Drawer */}
+        <LeadDetailDrawer 
+          isOpen={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          leadId={drawerLeadId}
+          currentUser={currentUser}
+          employees={employees}
+          onRefreshData={fetchCRMData}
         />
 
       </div>

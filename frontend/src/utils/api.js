@@ -344,5 +344,8 @@ export const api = {
     request('/api/import/run', {
       method: 'POST',
       body: JSON.stringify({ records, filename, duplicateStrategy })
-    })
+    }),
+
+  getRecentActivities: (limit) => 
+    request(`/api/activities/recent${limit ? `?limit=${limit}` : ''}`)
 };

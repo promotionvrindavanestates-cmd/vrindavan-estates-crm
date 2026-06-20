@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Download, Users, RefreshCw, BarChart2, Calendar, FileSpreadsheet, ShieldAlert, ArrowRight, Landmark, PhoneCall, Award, MapPin } from 'lucide-react';
+import RevenueAnalytics from './RevenueAnalytics';
 
 export default function ReportsAnalytics({ currentUser }) {
   const [stats, setStats] = useState(null);
@@ -83,6 +84,12 @@ export default function ReportsAnalytics({ currentUser }) {
           onClick={() => setActiveSubTab('analytics')}
         >
           📈 Analytics Charts
+        </button>
+        <button 
+          class={`btn ${activeSubTab === 'revenue' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveSubTab('revenue')}
+        >
+          💰 Revenue Ledger
         </button>
         {isAdmin && (
           <button 
@@ -306,6 +313,9 @@ export default function ReportsAnalytics({ currentUser }) {
               )}
             </div>
           )}
+          
+          {/* Revenue Analytics Tab */}
+          {activeSubTab === 'revenue' && <RevenueAnalytics />}
         </>
       )}
 
