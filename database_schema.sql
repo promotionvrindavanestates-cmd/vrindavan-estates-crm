@@ -315,3 +315,49 @@ INSERT INTO users (id, username, password_hash, role, full_name, phone, status, 
 VALUES 
 ('b19d45e0-32df-42b7-a35f-14984be01362', 'employee', '$2a$10$7Z2v8qB.NfS/tQ9/62pMteh986KjZfA1e6D41G7r8nJ9/Q67s9m82', 'employee', 'Gopal Sharma', '8888888888', 'active', 1)
 ON CONFLICT (username) DO NOTHING;
+
+-- -------------------------------------------------------------------------
+-- 7. PHASE 3 MIGRATIONS (ADVANCED LEAD MANAGEMENT, REMINDERS & IMPORTS)
+-- -------------------------------------------------------------------------
+
+-- Create Import History Table
+CREATE TABLE IF NOT EXISTS import_history (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    total_records INT DEFAULT 0,
+    imported_records INT DEFAULT 0,
+    updated_records INT DEFAULT 0,
+    skipped_records INT DEFAULT 0,
+    failed_records INT DEFAULT 0,
+    failed_logs JSONB DEFAULT '[]'::jsonb,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Reminders Table
+CREATE TABLE IF NOT EXISTS reminders (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    type VARCHAR(100) CHECK (type IN ('Follow-up', 'Callback', 'Site Visit', 'Booking')),
+    reminder_date DATE NOT NULL,
+    reminder_time TIME,
+    notes TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    assigned_employee_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Alter Audit Trails with Device Column
+ALTER TABLE audit_trails ADD COLUMN IF NOT EXISTS device VARCHAR(255) DEFAULT 'Web Portal';
+
+-- Disable RLS on new tables
+ALTER TABLE import_history DISABLE ROW LEVEL SECURITY;
+ALTER TABLE reminders DISABLE ROW LEVEL SECURITY;
+
+-- Indexes for Reminders and Import History
+CREATE INDEX IF NOT EXISTS idx_reminders_assigned ON reminders (assigned_employee_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_date_read ON reminders (reminder_date, is_read);
+CREATE INDEX IF NOT EXISTS idx_import_history_user ON import_history (created_by);
+CREATE INDEX IF NOT EXISTS idx_leads_phone_whatsapp ON leads (phone_whatsapp);
+

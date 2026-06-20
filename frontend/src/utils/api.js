@@ -270,7 +270,7 @@ export const api = {
     request(`/api/leads/${leadId}/site-visits/${visitId}/check-out`, { method: 'POST', body: JSON.stringify({ lat, lng, address, feedback, outcome, media_urls: mediaUrls }) }),
 
   // --- PHASE 2: INACTIVE QUEUE & ADVANCED DASHBOARD ---
-  getInactiveLeadsQueue: () => request('/api/leads/inactive-queue'),
+  getInactiveLeadsQueue: (days) => request(`/api/leads/inactive-queue${days ? `?days=${days}` : ''}`),
   getAdvancedDashboardStats: () => request('/api/dashboard/advanced'),
 
   // --- PHASE 2: REPORTS EXPORT ---
@@ -284,5 +284,59 @@ export const api = {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-  }
+  },
+
+  // --- PHASE 3: REMINDERS ---
+  getReminders: () => request('/api/reminders'),
+  createReminder: (data) => request('/api/reminders', { method: 'POST', body: JSON.stringify(data) }),
+  markReminderAsRead: (id) => request(`/api/reminders/${id}/read`, { method: 'PUT' }),
+  deleteReminder: (id) => request(`/api/reminders/${id}`, { method: 'DELETE' }),
+  getReminderWidgets: () => request('/api/reminders/widgets'),
+
+  // --- PHASE 3: TIMELINE ---
+  getLeadTimeline: (leadId) => request(`/api/leads/${leadId}/timeline`),
+
+  // --- PHASE 3: BULK ASSIGN ---
+  bulkAssignLeads: (leadIds, employeeId, method, config) => 
+    request('/api/leads/bulk-assign', { method: 'POST', body: JSON.stringify({ leadIds, employeeId, method, config }) }),
+
+  // --- PHASE 3: EXCEL/CSV IMPORT ENGINE ---
+  getImportHistory: () => request('/api/import/history'),
+  previewImportLeads: async (file, sheetUrl = '') => {
+    const formData = new FormData();
+    if (file) {
+      formData.append('file', file);
+    }
+    if (sheetUrl) {
+      formData.append('sheetUrl', sheetUrl);
+    }
+    
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${getBaseUrl()}/api/import/preview`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      setAuthToken('');
+      window.location.reload();
+      throw new Error('Session expired');
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Preview failed');
+    }
+    return data;
+  },
+  runImportLeads: (records, filename, duplicateStrategy) => 
+    request('/api/import/run', {
+      method: 'POST',
+      body: JSON.stringify({ records, filename, duplicateStrategy })
+    })
 };

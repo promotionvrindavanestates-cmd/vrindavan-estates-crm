@@ -326,6 +326,27 @@ const DB = {
       if (filters.assigned_employee_id) query = query.eq('assigned_employee_id', filters.assigned_employee_id);
       if (filters.source) query = query.eq('lead_source', filters.source);
       
+      // Phase 3 Filters
+      if (filters.created_start) query = query.gte('created_at', filters.created_start);
+      if (filters.created_end) query = query.lte('created_at', filters.created_end);
+      if (filters.follow_up_due) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        query = query.lte('follow_up_date', todayStr);
+      }
+      if (filters.site_visit_completed) query = query.eq('site_visit_status', 'Completed');
+      if (filters.phone) {
+        const p = `%${filters.phone}%`;
+        query = query.or(`phone1.ilike.${p},phone2.ilike.${p},phone_whatsapp.ilike.${p}`);
+      }
+      if (filters.executive) {
+        const { data: emps } = await supabase.from('users').select('id').or(`full_name.ilike.%${filters.executive}%,username.ilike.%${filters.executive}%`);
+        if (emps && emps.length > 0) {
+          query = query.in('assigned_employee_id', emps.map(e => e.id));
+        } else {
+          query = query.eq('assigned_employee_id', '00000000-0000-0000-0000-000000000000'); // mismatch
+        }
+      }
+      
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -354,6 +375,36 @@ const DB = {
       if (filters.status) results = results.filter(l => l.status === filters.status);
       if (filters.assigned_employee_id) results = results.filter(l => l.assigned_employee_id === filters.assigned_employee_id);
       if (filters.source) results = results.filter(l => l.lead_source === filters.source);
+
+      // Phase 3 Filters local
+      if (filters.created_start) {
+        results = results.filter(l => new Date(l.created_at) >= new Date(filters.created_start));
+      }
+      if (filters.created_end) {
+        results = results.filter(l => new Date(l.created_at) <= new Date(filters.created_end));
+      }
+      if (filters.follow_up_due) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        results = results.filter(l => l.follow_up_date && l.follow_up_date <= todayStr);
+      }
+      if (filters.site_visit_completed) {
+        results = results.filter(l => l.site_visit_status === 'Completed');
+      }
+      if (filters.phone) {
+        const p = filters.phone.replace(/\D/g, '');
+        results = results.filter(l => 
+          (l.phone1 && l.phone1.replace(/\D/g, '').includes(p)) ||
+          (l.phone2 && l.phone2.replace(/\D/g, '').includes(p)) ||
+          (l.phone_whatsapp && l.phone_whatsapp.replace(/\D/g, '').includes(p))
+        );
+      }
+      if (filters.executive) {
+        const term = filters.executive.toLowerCase();
+        results = results.filter(l => {
+          const emp = db.users.find(u => u.id === l.assigned_employee_id);
+          return emp && (emp.full_name.toLowerCase().includes(term) || emp.username.toLowerCase().includes(term));
+        });
+      }
 
       // Join employee details
       results = results.map(l => {
@@ -461,8 +512,12 @@ const DB = {
     const updateFields = {
       name: isEmployee ? existing.name : leadData.name,
       city: leadData.city,
+      state: leadData.state,
       phone1: isEmployee ? existing.phone1 : leadData.phone1,
       phone2: isEmployee ? existing.phone2 : leadData.phone2,
+      phone_whatsapp: isEmployee ? existing.phone_whatsapp : leadData.phone_whatsapp,
+      profession: leadData.profession,
+      investor_or_end_user: leadData.investor_or_end_user,
       budget: leadData.budget,
       project: leadData.project,
       requirement: leadData.requirement,
@@ -637,6 +692,17 @@ const DB = {
       }
       saveLocalDb(db);
       return db.leads[idx];
+    }
+  },
+
+  async getAllCallLogs() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('call_logs').select('*');
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      return db.call_logs || [];
     }
   },
 
@@ -1650,6 +1716,260 @@ const DB = {
         return { ...v, leads: lead || null };
       }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
+  },
+
+  // --- PHASE 3: DUPLICATE DETECTION ---
+  async checkDuplicateLeadByPhones(phone1, phone2, phoneWhatsapp, excludeId = null) {
+    const p1 = phone1 ? String(phone1).replace(/\D/g, '') : null;
+    const p2 = phone2 ? String(phone2).replace(/\D/g, '') : null;
+    const pw = phoneWhatsapp ? String(phoneWhatsapp).replace(/\D/g, '') : null;
+    
+    if (!p1 && !p2 && !pw) return null;
+    
+    if (this.isCloud()) {
+      const { data: leadsList, error } = await supabase.from('leads').select('*, assigned_employee:users!assigned_employee_id(*)');
+      if (error) throw error;
+      
+      for (const lead of leadsList) {
+        if (excludeId && lead.id === excludeId) continue;
+        const lp1 = lead.phone1 ? String(lead.phone1).replace(/\D/g, '') : '';
+        const lp2 = lead.phone2 ? String(lead.phone2).replace(/\D/g, '') : '';
+        const lpw = lead.phone_whatsapp ? String(lead.phone_whatsapp).replace(/\D/g, '') : '';
+        
+        if (
+          (p1 && (lp1 === p1 || lp2 === p1 || lpw === p1)) ||
+          (p2 && (lp1 === p2 || lp2 === p2 || lpw === p2)) ||
+          (pw && (lp1 === pw || lp2 === pw || lpw === pw))
+        ) {
+          return lead;
+        }
+      }
+      return null;
+    } else {
+      const db = loadLocalDb();
+      for (const lead of db.leads) {
+        if (excludeId && lead.id === excludeId) continue;
+        const lp1 = lead.phone1 ? String(lead.phone1).replace(/\D/g, '') : '';
+        const lp2 = lead.phone2 ? String(lead.phone2).replace(/\D/g, '') : '';
+        const lpw = lead.phone_whatsapp ? String(lead.phone_whatsapp).replace(/\D/g, '') : '';
+        
+        if (
+          (p1 && (lp1 === p1 || lp2 === p1 || lpw === p1)) ||
+          (p2 && (lp1 === p2 || lp2 === p2 || lpw === p2)) ||
+          (pw && (lp1 === pw || lp2 === pw || lpw === pw))
+        ) {
+          return lead;
+        }
+      }
+      return null;
+    }
+  },
+
+  // --- PHASE 3: IMPORT HISTORY ---
+  async logImport(importData) {
+    const formatted = {
+      filename: importData.filename,
+      total_records: importData.total_records || 0,
+      imported_records: importData.imported_records || 0,
+      updated_records: importData.updated_records || 0,
+      skipped_records: importData.skipped_records || 0,
+      failed_records: importData.failed_records || 0,
+      failed_logs: importData.failed_logs || [],
+      created_by: importData.created_by || null
+    };
+
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('import_history').insert([formatted]).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const record = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      if (!db.import_history) db.import_history = [];
+      db.import_history.push(record);
+      saveLocalDb(db);
+      return record;
+    }
+  },
+
+  async getImportHistory() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('import_history').select('*, users!created_by(*)').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.import_history) db.import_history = [];
+      return db.import_history.map(record => {
+        const user = db.users.find(u => u.id === record.created_by);
+        return { ...record, users: user || null };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async updateImportHistory(id, updates) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('import_history')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.import_history) db.import_history = [];
+      const idx = db.import_history.findIndex(r => r.id === id);
+      if (idx !== -1) {
+        db.import_history[idx] = { ...db.import_history[idx], ...updates };
+        saveLocalDb(db);
+        return db.import_history[idx];
+      }
+      throw new Error('Import history not found');
+    }
+  },
+
+  async getWhatsAppLogsForLead(leadId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_campaign_logs')
+        .select('*, whatsapp_campaigns(*)')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_campaign_logs) db.whatsapp_campaign_logs = [];
+      return db.whatsapp_campaign_logs
+        .filter(l => l.lead_id === leadId)
+        .map(l => {
+          const campaign = db.whatsapp_campaigns.find(c => c.id === l.campaign_id);
+          return { ...l, whatsapp_campaigns: campaign || null };
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  async getBookingsForLead(leadId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, projects(*), inventory(*)')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.bookings) db.bookings = [];
+      return db.bookings
+        .filter(b => b.lead_id === leadId)
+        .map(b => {
+          const proj = db.projects.find(p => p.id === b.project_id);
+          const inv = db.inventory.find(i => i.id === b.inventory_id);
+          return { ...b, projects: proj || null, inventory: inv || null };
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  },
+
+  // --- PHASE 3: REMINDERS ---
+  async getReminders(employeeId = null, role = 'admin') {
+    if (this.isCloud()) {
+      let query = supabase.from('reminders').select('*, leads(*)');
+      if (role === 'employee' && employeeId) {
+        query = query.eq('assigned_employee_id', employeeId);
+      }
+      const { data, error } = await query.order('reminder_date', { ascending: true });
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.reminders) db.reminders = [];
+      let list = db.reminders;
+      if (role === 'employee' && employeeId) {
+        list = list.filter(r => r.assigned_employee_id === employeeId);
+      }
+      return list.map(r => {
+        const lead = db.leads.find(l => l.id === r.lead_id);
+        return { ...r, leads: lead || null };
+      }).sort((a, b) => a.reminder_date.localeCompare(b.reminder_date));
+    }
+  },
+
+  async createReminder(reminderData) {
+    const formatted = {
+      lead_id: reminderData.lead_id,
+      title: reminderData.title,
+      type: reminderData.type || 'Follow-up',
+      reminder_date: reminderData.reminder_date,
+      reminder_time: reminderData.reminder_time || null,
+      notes: reminderData.notes || '',
+      is_read: reminderData.is_read || false,
+      assigned_employee_id: reminderData.assigned_employee_id || null
+    };
+
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('reminders').insert([formatted]).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const record = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      if (!db.reminders) db.reminders = [];
+      db.reminders.push(record);
+      saveLocalDb(db);
+      return record;
+    }
+  },
+
+  async markReminderAsRead(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('reminders').update({ is_read: true }).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.reminders) db.reminders = [];
+      const idx = db.reminders.findIndex(r => r.id === id);
+      if (idx !== -1) {
+        db.reminders[idx].is_read = true;
+        saveLocalDb(db);
+        return db.reminders[idx];
+      }
+      throw new Error('Reminder not found');
+    }
+  },
+
+  async deleteReminder(id) {
+    if (this.isCloud()) {
+      const { error } = await supabase.from('reminders').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const db = loadLocalDb();
+      if (!db.reminders) db.reminders = [];
+      db.reminders = db.reminders.filter(r => r.id !== id);
+      saveLocalDb(db);
+      return true;
+    }
+  },
+
+  async getReminderWidgets(employeeId = null, role = 'admin') {
+    const list = await this.getReminders(employeeId, role);
+    const nowStr = new Date().toISOString().split('T')[0];
+
+    const todayReminders = list.filter(r => r.reminder_date === nowStr && !r.is_read);
+    const missedReminders = list.filter(r => r.reminder_date < nowStr && !r.is_read);
+    const upcomingReminders = list.filter(r => r.reminder_date > nowStr && !r.is_read);
+
+    return {
+      today: todayReminders.length,
+      missed: missedReminders.length,
+      upcoming: upcomingReminders.length
+    };
   }
 };
 

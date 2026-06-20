@@ -219,12 +219,20 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       project: req.query.project,
       status: req.query.status,
       assigned_employee_id: req.query.assigned_employee_id,
-      source: req.query.source
+      source: req.query.source,
+      // Phase 3 Advanced filters
+      created_start: req.query.created_start,
+      created_end: req.query.created_end,
+      follow_up_due: req.query.follow_up_due === 'true',
+      site_visit_completed: req.query.site_visit_completed === 'true',
+      phone: req.query.phone,
+      executive: req.query.executive
     };
 
     const leads = await DB.getLeads(filters, req.user.id, req.user.role);
     res.json(leads);
   } catch (error) {
+    console.error('Fetch leads error:', error);
     res.status(500).json({ error: 'Failed to fetch leads' });
   }
 });
@@ -456,7 +464,7 @@ app.get('/api/export', authenticateToken, async (req, res) => {
   }
 });
 
-// Export Bookings, Payments, or Site Visits reports: Admin Only!
+// Export Bookings, Payments, Site Visits, Leads, or Employees reports: Admin Only!
 app.get('/api/reports/export', authenticateToken, requireAdmin, async (req, res) => {
   const type = req.query.type || 'bookings';
   try {
@@ -509,6 +517,68 @@ app.get('/api/reports/export', authenticateToken, requireAdmin, async (req, res)
         'Feedback': v.feedback || ''
       }));
       filename = 'site_visits_report.csv';
+    } else if (type === 'leads') {
+      const list = await DB.getLeads({}, req.user.id, req.user.role);
+      plainData = list.map(l => ({
+        'Lead ID': l.id,
+        'Created At': l.created_at || '',
+        'Name': l.name || '',
+        'City': l.city || '',
+        'Phone 1': l.phone1 || '',
+        'Phone 2': l.phone2 || '',
+        'WhatsApp Phone': l.phone_whatsapp || '',
+        'Budget': l.budget || '',
+        'Project': l.project || '',
+        'Source': l.lead_source || '',
+        'Status': l.status || '',
+        'Assigned Employee': l.assigned_employee ? l.assigned_employee.full_name : 'Unassigned',
+        'Follow Up Date': l.follow_up_date || '',
+        'Last Call Response': l.last_response || ''
+      }));
+      filename = 'leads_register.csv';
+    } else if (type === 'employees') {
+      const employees = await DB.getAllEmployees();
+      const leads = await DB.getLeads({}, 'system', 'admin');
+      const bookings = await DB.getBookings();
+      const siteVisits = await DB.getSiteVisits();
+      const callLogs = await DB.getAllCallLogs();
+        
+      plainData = employees.map(emp => {
+        const empLeads = leads.filter(l => l.assigned_employee_id === emp.id);
+        const empBookings = bookings.filter(b => b.executive_id === emp.id);
+        const empCalls = callLogs.filter(c => c.caller_id === emp.id);
+        const empVisits = siteVisits.filter(v => v.leads && v.leads.assigned_employee_id === emp.id && v.outcome && v.outcome !== 'Scheduled');
+        const conversionRate = empLeads.length > 0 ? (empBookings.length / empLeads.length) * 100 : 0;
+        
+        return {
+          'Rank': 1, // temporary index mapping placeholder
+          'Employee Name': emp.full_name,
+          'Username': emp.username,
+          'Phone': emp.phone || '',
+          'Status': emp.status || '',
+          'Assigned Leads': empLeads.length,
+          'Total Calls': empCalls.length,
+          'Completed Site Visits': empVisits.length,
+          'Bookings Confirmed': empBookings.length,
+          'Conversion %': Math.round(conversionRate * 10) / 10
+        };
+      });
+      plainData.sort((a, b) => b['Bookings Confirmed'] - a['Bookings Confirmed'] || b['Conversion %'] - a['Conversion %']);
+      plainData = plainData.map((emp, idx) => ({ ...emp, 'Rank': idx + 1 }));
+      filename = 'employee_performance_report.csv';
+    } else if (type === 'followups') {
+      const list = await DB.getReminders(null, 'admin');
+      plainData = list.map(r => ({
+        'Reminder ID': r.id,
+        'Scheduled Date': r.reminder_date,
+        'Scheduled Time': r.reminder_time || '',
+        'Customer Name': r.leads ? r.leads.name : 'Unknown',
+        'Customer Phone': r.leads ? r.leads.phone1 : 'Unknown',
+        'Title/Type': `${r.title} (${r.type})`,
+        'Notes': r.notes || '',
+        'Status': r.is_read ? 'Completed' : 'Pending'
+      }));
+      filename = 'followup_reminders_report.csv';
     } else {
       return res.status(400).json({ error: 'Invalid report type specified.' });
     }
@@ -541,84 +611,395 @@ app.get('/api/reports/export', authenticateToken, requireAdmin, async (req, res)
   }
 });
 
-app.post('/api/import', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+// Helper: Dynamic Client Device Resolver
+function getClientDevice(req) {
+  const customDevice = req.headers['x-device-name'];
+  if (customDevice) return customDevice;
+  
+  const userAgent = req.headers['user-agent'] || '';
+  if (userAgent.includes('Capacitor') || userAgent.includes('Android')) {
+    return 'Android App';
   }
+  return 'Web Portal';
+}
 
-  const filename = req.file.originalname;
-  const leadsToImport = [];
-
-  try {
-    if (filename.endsWith('.csv')) {
-      const stream = Readable.from(req.file.buffer.toString());
-      stream
+// Helper: Parse Google Sheets or File Buffer to raw JSON rows
+async function parseLeadsData(fileBuffer, filename, isGoogleSheetUrl = false, url = '') {
+  let rawRows = [];
+  
+  if (isGoogleSheetUrl) {
+    let exportUrl = url;
+    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      exportUrl = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+    }
+    
+    const response = await fetch(exportUrl);
+    if (!response.ok) throw new Error('Failed to download Google Sheet. Verify it is public (Anyone with the link can view).');
+    const text = await response.text();
+    
+    rawRows = await new Promise((resolve, reject) => {
+      const results = [];
+      Readable.from(text)
         .pipe(csvParser())
-        .on('data', (row) => {
-          leadsToImport.push(parseRow(row));
-        })
-        .on('end', async () => {
-          try {
-            const imported = await bulkInsert(leadsToImport, req.user.id, req.user.full_name);
-            res.json({ message: `Successfully imported ${imported.length} leads` });
-          } catch (e) {
-            res.status(500).json({ error: 'Error importing data: ' + e.message });
-          }
-        });
-    } else if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        .on('data', (data) => results.push(data))
+        .on('end', () => resolve(results))
+        .on('error', (err) => reject(err));
+    });
+  } else {
+    if (filename.endsWith('.csv')) {
+      const text = fileBuffer.toString('utf8');
+      rawRows = await new Promise((resolve, reject) => {
+        const results = [];
+        Readable.from(text)
+          .pipe(csvParser())
+          .on('data', (data) => results.push(data))
+          .on('end', () => resolve(results))
+          .on('error', (err) => reject(err));
+      });
+    } else {
+      const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rows = xlsx.utils.sheet_to_json(sheet);
-
-      for (const row of rows) {
-        leadsToImport.push(parseRow(row));
-      }
-
-      const imported = await bulkInsert(leadsToImport, req.user.id, req.user.full_name);
-      res.json({ message: `Successfully imported ${imported.length} leads` });
-    } else {
-      res.status(400).json({ error: 'Unsupported file format. Please upload a CSV or Excel (.xlsx) file.' });
+      rawRows = xlsx.utils.sheet_to_json(sheet);
     }
+  }
+  
+  return rawRows;
+}
+
+app.post('/api/import/preview', authenticateToken, requireAdmin, upload.single('file'), async (req, res) => {
+  const { sheetUrl } = req.body;
+  try {
+    let rows = [];
+    let sourceName = '';
+    
+    if (sheetUrl) {
+      rows = await parseLeadsData(null, '', true, sheetUrl);
+      sourceName = 'Google Sheet';
+    } else if (req.file) {
+      rows = await parseLeadsData(req.file.buffer, req.file.originalname, false);
+      sourceName = req.file.originalname;
+    } else {
+      return res.status(400).json({ error: 'No file uploaded or Google Sheet URL provided' });
+    }
+    
+    if (rows.length === 0) {
+      return res.json({ filename: sourceName, total: 0, duplicates: 0, preview: [], headers: [] });
+    }
+    
+    const headers = Object.keys(rows[0]);
+    let duplicateCount = 0;
+    
+    const previewRows = rows.slice(0, 50).map(r => parseRow(r));
+    
+    for (const r of rows) {
+      const parsed = parseRow(r);
+      const dup = await DB.checkDuplicateLeadByPhones(parsed.phone1, parsed.phone2, parsed.phone_whatsapp);
+      if (dup) duplicateCount++;
+    }
+    
+    res.json({
+      filename: sourceName,
+      total: rows.length,
+      duplicates: duplicateCount,
+      headers: headers,
+      preview: previewRows
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Import failed: ' + error.message });
+    console.error('Import preview error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-async function bulkInsert(leads, adminId, adminName) {
-  const insertedLeads = [];
-  for (const lead of leads) {
-    const duplicate = await DB.checkDuplicateLead(lead.phone1, lead.phone2);
-    const l = await DB.createLead(lead, adminId);
-    
-    let auditDetails = 'Lead bulk-imported.';
-    if (duplicate) {
-      auditDetails += ` WARNING: Duplicate lead matched. Owned by: ${duplicate.owner}`;
-    }
-    await DB.logAudit(l.id, 'Lead Created', auditDetails, adminId, adminName);
-    insertedLeads.push(l);
+app.post('/api/import/run', authenticateToken, requireAdmin, async (req, res) => {
+  const { records, filename, duplicateStrategy } = req.body; // skip, update, merge
+  if (!records || records.length === 0) {
+    return res.status(400).json({ error: 'No records provided for import' });
   }
-  return insertedLeads;
-}
+  
+  try {
+    // 1. Create a processing history record
+    const historyRecord = await DB.logImport({
+      filename: filename || 'Import Source',
+      total_records: records.length,
+      imported_records: 0,
+      updated_records: 0,
+      skipped_records: 0,
+      failed_records: 0,
+      failed_logs: [],
+      created_by: req.user.id
+    });
+
+    // 2. Respond immediately to the client to allow progress bar rendering
+    res.json({
+      message: 'Lead import started in background.',
+      history: historyRecord
+    });
+
+    // 3. Process the records in background chunks
+    const device = getClientDevice(req);
+    const userId = req.user.id;
+    const userName = req.user.full_name;
+    const userRole = req.user.role;
+
+    // Run background processing
+    setImmediate(async () => {
+      let importedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+      const failedLogs = [];
+
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        try {
+          const phone1 = record.phone1 ? String(record.phone1).trim() : '';
+          const phone2 = record.phone2 ? String(record.phone2).trim() : '';
+          const phoneWhatsapp = record.phone_whatsapp ? String(record.phone_whatsapp).trim() : '';
+          
+          if (!record.name || (!phone1 && !phone2)) {
+            failedCount++;
+            failedLogs.push({ row: i + 1, name: record.name || 'Unknown', error: 'Missing name or phone number' });
+            continue;
+          }
+          
+          const duplicate = await DB.checkDuplicateLeadByPhones(phone1, phone2, phoneWhatsapp);
+
+          if (duplicate) {
+            if (duplicateStrategy === 'skip') {
+              skippedCount++;
+              continue;
+            }
+            
+            if (duplicateStrategy === 'update') {
+              const updateFields = {
+                name: record.name,
+                city: record.city || duplicate.city,
+                state: record.state || duplicate.state,
+                phone1: phone1 || duplicate.phone1,
+                phone2: phone2 || duplicate.phone2,
+                phone_whatsapp: phoneWhatsapp || duplicate.phone_whatsapp,
+                profession: record.profession || duplicate.profession,
+                investor_or_end_user: record.investor_or_end_user || duplicate.investor_or_end_user,
+                budget: record.budget || duplicate.budget,
+                project: record.project || duplicate.project,
+                requirement: record.requirement || duplicate.requirement,
+                comments: record.comments || record.remarks || duplicate.comments,
+                lead_source: record.lead_source || duplicate.lead_source
+              };
+              await DB.updateLead(duplicate.id, updateFields, userId, userRole);
+              await DB.logAudit(duplicate.id, 'Status Changed', `Lead overwritten during bulk import update.`, userId, userName, device);
+              updatedCount++;
+            } else if (duplicateStrategy === 'merge') {
+              const updateFields = {
+                city: duplicate.city || record.city || '',
+                state: duplicate.state || record.state || '',
+                phone2: duplicate.phone2 || phone2 || '',
+                phone_whatsapp: duplicate.phone_whatsapp || phoneWhatsapp || '',
+                profession: duplicate.profession || record.profession || '',
+                investor_or_end_user: duplicate.investor_or_end_user || record.investor_or_end_user || null,
+                budget: duplicate.budget || record.budget || '',
+                project: duplicate.project || record.project || '',
+                requirement: duplicate.requirement || record.requirement || '',
+                comments: duplicate.comments || record.comments || record.remarks || '',
+                lead_source: duplicate.lead_source || record.lead_source || 'Website'
+              };
+              await DB.updateLead(duplicate.id, updateFields, userId, userRole);
+              await DB.logAudit(duplicate.id, 'Status Changed', `Lead fields merged during bulk import merge.`, userId, userName, device);
+              updatedCount++;
+            }
+          } else {
+            const newLead = {
+              name: record.name,
+              city: record.city || '',
+              state: record.state || '',
+              phone1: phone1,
+              phone2: phone2 || '',
+              phone_whatsapp: phoneWhatsapp || '',
+              profession: record.profession || '',
+              investor_or_end_user: record.investor_or_end_user || null,
+              budget: record.budget || '',
+              project: record.project || '',
+              requirement: record.requirement || '',
+              comments: record.comments || record.remarks || '',
+              lead_source: record.lead_source || 'Website',
+              status: 'New'
+            };
+            const created = await DB.createLead(newLead, userId);
+            await DB.logAudit(created.id, 'Lead Created', `Lead created via Excel/CSV import.`, userId, userName, device);
+            importedCount++;
+          }
+        } catch (err) {
+          failedCount++;
+          failedLogs.push({ row: i + 1, name: record.name || 'Unknown', error: err.message });
+        }
+
+        // Periodically write progress updates to the DB (e.g. every 50 records or at final step)
+        if ((i + 1) % 50 === 0 || (i + 1) === records.length) {
+          await DB.updateImportHistory(historyRecord.id, {
+            imported_records: importedCount,
+            updated_records: updatedCount,
+            skipped_records: skippedCount,
+            failed_records: failedCount,
+            failed_logs: failedLogs
+          });
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Import run error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+app.get('/api/import/history', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const list = await DB.getImportHistory();
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch import history' });
+  }
+});
+
+app.post('/api/leads/bulk-assign', authenticateToken, requireAdmin, async (req, res) => {
+  const { leadIds, employeeId, method, config } = req.body; // Manual, Round Robin, Equal Distribution, Project Wise
+  if (!leadIds || leadIds.length === 0) {
+    return res.status(400).json({ error: 'No lead IDs provided for assignment' });
+  }
+  
+  try {
+    const employees = await DB.getAllEmployees();
+    const activeEmployees = employees.filter(e => e.status === 'active');
+    
+    if (activeEmployees.length === 0) {
+      return res.status(400).json({ error: 'No active employee accounts available for assignment' });
+    }
+    
+    const device = getClientDevice(req);
+    
+    if (method === 'Manual') {
+      if (!employeeId) return res.status(400).json({ error: 'Target employee ID is required for Manual assignment' });
+      const targetEmp = activeEmployees.find(e => e.id === employeeId);
+      if (!targetEmp) return res.status(400).json({ error: 'Selected employee is inactive or not found' });
+      
+      for (const id of leadIds) {
+        const lead = await DB.getLeadById(id, req.user.id, req.user.role);
+        if (lead) {
+          const fromEmpId = lead.assigned_employee_id;
+          await DB.updateLead(id, { assigned_employee_id: employeeId }, req.user.id, req.user.role);
+          await DB.logLeadTransfer(id, fromEmpId, employeeId, req.user.id);
+          await DB.logAudit(id, 'Lead Assigned/Transferred', `Assigned to ${targetEmp.full_name} manually.`, req.user.id, req.user.full_name, device);
+        }
+      }
+    } else if (method === 'Round Robin') {
+      const selectedEmpIds = config && config.employeeIds && config.employeeIds.length > 0
+        ? config.employeeIds 
+        : activeEmployees.map(e => e.id);
+        
+      const assignees = activeEmployees.filter(e => selectedEmpIds.includes(e.id));
+      if (assignees.length === 0) return res.status(400).json({ error: 'No active employees selected' });
+      
+      let index = 0;
+      for (const id of leadIds) {
+        const targetEmp = assignees[index];
+        const lead = await DB.getLeadById(id, req.user.id, req.user.role);
+        if (lead) {
+          const fromEmpId = lead.assigned_employee_id;
+          await DB.updateLead(id, { assigned_employee_id: targetEmp.id }, req.user.id, req.user.role);
+          await DB.logLeadTransfer(id, fromEmpId, targetEmp.id, req.user.id);
+          await DB.logAudit(id, 'Lead Assigned/Transferred', `Auto-assigned to ${targetEmp.full_name} via Round Robin.`, req.user.id, req.user.full_name, device);
+        }
+        index = (index + 1) % assignees.length;
+      }
+    } else if (method === 'Equal Distribution') {
+      const selectedEmpIds = config && config.employeeIds && config.employeeIds.length > 0
+        ? config.employeeIds 
+        : activeEmployees.map(e => e.id);
+        
+      const assignees = activeEmployees.filter(e => selectedEmpIds.includes(e.id));
+      if (assignees.length === 0) return res.status(400).json({ error: 'No active employees selected' });
+      
+      const chunkSize = Math.ceil(leadIds.length / assignees.length);
+      for (let i = 0; i < assignees.length; i++) {
+        const emp = assignees[i];
+        const empLeads = leadIds.slice(i * chunkSize, (i + 1) * chunkSize);
+        for (const id of empLeads) {
+          const lead = await DB.getLeadById(id, req.user.id, req.user.role);
+          if (lead) {
+            const fromEmpId = lead.assigned_employee_id;
+            await DB.updateLead(id, { assigned_employee_id: emp.id }, req.user.id, req.user.role);
+            await DB.logLeadTransfer(id, fromEmpId, emp.id, req.user.id);
+            await DB.logAudit(id, 'Lead Assigned/Transferred', `Auto-assigned to ${emp.full_name} via Equal Distribution.`, req.user.id, req.user.full_name, device);
+          }
+        }
+      }
+    } else if (method === 'Project Wise') {
+      const mapping = config && config.projectMapping ? config.projectMapping : {};
+      
+      for (const id of leadIds) {
+        const lead = await DB.getLeadById(id, req.user.id, req.user.role);
+        if (lead) {
+          const targetEmpId = mapping[lead.project] || null;
+          const targetEmp = targetEmpId ? activeEmployees.find(e => e.id === targetEmpId) : null;
+          
+          if (targetEmp) {
+            const fromEmpId = lead.assigned_employee_id;
+            await DB.updateLead(id, { assigned_employee_id: targetEmp.id }, req.user.id, req.user.role);
+            await DB.logLeadTransfer(id, fromEmpId, targetEmp.id, req.user.id);
+            await DB.logAudit(id, 'Lead Assigned/Transferred', `Auto-assigned to ${targetEmp.full_name} via Project-Wise allocation.`, req.user.id, req.user.full_name, device);
+          }
+        }
+      }
+    }
+    
+    res.json({ message: `Successfully assigned ${leadIds.length} leads.` });
+  } catch (error) {
+    console.error('Bulk assignment error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 function parseRow(row) {
   const normalized = {};
   for (const k of Object.keys(row)) {
-    normalized[k.toLowerCase().replace(/[\s_]/g, '')] = row[k];
+    normalized[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[k];
   }
 
+  const name = normalized.name || normalized.leadname || normalized.customername || 'Imported Lead';
+  const city = normalized.city || normalized.location || '';
+  const state = normalized.state || '';
+  const phone1 = String(normalized.phone1 || normalized.mobile || normalized.mobilenumber || normalized.phone || normalized.phone_1 || '');
+  const phone2 = String(normalized.phone2 || normalized.alternate || normalized.alternatenumber || normalized.phone_2 || '');
+  const phone_whatsapp = String(normalized.whatsapp || normalized.whatsappnumber || normalized.phone_whatsapp || normalized.whatsapp_phone || '');
+  const budget = normalized.budget || '';
+  const project = normalized.project || '';
+  const requirement = normalized.requirement || normalized.requirements || '';
+  const comments = normalized.comments || normalized.remarks || normalized.comment || normalized.remark || '';
+  const lead_source = validateSource(normalized.leadsource || normalized.source);
+  const status = validateStatus(normalized.status);
+  const profession = normalized.profession || '';
+  const investor_or_end_user = normalized.investororenduser || normalized.investor_or_end_user || null;
+
   return {
-    name: normalized.name || normalized.leadname || 'Imported Lead',
-    city: normalized.city || '',
-    phone1: String(normalized.phone1 || normalized.phone || normalized.phone_1 || ''),
-    phone2: String(normalized.phone2 || normalized.phone_2 || ''),
-    budget: normalized.budget || '',
-    project: normalized.project || '',
-    requirement: normalized.requirement || '',
-    comments: normalized.comments || normalized.comment || '',
-    status: validateStatus(normalized.status),
+    name,
+    city,
+    state,
+    phone1,
+    phone2,
+    phone_whatsapp,
+    budget,
+    project,
+    requirement,
+    comments,
+    lead_source,
+    status,
+    profession,
+    investor_or_end_user: (investor_or_end_user === 'Investor' || investor_or_end_user === 'End User') ? investor_or_end_user : null,
     follow_up_date: normalized.followupdate || normalized.followup || null,
-    lead_source: validateSource(normalized.leadsource || normalized.source),
     site_visit_date: normalized.sitevisitdate || null,
     site_visit_status: normalized.sitevisitstatus || 'None',
     site_visit_remarks: normalized.sitevisitremarks || '',
@@ -633,9 +1014,9 @@ function parseRow(row) {
 function validateStatus(status) {
   if (!status) return 'Warm';
   const s = String(status).trim().toLowerCase();
-  if (s.includes('hot')) return 'Hot';
-  if (s.includes('cold')) return 'Cold';
-  return 'Warm';
+  const valid = ['New', 'Attempted', 'Connected', 'Interested', 'Hot', 'Warm', 'Cold', 'Site Visit Scheduled', 'Site Visit Done', 'Negotiation', 'Booked', 'Lost'];
+  const matched = valid.find(v => v.toLowerCase() === s);
+  return matched || 'Warm';
 }
 
 function validateSource(source) {
@@ -1278,24 +1659,202 @@ app.post('/api/leads/:id/site-visits/:visitId/check-out', authenticateToken, asy
   }
 });
 
-// --- PHASE 2: INACTIVE LEADS QUEUE (Admin only) ---
+// --- PHASE 3: INACTIVE LEADS QUEUE (Admin only) ---
 
 app.get('/api/leads/inactive-queue', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const days = parseInt(req.query.days) || 7;
     const leads = await DB.getLeads({}, req.user.id, req.user.role);
     const now = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 7);
+    const thresholdDate = new Date();
+    thresholdDate.setDate(now.getDate() - days);
 
     const inactiveLeads = leads.filter(lead => {
       if (!lead.assigned_employee_id) return false;
       const activityDate = lead.last_activity_date ? new Date(lead.last_activity_date) : new Date(lead.created_at);
-      return activityDate < sevenDaysAgo;
+      return activityDate < thresholdDate;
     });
 
     res.json(inactiveLeads);
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch inactive leads queue' });
+  }
+});
+
+// --- PHASE 3: REMINDERS API ---
+
+app.get('/api/reminders', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getReminders(req.user.id, req.user.role);
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch reminders' });
+  }
+});
+
+app.post('/api/reminders', authenticateToken, async (req, res) => {
+  try {
+    const reminderData = { ...req.body };
+    if (req.user.role !== 'admin') {
+      reminderData.assigned_employee_id = req.user.id;
+    }
+    const reminder = await DB.createReminder(reminderData);
+    
+    // Log audit
+    await DB.logAudit(
+      reminderData.lead_id,
+      'Follow-up Added',
+      `Reminder created: "${reminderData.title}" scheduled for ${reminderData.reminder_date}.`,
+      req.user.id,
+      req.user.full_name,
+      getClientDevice(req)
+    );
+
+    res.status(201).json(reminder);
+  } catch (e) {
+    console.error('Create reminder error:', e);
+    res.status(500).json({ error: 'Failed to create reminder' });
+  }
+});
+
+app.put('/api/reminders/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const reminder = await DB.markReminderAsRead(req.params.id);
+    res.json(reminder);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update reminder status' });
+  }
+});
+
+app.delete('/api/reminders/:id', authenticateToken, async (req, res) => {
+  try {
+    await DB.deleteReminder(req.params.id);
+    res.json({ message: 'Reminder deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete reminder' });
+  }
+});
+
+app.get('/api/reminders/widgets', authenticateToken, async (req, res) => {
+  try {
+    const widgets = await DB.getReminderWidgets(req.user.id, req.user.role);
+    res.json(widgets);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch reminder widgets' });
+  }
+});
+
+// --- PHASE 3: UNIFIED TIMELINE API ---
+
+app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const lead = await DB.getLeadById(leadId, req.user.id, req.user.role);
+    if (!lead) return res.status(404).json({ error: 'Lead not found or access denied' });
+
+    // Fetch timeline activities in parallel
+    const [audits, calls, transfers, visits, bookings, whatsappLogs] = await Promise.all([
+      DB.getAuditTrail(leadId),
+      DB.getCallLogs(leadId),
+      DB.getTransferHistory(leadId),
+      DB.getSiteVisits(leadId),
+      DB.getBookingsForLead(leadId),
+      DB.getWhatsAppLogsForLead(leadId)
+    ]);
+
+    const timeline = [];
+
+    // 1. Audit logs
+    audits.forEach(a => {
+      timeline.push({
+        id: a.id,
+        type: 'activity',
+        title: a.action,
+        description: a.details,
+        date: a.created_at,
+        user: a.user_name || 'System',
+        device: a.device || 'Web Portal'
+      });
+    });
+
+    // 2. Call Logs
+    calls.forEach(c => {
+      timeline.push({
+        id: c.id,
+        type: 'call',
+        title: `Call Response: ${c.response}`,
+        description: c.notes || 'No remarks logged.',
+        date: c.call_date,
+        user: c.caller ? c.caller.full_name : 'Executive'
+      });
+    });
+
+    // 3. Lead Transfers
+    transfers.forEach(t => {
+      timeline.push({
+        id: t.id,
+        type: 'transfer',
+        title: 'Lead Assignment/Transfer',
+        description: `Owner transferred from ${t.from_employee ? t.from_employee.full_name : 'Unassigned'} to ${t.to_employee ? t.to_employee.full_name : 'Unassigned'}.`,
+        date: t.transfer_date,
+        user: t.assigner ? t.assigner.full_name : 'System'
+      });
+    });
+
+    // 4. Site Visits
+    visits.forEach(v => {
+      if (v.check_in_time) {
+        timeline.push({
+          id: `${v.id}-checkin`,
+          type: 'site-visit-in',
+          title: 'Site Visit Check-In',
+          description: `Checked in at project site. GPS coords: ${v.check_in_lat}, ${v.check_in_lng}. Address: ${v.check_in_address || 'N/A'}`,
+          date: v.check_in_time,
+          user: lead.assigned_employee ? lead.assigned_employee.full_name : 'Executive'
+        });
+      }
+      if (v.check_out_time) {
+        timeline.push({
+          id: `${v.id}-checkout`,
+          type: 'site-visit-out',
+          title: 'Site Visit Check-Out',
+          description: `Checked out of project site. Outcome: ${v.outcome}. Feedback: "${v.feedback || 'None'}". Address: ${v.check_out_address || 'N/A'}`,
+          date: v.check_out_time,
+          user: lead.assigned_employee ? lead.assigned_employee.full_name : 'Executive'
+        });
+      }
+    });
+
+    // 5. Bookings
+    bookings.forEach(b => {
+      timeline.push({
+        id: b.id,
+        type: 'booking',
+        title: `Booking Action: ${b.status}`,
+        description: `Booked Unit ${b.unit_number || 'N/A'} in Project ${b.projects ? b.projects.name : 'N/A'}. Token: ₹${b.token_amount}, Total Cost: ₹${b.booking_amount}.`,
+        date: b.created_at,
+        user: 'System'
+      });
+    });
+
+    // 6. WhatsApp Logs
+    whatsappLogs.forEach(w => {
+      timeline.push({
+        id: w.id,
+        type: 'whatsapp',
+        title: `WhatsApp Campaign: ${w.status}`,
+        description: `Message: "${w.message_text}". Response Details: ${w.response_details || 'N/A'}`,
+        date: w.created_at,
+        user: 'WhatsApp Automation'
+      });
+    });
+
+    // Sort chronologically descending
+    timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json(timeline);
+  } catch (e) {
+    console.error('Unified timeline error:', e);
+    res.status(500).json({ error: 'Failed to build lead timeline' });
   }
 });
 
@@ -1333,17 +1892,13 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
 
     // Call logging today counts
     const todayStr = new Date().toISOString().split('T')[0];
-    let callsToday = 0;
+    const callLogs = await DB.getAllCallLogs();
     
+    // Count calls today
+    let callsToday = 0;
     if (role === 'employee') {
-      const callLogs = await DB.isCloud()
-        ? (await require('./db').supabase.from('call_logs').select('*').eq('caller_id', userId))?.data || []
-        : loadLocalDb().call_logs.filter(c => c.caller_id === userId);
-      callsToday = callLogs.filter(c => c.call_date && c.call_date.startsWith(todayStr)).length;
+      callsToday = callLogs.filter(c => c.caller_id === userId && c.call_date && c.call_date.startsWith(todayStr)).length;
     } else {
-      const callLogs = await DB.isCloud()
-        ? (await require('./db').supabase.from('call_logs').select('*'))?.data || []
-        : loadLocalDb().call_logs;
       callsToday = callLogs.filter(c => c.call_date && c.call_date.startsWith(todayStr)).length;
     }
 
@@ -1354,23 +1909,32 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
       if (sourceMap[src] !== undefined) sourceMap[src]++;
     });
 
-    // Employee Performance comparison (Admin Only)
+    // Employee Performance comparison (Admin & Leaderboard)
     let employeePerformance = [];
-    if (role === 'admin') {
-      const employees = await DB.getAllEmployees();
-      employeePerformance = employees.map(emp => {
-        const empLeads = leads.filter(l => l.assigned_employee_id === emp.id);
-        const empBookings = bookings.filter(b => b.executive_id === emp.id);
-        const conversionRate = empLeads.length > 0 ? (empBookings.length / empLeads.length) * 100 : 0;
-        return {
-          id: emp.id,
-          name: emp.full_name,
-          leadsCount: empLeads.length,
-          bookingsCount: empBookings.length,
-          conversionRate: Math.round(conversionRate * 10) / 10
-        };
-      });
-    }
+    const employees = await DB.getAllEmployees();
+    employeePerformance = employees.map(emp => {
+      const empLeads = leads.filter(l => l.assigned_employee_id === emp.id);
+      const empBookings = bookings.filter(b => b.executive_id === emp.id);
+      const empCalls = callLogs.filter(c => c.caller_id === emp.id);
+      const empConnectedCalls = empCalls.filter(c => !['Not Picked', 'Busy', 'Failed', 'Not Connected'].includes(c.response));
+      const empVisits = siteVisits.filter(v => v.leads && v.leads.assigned_employee_id === emp.id && v.outcome && v.outcome !== 'Scheduled');
+      const conversionRate = empLeads.length > 0 ? (empBookings.length / empLeads.length) * 100 : 0;
+      return {
+        id: emp.id,
+        name: emp.full_name,
+        leadsCount: empLeads.length,
+        callsCount: empCalls.length,
+        connectedCallsCount: empConnectedCalls.length,
+        siteVisitsCount: empVisits.length,
+        bookingsCount: empBookings.length,
+        conversionRate: Math.round(conversionRate * 10) / 10
+      };
+    });
+    // Sort by bookings then conversion rate for Ranking Board
+    employeePerformance.sort((a, b) => b.bookingsCount - a.bookingsCount || b.conversionRate - a.conversionRate);
+
+    // Fetch reminder widget counts
+    const remindersWidget = await DB.getReminderWidgets(req.user.id, req.user.role);
 
     res.json({
       summary: {
@@ -1388,7 +1952,8 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         callsToday
       },
       sourceDistribution: sourceMap,
-      employeePerformance
+      employeePerformance,
+      reminders: remindersWidget
     });
   } catch (e) {
     console.error('Analytics dashboard error:', e);

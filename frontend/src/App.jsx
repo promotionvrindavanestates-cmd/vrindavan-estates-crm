@@ -14,6 +14,7 @@ import BookingsRegistry from './components/BookingsRegistry';
 import WhatsAppCampaigns from './components/WhatsAppCampaigns';
 import ReportsAnalytics from './components/ReportsAnalytics';
 import LeadDetailsModal from './components/LeadDetailsModal';
+import RemindersModal from './components/RemindersModal';
 import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt } from 'lucide-react';
 
 export default function App() {
@@ -39,6 +40,9 @@ export default function App() {
   // History Audit Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedLeadForHistory, setSelectedLeadForHistory] = useState(null);
+  
+  // Reminders Modal State
+  const [remindersOpen, setRemindersOpen] = useState(false);
 
   // Check login on startup
   useEffect(() => {
@@ -201,6 +205,7 @@ export default function App() {
           <div class="user-controls">
             {todayReminderCount > 0 && (
               <div 
+                onClick={() => setRemindersOpen(true)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -211,7 +216,8 @@ export default function App() {
                   borderRadius: '20px',
                   fontSize: '12px',
                   border: '1px solid rgba(6, 182, 212, 0.2)',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}
                 title={`${todayReminderCount} follow-ups scheduled for today`}
               >
@@ -394,6 +400,14 @@ export default function App() {
           onClose={() => setHistoryModalOpen(false)} 
           lead={selectedLeadForHistory}
           onSaveSuccess={fetchCRMData}
+        />
+
+        {/* Reminders list & action shortcuts Modal */}
+        <RemindersModal
+          isOpen={remindersOpen}
+          onClose={() => setRemindersOpen(false)}
+          onSelectLead={handleSelectLeadFromDashboard}
+          currentUser={currentUser}
         />
 
       </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Download, Users, RefreshCw, BarChart2, Calendar, FileSpreadsheet, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Download, Users, RefreshCw, BarChart2, Calendar, FileSpreadsheet, ShieldAlert, ArrowRight, Landmark, PhoneCall, Award, MapPin } from 'lucide-react';
 
 export default function ReportsAnalytics({ currentUser }) {
   const [stats, setStats] = useState(null);
@@ -27,7 +27,7 @@ export default function ReportsAnalytics({ currentUser }) {
         setInactiveLeads(inactiveData);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to fetch reports analytics data:', e);
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,7 @@ export default function ReportsAnalytics({ currentUser }) {
           class={`btn ${activeSubTab === 'analytics' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveSubTab('analytics')}
         >
-          📈 Dashboard Charts
+          📈 Analytics Charts
         </button>
         {isAdmin && (
           <button 
@@ -103,7 +103,7 @@ export default function ReportsAnalytics({ currentUser }) {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '20px' }}>Loading reports data...</div>
+        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Loading reports data...</div>
       ) : (
         <>
           {/* Dashboard Analytics Sub Tab */}
@@ -194,33 +194,63 @@ export default function ReportsAnalytics({ currentUser }) {
           {/* CSV/Excel Exports Sub Tab (Admin only) */}
           {activeSubTab === 'reports' && isAdmin && (
             <div class="card">
-              <h2 style={{ marginBottom: '20px' }}>📥 Download Excel/CSV Reports</h2>
+              <h2 style={{ marginBottom: '10px' }}>📥 Download Excel/CSV Reports</h2>
               <p style={{ color: 'var(--text-muted)', marginBottom: '25px', fontSize: '14px' }}>
                 Generate and download daily, weekly, or monthly registers for booking records, payment histories, and GPS check-in logs.
               </p>
 
-              <div class="grid-3">
-                <div class="stat-card" style={{ textAlign: 'center', padding: '25px' }}>
-                  <FileSpreadsheet size={32} style={{ color: 'var(--primary)', marginBottom: '15px' }} />
-                  <h3 style={{ marginBottom: '10px' }}>Booking Register</h3>
-                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => handleExportReport('bookings')}>
-                    <Download size={14} /> Download CSV
-                  </button>
-                </div>
-                
-                <div class="stat-card" style={{ textAlign: 'center', padding: '25px' }}>
-                  <Landmark size={32} style={{ color: '#eab308', marginBottom: '15px' }} />
-                  <h3 style={{ marginBottom: '10px' }}>Payments Ledger</h3>
-                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => handleExportReport('payments')}>
-                    <Download size={14} /> Download CSV
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+                {/* Leads CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <FileSpreadsheet size={32} style={{ color: 'var(--primary)', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Leads Register</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('leads')}>
+                    <Download size={12} /> Download CSV
                   </button>
                 </div>
 
-                <div class="stat-card" style={{ textAlign: 'center', padding: '25px' }}>
-                  <Calendar size={32} style={{ color: '#06b6d4', marginBottom: '15px' }} />
-                  <h3 style={{ marginBottom: '10px' }}>Site Visits Check-In Log</h3>
-                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => handleExportReport('site-visits')}>
-                    <Download size={14} /> Download CSV
+                {/* Follow-up CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <PhoneCall size={32} style={{ color: '#06b6d4', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Follow-Up Schedule</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('followups')}>
+                    <Download size={12} /> Download CSV
+                  </button>
+                </div>
+
+                {/* Site Visit CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <MapPin size={32} style={{ color: '#eab308', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Site Visit Logs</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('site-visits')}>
+                    <Download size={12} /> Download CSV
+                  </button>
+                </div>
+
+                {/* Booking CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <Award size={32} style={{ color: 'var(--color-success)', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Booking Register</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('bookings')}>
+                    <Download size={12} /> Download CSV
+                  </button>
+                </div>
+
+                {/* Payments CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <Landmark size={32} style={{ color: 'var(--primary)', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Payments Ledger</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('payments')}>
+                    <Download size={12} /> Download CSV
+                  </button>
+                </div>
+
+                {/* Employee Performance CSV */}
+                <div class="stat-card" style={{ textAlign: 'center', padding: '20px' }}>
+                  <Users size={32} style={{ color: '#8b5cf6', marginBottom: '12px' }} />
+                  <h4 style={{ marginBottom: '8px', fontSize: '14px' }}>Employee Analytics</h4>
+                  <button class="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }} onClick={() => handleExportReport('employees')}>
+                    <Download size={12} /> Download CSV
                   </button>
                 </div>
               </div>

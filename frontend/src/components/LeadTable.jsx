@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Phone, MessageSquare, Edit2, Trash2, UserPlus, PhoneCall, Plus, History } from 'lucide-react';
+import { api } from '../utils/api';
+import { Phone, MessageSquare, Edit2, Trash2, UserPlus, PhoneCall, Plus, History, Filter, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
 
 export default function LeadTable({ 
   leads = [], 
@@ -18,11 +19,33 @@ export default function LeadTable({
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
+  
+  // Advanced filters state
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedSource, setSelectedSource] = useState('');
+  const [createdStart, setCreatedStart] = useState('');
+  const [createdEnd, setCreatedEnd] = useState('');
+  const [followupStart, setFollowupStart] = useState('');
+  const [followupEnd, setFollowupEnd] = useState('');
+  const [siteVisitStart, setSiteVisitStart] = useState('');
+  const [siteVisitEnd, setSiteVisitEnd] = useState('');
+
+  // Row selection states for bulk assignments
+  const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+  
+  // Bulk Assignment Modal state
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkMethod, setBulkMethod] = useState('Manual'); // Manual, Round Robin, Equal Distribution, Project Wise
+  const [bulkTargetEmployee, setBulkTargetEmployee] = useState('');
+  const [bulkSelectedEmployees, setBulkSelectedEmployees] = useState([]);
+  const [bulkProjectMapping, setBulkProjectMapping] = useState({});
+  const [bulkAssigning, setBulkAssigning] = useState(false);
 
   // Extract unique projects, cities, budgets for dynamic filter dropdowns
   const uniqueProjects = [...new Set(leads.map(l => l.project).filter(Boolean))];
   const uniqueCities = [...new Set(leads.map(l => l.city).filter(Boolean))];
   const uniqueBudgets = [...new Set(leads.map(l => l.budget).filter(Boolean))];
+  const uniqueSources = ['Facebook', 'Instagram', 'Google', 'Website', 'WhatsApp', 'Walk-In', 'Referral', 'MagicBricks', '99acres', 'Housing'];
 
   // Filtering leads client-side to ensure instant results
   const filteredLeads = leads.filter(l => {
@@ -36,14 +59,49 @@ export default function LeadTable({
       (l.city && l.city.toLowerCase().includes(term)) ||
       (l.assigned_employee && l.assigned_employee.full_name.toLowerCase().includes(term));
 
-    // Filters
+    // Core Filters
     const matchesCity = !selectedCity || (l.city && l.city.toLowerCase() === selectedCity.toLowerCase());
     const matchesBudget = !selectedBudget || (l.budget && l.budget.toLowerCase() === selectedBudget.toLowerCase());
     const matchesProject = !selectedProject || (l.project && l.project.toLowerCase() === selectedProject.toLowerCase());
     const matchesStatus = !selectedStatus || l.status === selectedStatus;
     const matchesEmployee = !selectedEmployee || l.assigned_employee_id === selectedEmployee;
 
-    return matchesSearch && matchesCity && matchesBudget && matchesProject && matchesStatus && matchesEmployee;
+    // Advanced Filters
+    const matchesSource = !selectedSource || l.lead_source === selectedSource;
+    
+    // Created Date Range
+    let matchesCreated = true;
+    if (createdStart || createdEnd) {
+      const cDateStr = l.created_at ? l.created_at.split('T')[0] : '';
+      if (createdStart && cDateStr < createdStart) matchesCreated = false;
+      if (createdEnd && cDateStr > createdEnd) matchesCreated = false;
+    }
+
+    // Follow-up Date Range
+    let matchesFollowup = true;
+    if (followupStart || followupEnd) {
+      const fDateStr = l.follow_up_date || '';
+      if (!fDateStr) {
+        matchesFollowup = false;
+      } else {
+        if (followupStart && fDateStr < followupStart) matchesFollowup = false;
+        if (followupEnd && fDateStr > followupEnd) matchesFollowup = false;
+      }
+    }
+
+    // Site Visit Date Range
+    let matchesSiteVisit = true;
+    if (siteVisitStart || siteVisitEnd) {
+      const svDateStr = l.site_visit_date || '';
+      if (!svDateStr) {
+        matchesSiteVisit = false;
+      } else {
+        if (siteVisitStart && svDateStr < siteVisitStart) matchesSiteVisit = false;
+        if (siteVisitEnd && svDateStr > siteVisitEnd) matchesSiteVisit = false;
+      }
+    }
+
+    return matchesSearch && matchesCity && matchesBudget && matchesProject && matchesStatus && matchesEmployee && matchesSource && matchesCreated && matchesFollowup && matchesSiteVisit;
   });
 
   const getStatusBadgeClass = (status) => {
@@ -66,13 +124,11 @@ export default function LeadTable({
 
   const formatPhoneNumber = (num) => {
     if (!num) return '';
-    // Clean and normalize number for WhatsApp
     return num.replace(/\D/g, '');
   };
 
   const handleWhatsAppClick = (phone, leadName) => {
     const cleanPhone = formatPhoneNumber(phone);
-    // Add country code if not present (default to 91 for India as Vrindavan is in India)
     const waPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const text = encodeURIComponent(`Hi ${leadName}, greetings from Vrindavan Estates! We are following up regarding your query. How can we assist you today?`);
     const url = `https://wa.me/${waPhone}?text=${text}`;
@@ -80,14 +136,84 @@ export default function LeadTable({
   };
 
   const handleCallClick = (phone, lead) => {
-    // 1. Open the tel protocol to trigger dialer (native or VOIP)
     if (window.Capacitor) {
       window.open(`tel:${phone}`, '_system');
     } else {
       window.location.href = `tel:${phone}`;
     }
-    // 2. Open Call Logger modal immediately to record outcome
     onLogCall(lead);
+  };
+
+  // Checkbox Selection Helpers
+  const handleToggleSelectAll = () => {
+    if (selectedLeadIds.length === filteredLeads.length) {
+      setSelectedLeadIds([]);
+    } else {
+      setSelectedLeadIds(filteredLeads.map(l => l.id));
+    }
+  };
+
+  const handleToggleSelectRow = (id) => {
+    setSelectedLeadIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Bulk Assignment Submission
+  const handleExecuteBulkAssign = async () => {
+    if (selectedLeadIds.length === 0) return;
+    
+    // Validations
+    if (bulkMethod === 'Manual' && !bulkTargetEmployee) {
+      alert('Please select a target employee.');
+      return;
+    }
+    if ((bulkMethod === 'Round Robin' || bulkMethod === 'Equal Distribution') && bulkSelectedEmployees.length === 0) {
+      alert('Please select at least one employee to distribute to.');
+      return;
+    }
+
+    setBulkAssigning(true);
+    try {
+      const config = {};
+      if (bulkMethod === 'Round Robin' || bulkMethod === 'Equal Distribution') {
+        config.employeeIds = bulkSelectedEmployees;
+      }
+      if (bulkMethod === 'Project Wise') {
+        config.projectMapping = bulkProjectMapping;
+      }
+
+      const res = await api.bulkAssignLeads(
+        selectedLeadIds,
+        bulkMethod === 'Manual' ? bulkTargetEmployee : null,
+        bulkMethod,
+        config
+      );
+      
+      alert(res.message || 'Leads successfully assigned.');
+      setSelectedLeadIds([]);
+      setBulkModalOpen(false);
+      
+      // Force refresh CRM data
+      if (window.location) window.location.reload();
+    } catch (err) {
+      alert(`Bulk assign failed: ${err.message}`);
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
+  const handleSelectBulkEmployee = (empId) => {
+    setBulkSelectedEmployees(prev => 
+      prev.includes(empId) ? prev.filter(id => id !== empId) : [...prev, empId]
+    );
+  };
+
+  const handleProjectMapChange = (projectName, empId) => {
+    setBulkProjectMapping(prev => ({
+      ...prev,
+      [projectName]: empId
+    }));
   };
 
   return (
@@ -187,12 +313,94 @@ export default function LeadTable({
             </div>
           )}
         </div>
+
+        {/* Toggle Advanced Filters */}
+        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '6px 12px', fontSize: '12px' }}
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            <Filter size={12} /> {showAdvanced ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
+            {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        </div>
+
+        {/* Advanced Filters Panel */}
+        {showAdvanced && (
+          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+            <div class="form-group">
+              <label>Lead Source</label>
+              <select class="form-control" value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)}>
+                <option value="">All Sources</option>
+                {uniqueSources.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label>Created From</label>
+              <input type="date" class="form-control" value={createdStart} onChange={(e) => setCreatedStart(e.target.value)} />
+            </div>
+            <div class="form-group">
+              <label>Created To</label>
+              <input type="date" class="form-control" value={createdEnd} onChange={(e) => setCreatedEnd(e.target.value)} />
+            </div>
+
+            <div class="form-group">
+              <label>Follow-up From</label>
+              <input type="date" class="form-control" value={followupStart} onChange={(e) => setFollowupStart(e.target.value)} />
+            </div>
+            <div class="form-group">
+              <label>Follow-up To</label>
+              <input type="date" class="form-control" value={followupEnd} onChange={(e) => setFollowupEnd(e.target.value)} />
+            </div>
+
+            <div class="form-group">
+              <label>Site Visit From</label>
+              <input type="date" class="form-control" value={siteVisitStart} onChange={(e) => setSiteVisitStart(e.target.value)} />
+            </div>
+            <div class="form-group">
+              <label>Site Visit To</label>
+              <input type="date" class="form-control" value={siteVisitEnd} onChange={(e) => setSiteVisitEnd(e.target.value)} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Leads Table Panel */}
       <div class="table-panel">
-        <div class="table-header-row">
-          <h3>Leads Directory ({filteredLeads.length})</h3>
+        <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h3>Leads Directory ({filteredLeads.length})</h3>
+            
+            {/* Bulk Actions Indicator & Trigger */}
+            {selectedLeadIds.length > 0 && currentUser.role === 'admin' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--color-info-bg)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-info)' }}>
+                  {selectedLeadIds.length} Selected
+                </span>
+                <button 
+                  type="button" 
+                  class="btn btn-primary" 
+                  style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', gap: '4px', alignItems: 'center' }}
+                  onClick={() => {
+                    // Populate default mapped projects config
+                    const defaults = {};
+                    uniqueProjects.forEach(p => {
+                      defaults[p] = '';
+                    });
+                    setBulkProjectMapping(defaults);
+                    setBulkSelectedEmployees(employees.filter(e => e.status === 'active').map(e => e.id));
+                    setBulkModalOpen(true);
+                  }}
+                >
+                  <UserPlus size={12} /> Bulk Assign
+                </button>
+              </div>
+            )}
+          </div>
+
           <button class="btn btn-primary" onClick={onAddLead}>
             <Plus size={16} /> Add Lead
           </button>
@@ -207,6 +415,21 @@ export default function LeadTable({
             <table>
               <thead>
                 <tr>
+                  {currentUser.role === 'admin' && (
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <button 
+                        type="button" 
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0 }}
+                        onClick={handleToggleSelectAll}
+                      >
+                        {selectedLeadIds.length === filteredLeads.length ? (
+                          <CheckSquare size={16} />
+                        ) : (
+                          <Square size={16} />
+                        )}
+                      </button>
+                    </th>
+                  )}
                   <th>Lead Info</th>
                   <th>Contact Info</th>
                   <th>Budget & Project</th>
@@ -218,167 +441,282 @@ export default function LeadTable({
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map(l => (
-                  <tr key={l.id}>
-                    <td data-label="Lead Info">
-                      <div style={{ fontWeight: 600 }}>{l.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px' }}>Src: {l.lead_source || 'Website'}</div>
-                    </td>
-                    
-                    <td data-label="Contact Info">
-                      <div class="phone-actions">
-                        <span>{l.phone1}</span>
-                        <button 
-                          class="action-icon-btn call" 
-                          title="Call Lead"
-                          onClick={() => handleCallClick(l.phone1, l)}
-                        >
-                          <Phone size={12} />
-                        </button>
-                        <button 
-                          class="action-icon-btn whatsapp" 
-                          title="WhatsApp Chat"
-                          onClick={() => handleWhatsAppClick(l.phone1, l.name)}
-                        >
-                          <MessageSquare size={12} />
-                        </button>
-                      </div>
+                {filteredLeads.map(l => {
+                  const isRowSelected = selectedLeadIds.includes(l.id);
+                  return (
+                    <tr key={l.id} style={{ background: isRowSelected ? 'rgba(219, 178, 93, 0.05)' : 'inherit' }}>
+                      {currentUser.role === 'admin' && (
+                        <td style={{ textAlign: 'center' }}>
+                          <button 
+                            type="button" 
+                            style={{ background: 'none', border: 'none', color: isRowSelected ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                            onClick={() => handleToggleSelectRow(l.id)}
+                          >
+                            {isRowSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                          </button>
+                        </td>
+                      )}
                       
-                      {l.phone2 && (
-                        <div class="phone-actions" style={{ marginTop: '4px' }}>
-                          <span>{l.phone2}</span>
+                      <td data-label="Lead Info">
+                        <div style={{ fontWeight: 600 }}>{l.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px' }}>Src: {l.lead_source || 'Website'}</div>
+                      </td>
+                      
+                      <td data-label="Contact Info">
+                        <div class="phone-actions">
+                          <span>{l.phone1}</span>
                           <button 
                             class="action-icon-btn call" 
-                            title="Call Lead Phone 2"
-                            onClick={() => handleCallClick(l.phone2, l)}
+                            title="Call Lead"
+                            onClick={() => handleCallClick(l.phone1, l)}
                           >
                             <Phone size={12} />
                           </button>
                           <button 
                             class="action-icon-btn whatsapp" 
-                            title="WhatsApp Chat Phone 2"
-                            onClick={() => handleWhatsAppClick(l.phone2, l.name)}
+                            title="WhatsApp Chat"
+                            onClick={() => handleWhatsAppClick(l.phone1, l.name)}
                           >
                             <MessageSquare size={12} />
                           </button>
                         </div>
-                      )}
+                        
+                        {l.phone2 && (
+                          <div class="phone-actions" style={{ marginTop: '4px' }}>
+                            <span>{l.phone2}</span>
+                            <button 
+                              class="action-icon-btn call" 
+                              title="Call Lead Phone 2"
+                              onClick={() => handleCallClick(l.phone2, l)}
+                            >
+                              <Phone size={12} />
+                            </button>
+                            <button 
+                              class="action-icon-btn whatsapp" 
+                              title="WhatsApp Chat Phone 2"
+                              onClick={() => handleWhatsAppClick(l.phone2, l.name)}
+                            >
+                              <MessageSquare size={12} />
+                            </button>
+                          </div>
+                        )}
 
-                      {(l.last_call_date || l.last_response) && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                          Last: {l.last_response || 'Call'} ({l.last_call_date ? new Date(l.last_call_date).toLocaleDateString() : 'N/A'})
+                        {(l.last_call_date || l.last_response) && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                            Last: {l.last_response || 'Call'} ({l.last_call_date ? new Date(l.last_call_date).toLocaleDateString() : 'N/A'})
+                          </div>
+                        )}
+                      </td>
+                      
+                      <td data-label="Budget & Project">
+                        <div style={{ fontWeight: 500 }}>{l.project || 'Unspecified Project'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Budget: {l.budget || 'N/A'}</div>
+                      </td>
+                      
+                      <td data-label="Requirement & Comments" style={{ maxWidth: '280px' }}>
+                        <div style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.requirement}>
+                          {l.requirement || <span style={{ color: 'var(--text-muted)' }}>No requirement notes</span>}
                         </div>
-                      )}
-                    </td>
-                    
-                    <td data-label="Budget & Project">
-                      <div style={{ fontWeight: 500 }}>{l.project || 'Unspecified Project'}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Budget: {l.budget || 'N/A'}</div>
-                    </td>
-                    
-                    <td data-label="Requirement & Comments" style={{ maxWidth: '280px' }}>
-                      <div style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.requirement}>
-                        {l.requirement || <span style={{ color: 'var(--text-muted)' }}>No requirement notes</span>}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.comments}>
-                        Comment: {l.comments || 'None'}
-                      </div>
-                    </td>
-                    
-                    <td data-label="Status">
-                      <span class={getStatusBadgeClass(l.status)}>{l.status}</span>
-                      {l.site_visit_status && l.site_visit_status !== 'None' && (
-                        <div style={{ marginTop: '4px' }}>
-                          <span class="badge badge-info" style={{ fontSize: '9px', padding: '2px 6px' }}>Visit: {l.site_visit_status}</span>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.comments}>
+                          Comment: {l.comments || 'None'}
                         </div>
-                      )}
-                      {l.booking_status && l.booking_status !== 'None' && (
-                        <div style={{ marginTop: '4px' }}>
-                          <span class="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px' }}>Booked ({l.booking_status})</span>
-                        </div>
-                      )}
-                    </td>
-                    
-                    <td data-label="Follow Up">
-                      {l.follow_up_date ? (
-                        <span style={{ 
-                          color: l.follow_up_date < new Date().toLocaleDateString('en-CA') && l.booking_status !== 'Confirmed' ? 'var(--color-hot)' : 'inherit',
-                          fontWeight: 500
-                        }}>
-                          {l.follow_up_date}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>Not scheduled</span>
-                      )}
-                    </td>
-                    
-                    <td data-label="Assigned To">
-                      {l.assigned_employee ? (
-                        <span>{l.assigned_employee.full_name}</span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Unassigned</span>
-                      )}
-                      {currentUser.role === 'admin' && (
-                        <button 
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                            marginLeft: '6px',
-                            verticalAlign: 'middle'
-                          }} 
-                          title="Reassign Employee"
-                          onClick={() => onAssignLead(l)}
-                        >
-                          <UserPlus size={14} />
-                        </button>
-                      )}
-                    </td>
-                    
-                    <td data-label="Actions" style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px' }}>
-                        <button 
-                          class="action-icon-btn" 
-                          title="View History Trails"
-                          onClick={() => onViewHistory(l)}
-                        >
-                          <History size={14} />
-                        </button>
-                        <button 
-                          class="action-icon-btn" 
-                          title="Log Call Response"
-                          onClick={() => onLogCall(l)}
-                        >
-                          <PhoneCall size={14} />
-                        </button>
-                        <button 
-                          class="action-icon-btn" 
-                          title="Edit Lead"
-                          onClick={() => onEditLead(l)}
-                        >
-                          <Edit2 size={14} />
-                        </button>
+                      </td>
+                      
+                      <td data-label="Status">
+                        <span class={getStatusBadgeClass(l.status)}>{l.status}</span>
+                        {l.site_visit_status && l.site_visit_status !== 'None' && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span class="badge badge-info" style={{ fontSize: '9px', padding: '2px 6px' }}>Visit: {l.site_visit_status}</span>
+                          </div>
+                        )}
+                        {l.booking_status && l.booking_status !== 'None' && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span class="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px' }}>Booked ({l.booking_status})</span>
+                          </div>
+                        )}
+                      </td>
+                      
+                      <td data-label="Follow Up">
+                        {l.follow_up_date ? (
+                          <span style={{ 
+                            color: l.follow_up_date < new Date().toLocaleDateString('en-CA') && l.booking_status !== 'Confirmed' ? 'var(--color-hot)' : 'inherit',
+                            fontWeight: 500
+                          }}>
+                            {l.follow_up_date}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>Not scheduled</span>
+                        )}
+                      </td>
+                      
+                      <td data-label="Assigned To">
+                        {l.assigned_employee ? (
+                          <span>{l.assigned_employee.full_name}</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Unassigned</span>
+                        )}
                         {currentUser.role === 'admin' && (
                           <button 
-                            class="action-icon-btn" 
-                            style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
-                            title="Delete Lead"
-                            onClick={() => onDeleteLead(l.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--primary)',
+                              cursor: 'pointer',
+                              marginLeft: '6px',
+                              verticalAlign: 'middle'
+                            }} 
+                            title="Reassign Employee"
+                            onClick={() => onAssignLead(l)}
                           >
-                            <Trash2 size={14} />
+                            <UserPlus size={14} />
                           </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      
+                      <td data-label="Actions" style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '8px' }}>
+                          <button 
+                            class="action-icon-btn" 
+                            title="View Timeline & Audits"
+                            onClick={() => onViewHistory(l)}
+                          >
+                            <History size={14} />
+                          </button>
+                          <button 
+                            class="action-icon-btn" 
+                            title="Log Call Response"
+                            onClick={() => onLogCall(l)}
+                          >
+                            <PhoneCall size={14} />
+                          </button>
+                          <button 
+                            class="action-icon-btn" 
+                            title="Edit Lead"
+                            onClick={() => onEditLead(l)}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          {currentUser.role === 'admin' && (
+                            <button 
+                              class="action-icon-btn" 
+                              style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
+                              title="Delete Lead"
+                              onClick={() => onDeleteLead(l.id)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* Bulk Assignment Modal */}
+      {bulkModalOpen && (
+        <div class="modal-backdrop">
+          <div class="modal-card" style={{ maxWidth: '540px' }}>
+            <div class="modal-header">
+              <h2>Bulk Assignment Wizard ({selectedLeadIds.length} Leads Selected)</h2>
+              <button class="close-btn" onClick={() => setBulkModalOpen(false)}>×</button>
+            </div>
+            
+            <div class="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div class="form-group">
+                <label>Allocation Methodology</label>
+                <select class="form-control" value={bulkMethod} onChange={(e) => setBulkMethod(e.target.value)}>
+                  <option value="Manual">Manual Assignment (Single Target)</option>
+                  <option value="Round Robin">Round Robin Distribution</option>
+                  <option value="Equal Distribution">Equal Distribution</option>
+                  <option value="Project Wise">Project-Wise Allocation</option>
+                </select>
+              </div>
+
+              {/* Manual Assignment Options */}
+              {bulkMethod === 'Manual' && (
+                <div class="form-group">
+                  <label>Target Executive</label>
+                  <select 
+                    class="form-control" 
+                    value={bulkTargetEmployee} 
+                    onChange={(e) => setBulkTargetEmployee(e.target.value)}
+                  >
+                    <option value="">-- Select Target Employee --</option>
+                    {employees.filter(e => e.status === 'active').map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Round Robin & Equal Distribution Options */}
+              {(bulkMethod === 'Round Robin' || bulkMethod === 'Equal Distribution') && (
+                <div class="form-group">
+                  <label style={{ marginBottom: '8px', display: 'block' }}>Select Executives to Include</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--bg-main)', padding: '12px', borderRadius: 'var(--radius-md)', maxHeight: '180px', overflowY: 'auto' }}>
+                    {employees.filter(e => e.status === 'active').map(emp => (
+                      <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                        <input 
+                          type="checkbox"
+                          checked={bulkSelectedEmployees.includes(emp.id)}
+                          onChange={() => handleSelectBulkEmployee(emp.id)}
+                        />
+                        <span>{emp.full_name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Project Wise Options */}
+              {bulkMethod === 'Project Wise' && (
+                <div class="form-group">
+                  <label style={{ marginBottom: '8px', display: 'block' }}>Map Executives to Projects</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-main)', padding: '12px', borderRadius: 'var(--radius-md)', maxHeight: '220px', overflowY: 'auto' }}>
+                    {uniqueProjects.length === 0 ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No projects defined in lead database.</span>
+                    ) : (
+                      uniqueProjects.map(proj => (
+                        <div key={proj} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{proj}</span>
+                          <select 
+                            class="form-control"
+                            style={{ fontSize: '12px', padding: '4px' }}
+                            value={bulkProjectMapping[proj] || ''}
+                            onChange={(e) => handleProjectMapChange(proj, e.target.value)}
+                          >
+                            <option value="">-- Skip / Leave Unassigned --</option>
+                            {employees.filter(e => e.status === 'active').map(emp => (
+                              <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div class="modal-footer" style={{ display: 'flex', justifySelf: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <button class="btn btn-secondary" onClick={() => setBulkModalOpen(false)}>Cancel</button>
+              <button 
+                class="btn btn-primary" 
+                onClick={handleExecuteBulkAssign}
+                disabled={bulkAssigning}
+              >
+                {bulkAssigning ? 'Reassigning...' : `Execute Assignment (${selectedLeadIds.length} Leads)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

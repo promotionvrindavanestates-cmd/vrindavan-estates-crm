@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { api } from '../utils/api';
 import { Download, Upload, FileText, Database, ShieldAlert, CheckCircle } from 'lucide-react';
+import ImportEngine from './ImportEngine';
 
 export default function BackupMgmt({ onRefreshLeads, currentUser = {} }) {
   const [importLoading, setImportLoading] = useState(false);
@@ -126,49 +127,7 @@ export default function BackupMgmt({ onRefreshLeads, currentUser = {} }) {
 
         {/* Import Card */}
         {currentUser.role === 'admin' && (
-          <div class="alerts-panel" style={{ maxHeight: 'none', height: 'fit-content' }}>
-            <div class="alerts-header">
-              <h3 class="alerts-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Upload size={18} style={{ color: 'var(--primary)' }} />
-                Bulk Import Leads
-              </h3>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Upload an Excel (.xlsx) or CSV file to bulk insert leads. Make sure columns map to fields like: 
-              <code style={{ color: 'var(--primary)', background: 'var(--bg-main)', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px', fontSize: '11px' }}>
-                Name, Phone1, Project, City, Budget, Requirement
-              </code>.
-            </p>
-
-            {importError && (
-              <div style={{ background: 'var(--color-hot-bg)', color: 'var(--color-hot)', padding: '10px 14px', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '13px', border: '1px solid rgba(255, 94, 94, 0.2)' }}>
-                {importError}
-              </div>
-            )}
-
-            {importMsg && (
-              <div style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '10px 14px', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '13px', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle size={14} />
-                {importMsg}
-              </div>
-            )}
-
-            <form onSubmit={handleImportSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div class="form-group">
-                <input
-                  type="file"
-                  class="form-control"
-                  ref={importFileRef}
-                  accept=".csv, .xlsx, .xls"
-                  disabled={importLoading}
-                  style={{ background: 'var(--bg-main)', border: '1px dashed var(--border-color)', padding: '12px' }}
-                />
-              </div>
-              <button type="submit" class="btn btn-primary" disabled={importLoading}>
-                {importLoading ? 'Uploading and Parsing...' : 'Import Data Sheet'}
-              </button>
-            </form>
-          </div>
+          <ImportEngine onRefreshLeads={onRefreshLeads} />
         )}
       </div>
 
