@@ -43,6 +43,7 @@ export default function App() {
   
   // Reminders Modal State
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [remindersCount, setRemindersCount] = useState(0);
 
   // Check login on startup
   useEffect(() => {
@@ -75,12 +76,18 @@ export default function App() {
     if (!user) return;
     setDataLoading(true);
     try {
-      const leadsData = await api.getLeads();
-      setLeads(leadsData);
+      // Limit to 100 on startup to prevent crashing on large datasets
+      const leadsData = await api.getLeads({ limit: 100, page: 1 });
+      setLeads(leadsData.leads || leadsData);
+      
+      // Fetch active follow-ups count from widgets API
+      const widgets = await api.getReminderWidgets();
+      setRemindersCount(widgets.today || 0);
+
       if (window.Capacitor) {
         try {
           const { scheduleAllFollowUps } = await import('./utils/localNotifications');
-          await scheduleAllFollowUps(leadsData);
+          await scheduleAllFollowUps(leadsData.leads || leadsData);
         } catch (e) {
           console.error('Failed to schedule notifications:', e);
         }
@@ -176,9 +183,8 @@ export default function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // Daily Follow-Ups Alert Reminder Notification count
-  const todayStr = new Date().toLocaleDateString('en-CA');
-  const todayReminderCount = leads.filter(l => l.follow_up_date === todayStr && l.booking_status !== 'Confirmed').length;
+  // Daily Follow-Ups Alert Reminder Notification count (fetched via server-side reminders API)
+  const todayReminderCount = remindersCount;
 
   return (
     <div class="app-container">

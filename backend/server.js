@@ -226,7 +226,10 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       follow_up_due: req.query.follow_up_due === 'true',
       site_visit_completed: req.query.site_visit_completed === 'true',
       phone: req.query.phone,
-      executive: req.query.executive
+      executive: req.query.executive,
+      // Pagination parameters
+      page: req.query.page,
+      limit: req.query.limit
     };
 
     const leads = await DB.getLeads(filters, req.user.id, req.user.role);

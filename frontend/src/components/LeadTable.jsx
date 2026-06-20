@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Phone, MessageSquare, Edit2, Trash2, UserPlus, PhoneCall, Plus, History, Filter, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
 
@@ -30,6 +30,14 @@ export default function LeadTable({
   const [siteVisitStart, setSiteVisitStart] = useState('');
   const [siteVisitEnd, setSiteVisitEnd] = useState('');
 
+  // Server-side Pagination & Query States
+  const [leadsState, setLeadsState] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+
   // Row selection states for bulk assignments
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   
@@ -47,62 +55,77 @@ export default function LeadTable({
   const uniqueBudgets = [...new Set(leads.map(l => l.budget).filter(Boolean))];
   const uniqueSources = ['Facebook', 'Instagram', 'Google', 'Website', 'WhatsApp', 'Walk-In', 'Referral', 'MagicBricks', '99acres', 'Housing'];
 
-  // Filtering leads client-side to ensure instant results
-  const filteredLeads = leads.filter(l => {
-    // Search filter
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = !searchTerm || 
-      (l.name && l.name.toLowerCase().includes(term)) ||
-      (l.phone1 && l.phone1.toLowerCase().includes(term)) ||
-      (l.phone2 && l.phone2.toLowerCase().includes(term)) ||
-      (l.project && l.project.toLowerCase().includes(term)) ||
-      (l.city && l.city.toLowerCase().includes(term)) ||
-      (l.assigned_employee && l.assigned_employee.full_name.toLowerCase().includes(term));
+  // Fetch leads dynamically from backend server
+  const fetchLeads = async () => {
+    setLoadingLeads(true);
+    try {
+      const data = await api.getLeads({
+        search: searchTerm,
+        city: selectedCity,
+        budget: selectedBudget,
+        project: selectedProject,
+        status: selectedStatus,
+        assigned_employee_id: selectedEmployee,
+        source: selectedSource,
+        created_start: createdStart,
+        created_end: createdEnd,
+        page: currentPage,
+        limit: limit
+      });
 
-    // Core Filters
-    const matchesCity = !selectedCity || (l.city && l.city.toLowerCase() === selectedCity.toLowerCase());
-    const matchesBudget = !selectedBudget || (l.budget && l.budget.toLowerCase() === selectedBudget.toLowerCase());
-    const matchesProject = !selectedProject || (l.project && l.project.toLowerCase() === selectedProject.toLowerCase());
-    const matchesStatus = !selectedStatus || l.status === selectedStatus;
-    const matchesEmployee = !selectedEmployee || l.assigned_employee_id === selectedEmployee;
-
-    // Advanced Filters
-    const matchesSource = !selectedSource || l.lead_source === selectedSource;
-    
-    // Created Date Range
-    let matchesCreated = true;
-    if (createdStart || createdEnd) {
-      const cDateStr = l.created_at ? l.created_at.split('T')[0] : '';
-      if (createdStart && cDateStr < createdStart) matchesCreated = false;
-      if (createdEnd && cDateStr > createdEnd) matchesCreated = false;
-    }
-
-    // Follow-up Date Range
-    let matchesFollowup = true;
-    if (followupStart || followupEnd) {
-      const fDateStr = l.follow_up_date || '';
-      if (!fDateStr) {
-        matchesFollowup = false;
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        setLeadsState(data.leads || []);
+        setTotalCount(data.total || 0);
+        setTotalPages(data.pages || 1);
       } else {
-        if (followupStart && fDateStr < followupStart) matchesFollowup = false;
-        if (followupEnd && fDateStr > followupEnd) matchesFollowup = false;
+        const arr = data || [];
+        setLeadsState(arr);
+        setTotalCount(arr.length);
+        setTotalPages(1);
       }
+    } catch (err) {
+      console.error('Failed to load leads:', err);
+    } finally {
+      setLoadingLeads(false);
     }
+  };
 
-    // Site Visit Date Range
-    let matchesSiteVisit = true;
-    if (siteVisitStart || siteVisitEnd) {
-      const svDateStr = l.site_visit_date || '';
-      if (!svDateStr) {
-        matchesSiteVisit = false;
-      } else {
-        if (siteVisitStart && svDateStr < siteVisitStart) matchesSiteVisit = false;
-        if (siteVisitEnd && svDateStr > siteVisitEnd) matchesSiteVisit = false;
-      }
-    }
+  // Reset page to 1 when search terms or filters are updated
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    selectedCity,
+    selectedBudget,
+    selectedProject,
+    selectedStatus,
+    selectedEmployee,
+    selectedSource,
+    createdStart,
+    createdEnd,
+    limit
+  ]);
 
-    return matchesSearch && matchesCity && matchesBudget && matchesProject && matchesStatus && matchesEmployee && matchesSource && matchesCreated && matchesFollowup && matchesSiteVisit;
-  });
+  // Load leads whenever pagination or filters change
+  useEffect(() => {
+    fetchLeads();
+  }, [
+    searchTerm,
+    selectedCity,
+    selectedBudget,
+    selectedProject,
+    selectedStatus,
+    selectedEmployee,
+    selectedSource,
+    createdStart,
+    createdEnd,
+    currentPage,
+    limit,
+    leads.length
+  ]);
+
+  // Server-side filtered and paginated leads
+  const filteredLeads = leadsState;
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -615,7 +638,57 @@ export default function LeadTable({
               </tbody>
             </table>
           )}
+          
+          {loadingLeads && (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+              Loading leads from database...
+            </div>
+          )}
         </div>
+
+        {/* Server-side Pagination Controls */}
+        {totalPages > 1 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--bg-card)',
+            padding: '12px 20px',
+            borderRadius: 'var(--radius-md)',
+            marginTop: '16px',
+            border: '1px solid var(--border-color)',
+            fontSize: '13px',
+            color: 'var(--text-muted)'
+          }}>
+            <div>
+              Showing <strong style={{ color: 'var(--text-main)' }}>{Math.min((currentPage - 1) * limit + 1, totalCount)}</strong> to{' '}
+              <strong style={{ color: 'var(--text-main)' }}>{Math.min(currentPage * limit, totalCount)}</strong> of{' '}
+              <strong style={{ color: 'var(--text-main)' }}>{totalCount}</strong> leads
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                class="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid var(--border-color)' }}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              <span>
+                Page <strong style={{ color: 'var(--text-main)' }}>{currentPage}</strong> of{' '}
+                <strong style={{ color: 'var(--text-main)' }}>{totalPages}</strong>
+              </span>
+              <button
+                class="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid var(--border-color)' }}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bulk Assignment Modal */}

@@ -309,7 +309,7 @@ const DB = {
     if (this.isCloud()) {
       let query = supabase
         .from('leads')
-        .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)');
+        .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)', { count: 'exact' });
 
       if (userRole === 'employee') {
         query = query.eq('assigned_employee_id', userId);
@@ -347,8 +347,27 @@ const DB = {
         }
       }
       
-      const { data, error } = await query.order('created_at', { ascending: false });
+      // Apply pagination range if page and limit exist
+      if (filters.page && filters.limit) {
+        const page = parseInt(filters.page);
+        const limit = parseInt(filters.limit);
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        query = query.range(from, to);
+      }
+      
+      const { data, error, count } = await query.order('created_at', { ascending: false });
       if (error) throw error;
+
+      if (filters.page && filters.limit) {
+        return {
+          leads: data,
+          total: count,
+          page: parseInt(filters.page),
+          limit: parseInt(filters.limit),
+          pages: Math.ceil(count / parseInt(filters.limit))
+        };
+      }
       return data;
     } else {
       const db = loadLocalDb();
@@ -417,7 +436,23 @@ const DB = {
         };
       });
 
-      return results.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      results.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      if (filters.page && filters.limit) {
+        const page = parseInt(filters.page);
+        const limit = parseInt(filters.limit);
+        const total = results.length;
+        const from = (page - 1) * limit;
+        const paginated = results.slice(from, from + limit);
+        return {
+          leads: paginated,
+          total: total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit)
+        };
+      }
+      return results;
     }
   },
 
