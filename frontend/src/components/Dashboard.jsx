@@ -4,11 +4,13 @@ import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, Chec
 
 export default function Dashboard({ leads = [], employees = [], onSelectLead }) {
   const [stats, setStats] = useState(null);
+  const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     fetchDashboardStats();
+    fetchRemindersList();
   }, [leads, employees]); // Refresh when core data changes
 
   const fetchDashboardStats = async () => {
@@ -24,10 +26,26 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead }) 
     }
   };
 
-  // Client-side fallback calculation if API fails
+  const fetchRemindersList = async () => {
+    try {
+      const data = await api.getReminders();
+      setReminders(data || []);
+    } catch (e) {
+      console.error('Failed to fetch reminders for dashboard:', e);
+    }
+  };
+
+  // Scalable server-driven follow-ups matching active reminders
   const todayStr = new Date().toLocaleDateString('en-CA');
-  const todayFollowUps = leads.filter(l => l.follow_up_date === todayStr && l.booking_status !== 'Confirmed');
-  const overdueFollowUps = leads.filter(l => l.follow_up_date && l.follow_up_date < todayStr && l.booking_status !== 'Confirmed');
+  const activeReminders = reminders.filter(r => !r.is_read);
+  
+  const todayFollowUps = activeReminders
+    .filter(r => r.reminder_date === todayStr && r.leads)
+    .map(r => r.leads);
+    
+  const overdueFollowUps = activeReminders
+    .filter(r => r.reminder_date < todayStr && r.leads)
+    .map(r => r.leads);
 
   // SVG Chart Scaling Helpers
   const maxSourceCount = stats ? Math.max(...Object.values(stats.sourceDistribution), 1) : 1;
@@ -78,6 +96,69 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead }) 
         <div class="metric-card primary">
           <div class="metric-label">Total Revenue (Token)</div>
           <div class="metric-value">₹{(stats ? stats.summary.revenueEarned : 0).toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Sales Funnel Section */}
+      <div class="card" style={{ marginBottom: '24px' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+          <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
+          Sales Conversion Funnel
+        </h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {stats && stats.funnel ? (
+            (() => {
+              const funnelStages = [
+                { key: 'new', label: 'New Inquiries', count: stats.funnel.new, color: '#6366f1', description: 'Fresh incoming leads' },
+                { key: 'contacted', label: 'Contacted / Engaged', count: stats.funnel.contacted, color: '#06b6d4', description: 'Calls made & warm prospects' },
+                { key: 'visit', label: 'Site Visits', count: stats.funnel.visit, color: '#f59e0b', description: 'Visits scheduled or done' },
+                { key: 'negotiation', label: 'Negotiations', count: stats.funnel.negotiation, color: '#ec4899', description: 'Hot leads in discussions' },
+                { key: 'booked', label: 'Bookings Confirmed', count: stats.funnel.booked, color: '#10b981', description: 'Converted customers' }
+              ];
+              const maxCount = Math.max(...funnelStages.map(s => s.count), 1);
+              
+              return funnelStages.map((stage, idx) => {
+                const pct = (stage.count / maxCount) * 100;
+                const conversionFromPrevious = idx === 0 ? 100 : (funnelStages[idx - 1].count > 0 ? Math.round((stage.count / funnelStages[idx - 1].count) * 100) : 0);
+                
+                return (
+                  <div key={stage.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255, 255, 255, 0.01)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+                    <div style={{ width: '180px', minWidth: '150px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-main)' }}>{stage.label}</span>
+                      <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)' }}>{stage.description}</span>
+                    </div>
+                    
+                    <div style={{ flex: 1, minWidth: '200px', background: 'var(--bg-input)', height: '20px', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
+                      <div 
+                        style={{ 
+                          width: `${Math.max(pct, 2)}%`, 
+                          background: `linear-gradient(90deg, ${stage.color}aa 0%, ${stage.color} 100%)`, 
+                          height: '100%', 
+                          borderRadius: '4px',
+                          transition: 'width 0.8s ease-out'
+                        }}
+                      />
+                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', fontWeight: 'bold', color: '#fff' }}>
+                        {stage.count} leads
+                      </span>
+                    </div>
+
+                    <div style={{ width: '150px', textAlign: 'right', fontSize: '11px', fontWeight: 'bold' }}>
+                      {idx === 0 ? (
+                        <span style={{ color: 'var(--text-muted)' }}>Baseline</span>
+                      ) : (
+                        <span style={{ color: stage.count > 0 ? 'var(--color-success)' : 'var(--text-muted)' }}>
+                          ↓ {conversionFromPrevious}% conversion
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })()
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading funnel metrics...</div>
+          )}
         </div>
       </div>
 

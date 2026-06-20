@@ -1535,6 +1535,64 @@ app.post('/api/whatsapp/campaigns', authenticateToken, async (req, res) => {
   }
 });
 
+// Click-to-WhatsApp manual redirection logger
+app.post('/api/whatsapp/campaigns/click-log', authenticateToken, async (req, res) => {
+  const { lead_id, phone, message_text } = req.body;
+  if (!phone || !message_text) {
+    return res.status(400).json({ error: 'Phone and message text are required' });
+  }
+  try {
+    const campaigns = await DB.getWhatsAppCampaigns();
+    let campaign = campaigns.find(c => c.name === 'Click-to-WhatsApp Messages');
+    if (!campaign) {
+      const templates = await DB.getWhatsAppTemplates();
+      const welcomeTemp = templates.find(t => t.name === 'welcome_message');
+      const result = await DB.createWhatsAppCampaign({
+        name: 'Click-to-WhatsApp Messages',
+        template_id: welcomeTemp ? welcomeTemp.id : null,
+        filters_used: { system: 'Click-to-WhatsApp fallback' }
+      }, []);
+      campaign = result.campaign;
+    }
+
+    const logData = {
+      campaign_id: campaign.id,
+      lead_id: lead_id || null,
+      phone,
+      message_text,
+      status: 'Sent'
+    };
+
+    if (DB.isCloud()) {
+      const { supabase } = require('./db');
+      const { data, error } = await supabase.from('whatsapp_campaign_logs').insert([logData]).select().single();
+      if (error) throw error;
+      res.status(201).json(data);
+    } else {
+      const fs = require('fs');
+      const path = require('path');
+      const LOCAL_DB_PATH = path.join(__dirname, 'database.json');
+      if (fs.existsSync(LOCAL_DB_PATH)) {
+        const data = JSON.parse(fs.readFileSync(LOCAL_DB_PATH, 'utf8'));
+        const logRecord = {
+          id: Math.random().toString(36).substring(2, 15),
+          created_at: new Date().toISOString(),
+          ...logData
+        };
+        if (!data.whatsapp_campaign_logs) data.whatsapp_campaign_logs = [];
+        data.whatsapp_campaign_logs.push(logRecord);
+        fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+        res.status(201).json(logRecord);
+      } else {
+        res.status(500).json({ error: 'Local database not found' });
+      }
+    }
+  } catch (err) {
+    console.error('Click log error:', err);
+    res.status(500).json({ error: 'Failed to record click log' });
+  }
+});
+
 // Configure API keys
 app.get('/api/whatsapp/config', authenticateToken, requireAdmin, async (req, res) => {
   // Config mock or file read/write
@@ -1747,6 +1805,18 @@ app.get('/api/reminders/widgets', authenticateToken, async (req, res) => {
   }
 });
 
+// Notifications Alerts sync API
+app.get('/api/notifications/alerts', authenticateToken, async (req, res) => {
+  try {
+    const { since } = req.query;
+    const alertsData = await DB.getNotificationsAlerts(req.user.id, req.user.role, since);
+    res.json(alertsData);
+  } catch (e) {
+    console.error('Failed to fetch notifications alerts:', e);
+    res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+});
+
 // --- PHASE 3: UNIFIED TIMELINE API ---
 
 app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
@@ -1954,6 +2024,13 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         revenueEarned,
         callsToday
       },
+      funnel: {
+        new: leads.filter(l => l.status === 'New').length,
+        contacted: leads.filter(l => ['Attempted', 'Connected', 'Warm', 'Cold', 'Interested'].includes(l.status)).length,
+        visit: leads.filter(l => ['Site Visit Scheduled', 'Site Visit Done'].includes(l.status)).length,
+        negotiation: leads.filter(l => ['Negotiation', 'Hot'].includes(l.status)).length,
+        booked: leads.filter(l => l.status === 'Booked').length
+      },
       sourceDistribution: sourceMap,
       employeePerformance,
       reminders: remindersWidget
@@ -1972,6 +2049,64 @@ app.get('/', (req, res) => {
   res.send('Vrindavan Estates CRM Backend Server is running successfully!');
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+async function seedWhatsAppTemplatesAndCampaigns() {
+  try {
+    const templates = await DB.getWhatsAppTemplates();
+    const defaults = [
+      {
+        name: 'welcome_message',
+        category: 'Utility',
+        body_text: 'Hello {customer_name}, thank you for inquiring about {project_name} with Vrindavan Estates. An executive will contact you shortly.',
+        variables: ['customer_name', 'project_name']
+      },
+      {
+        name: 'followup_reminder',
+        category: 'Utility',
+        body_text: 'Hello {customer_name}, this is a reminder regarding your scheduled {type} today at {time} for {project_name}. Regards!',
+        variables: ['customer_name', 'type', 'time', 'project_name']
+      },
+      {
+        name: 'site_visit_invite',
+        category: 'Marketing',
+        body_text: 'Hi {customer_name}, we would love to invite you for a site visit to {project_name} in {location}. Let us know your convenient time. - Vrindavan Estates',
+        variables: ['customer_name', 'project_name', 'location']
+      },
+      {
+        name: 'booking_confirmation',
+        category: 'Utility',
+        body_text: 'Hi {customer_name}, congratulations! We have confirmed your booking for Unit {unit_number} in {project_name}. Token amount: ₹{token_amount}.',
+        variables: ['customer_name', 'unit_number', 'project_name', 'token_amount']
+      }
+    ];
+
+    for (const def of defaults) {
+      if (!templates.find(t => t.name === def.name)) {
+        await DB.createWhatsAppTemplate(def);
+        console.log(`Seeded WhatsApp Template: ${def.name}`);
+      }
+    }
+
+    const campaigns = await DB.getWhatsAppCampaigns();
+    const clickCampaignName = 'Click-to-WhatsApp Messages';
+    if (!campaigns.find(c => c.name === clickCampaignName)) {
+      const freshTemplates = await DB.getWhatsAppTemplates();
+      const welcomeTemp = freshTemplates.find(t => t.name === 'welcome_message');
+      
+      const campaignData = {
+        name: clickCampaignName,
+        template_id: welcomeTemp ? welcomeTemp.id : null,
+        filters_used: { system: 'Click-to-WhatsApp fallback' }
+      };
+      
+      await DB.createWhatsAppCampaign(campaignData, []);
+      console.log(`Seeded WhatsApp Campaign: ${clickCampaignName}`);
+    }
+  } catch (err) {
+    console.error('Failed to seed default WhatsApp configuration:', err);
+  }
+}
+
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT} (Bound to 0.0.0.0)`);
+  await seedWhatsAppTemplatesAndCampaigns();
 });

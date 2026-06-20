@@ -292,6 +292,12 @@ export const api = {
   markReminderAsRead: (id) => request(`/api/reminders/${id}/read`, { method: 'PUT' }),
   deleteReminder: (id) => request(`/api/reminders/${id}`, { method: 'DELETE' }),
   getReminderWidgets: () => request('/api/reminders/widgets'),
+  getNotificationsAlerts: (since) => request(`/api/notifications/alerts${since ? `?since=${since}` : ''}`),
+  logWhatsAppClick: (leadId, phone, messageText) =>
+    request('/api/whatsapp/campaigns/click-log', {
+      method: 'POST',
+      body: JSON.stringify({ lead_id: leadId, phone, message_text: messageText })
+    }),
 
   // --- PHASE 3: TIMELINE ---
   getLeadTimeline: (leadId) => request(`/api/leads/${leadId}/timeline`),

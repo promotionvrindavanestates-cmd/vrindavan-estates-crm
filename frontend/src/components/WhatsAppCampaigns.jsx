@@ -176,7 +176,21 @@ export default function WhatsAppCampaigns({ currentUser }) {
         >
           📝 WhatsApp Templates
         </button>
-        {selectedCampaignId && (
+        <button 
+          class={`btn ${activeSubTab === 'click-logs' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => {
+            const clickCamp = campaigns.find(c => c.name === 'Click-to-WhatsApp Messages');
+            if (clickCamp) {
+              viewCampaignLogs(clickCamp.id);
+              setActiveSubTab('click-logs');
+            } else {
+              alert('Click-to-WhatsApp logs history is loading. If empty, click some WhatsApp icons first!');
+            }
+          }}
+        >
+          💬 Click-to-WhatsApp Logs
+        </button>
+        {selectedCampaignId && activeSubTab === 'logs' && (
           <button class="btn btn-primary" onClick={() => setActiveSubTab('logs')}>
             📊 Logs: {campaigns.find(c => c.id === selectedCampaignId)?.name || 'Campaign'}
           </button>
@@ -429,7 +443,7 @@ export default function WhatsAppCampaigns({ currentUser }) {
           )}
 
           {/* Logs sub tab view */}
-          {activeSubTab === 'logs' && selectedCampaignId && (
+          {(activeSubTab === 'logs' || activeSubTab === 'click-logs') && selectedCampaignId && (
             <div class="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2>📊 Message Logs details</h2>

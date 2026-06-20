@@ -16,6 +16,7 @@ import ReportsAnalytics from './components/ReportsAnalytics';
 import LeadDetailsModal from './components/LeadDetailsModal';
 import RemindersModal from './components/RemindersModal';
 import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt } from 'lucide-react';
+import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -44,6 +45,7 @@ export default function App() {
   // Reminders Modal State
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [remindersCount, setRemindersCount] = useState(0);
+  const [activeToast, setActiveToast] = useState(null);
 
   // Check login on startup
   useEffect(() => {
@@ -71,6 +73,89 @@ export default function App() {
       setAuthLoading(false);
     }
   };
+
+  // Polling Alerts Sync hook
+  useEffect(() => {
+    if (!currentUser) return;
+
+    requestNotificationPermission();
+
+    let lastPollTime = new Date().toISOString();
+
+    const pollAlerts = async () => {
+      try {
+        const res = await api.getNotificationsAlerts(lastPollTime);
+        lastPollTime = res.timestamp || new Date().toISOString();
+
+        const { newLeads, newBookings, dueReminders, missedReminders } = res;
+
+        // 1. Process New Leads
+        newLeads.forEach(lead => {
+          const title = '📥 New Lead Assigned';
+          const body = `Lead "${lead.name}" has been assigned to you for "${lead.project || 'Vrindavan Estates'}".`;
+          showPushNotification(title, body, { leadId: lead.id });
+          setActiveToast({ title, body, lead });
+        });
+
+        // 2. Process New Bookings
+        newBookings.forEach(booking => {
+          const title = '🎉 Booking Confirmed!';
+          const body = `Unit ${booking.unit_number || 'N/A'} booked for "${booking.leads ? booking.leads.name : 'Unknown'}" in "${booking.projects ? booking.projects.name : 'N/A'}".`;
+          showPushNotification(title, body, { bookingId: booking.id });
+          setActiveToast({ title, body });
+        });
+
+        // 3. Process Due/Missed Reminders
+        const alertedIds = JSON.parse(sessionStorage.getItem('alerted_reminders') || '[]');
+        let updatedAlerted = false;
+
+        dueReminders.forEach(r => {
+          if (!alertedIds.includes(r.id)) {
+            alertedIds.push(r.id);
+            updatedAlerted = true;
+            const title = '🕉️ Due Follow-Up Reminder';
+            const body = `${r.title} (${r.type}) is due now.`;
+            showPushNotification(title, body, { reminderId: r.id });
+            setActiveToast({ title, body, lead: r.leads });
+          }
+        });
+
+        missedReminders.forEach(r => {
+          if (!alertedIds.includes(r.id)) {
+            alertedIds.push(r.id);
+            updatedAlerted = true;
+            const title = '⚠️ Missed Follow-Up Reminder';
+            const body = `Follow-up "${r.title}" scheduled for ${r.reminder_date} was missed.`;
+            showPushNotification(title, body, { reminderId: r.id });
+            setActiveToast({ title, body, lead: r.leads });
+          }
+        });
+
+        if (updatedAlerted) {
+          sessionStorage.setItem('alerted_reminders', JSON.stringify(alertedIds));
+        }
+
+        // Keep reminders badge count synced
+        const widgets = await api.getReminderWidgets();
+        setRemindersCount(widgets.today || 0);
+
+      } catch (err) {
+        console.warn('Notification polling error:', err);
+      }
+    };
+
+    pollAlerts();
+    const timerId = setInterval(pollAlerts, 20000);
+    return () => clearInterval(timerId);
+  }, [currentUser]);
+
+  // Toast Auto-Dismiss
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => setActiveToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
 
   const fetchCRMData = async (user = currentUser) => {
     if (!user) return;
@@ -188,6 +273,76 @@ export default function App() {
 
   return (
     <div class="app-container">
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .slide-in-alert {
+          animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
+      {activeToast && (
+        <div 
+          className="slide-in-alert"
+          style={{
+            position: 'fixed',
+            top: '24px',
+            right: '24px',
+            zIndex: 99999,
+            background: 'rgba(26, 26, 26, 0.95)',
+            border: '1px solid var(--primary)',
+            borderRadius: '8px',
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5), 0 8px 10px -6px rgba(0,0,0,0.5)',
+            padding: '16px',
+            width: '320px',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            color: 'var(--text-main)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', fontWeight: 700, fontSize: '13px' }}>
+              <BellRing size={14} style={{ color: 'var(--primary)' }} />
+              {activeToast.title}
+            </span>
+            <button 
+              onClick={() => setActiveToast(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '18px',
+                cursor: 'pointer',
+                padding: '0 4px',
+                lineHeight: 1
+              }}
+            >
+              &times;
+            </button>
+          </div>
+          <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.4, color: 'var(--text-main)' }}>
+            {activeToast.body}
+          </p>
+          {activeToast.lead && (
+            <button 
+              className="btn btn-primary" 
+              style={{ padding: '4px 8px', fontSize: '11px', alignSelf: 'flex-start', marginTop: '4px' }}
+              onClick={() => {
+                setSelectedLeadForEdit(activeToast.lead);
+                setLeadModalOpen(true);
+                setActiveToast(null);
+              }}
+            >
+              Open Lead
+            </button>
+          )}
+        </div>
+      )}
+
       <div class="main-content">
         
         {/* Demo Mode Banner fallback info */}

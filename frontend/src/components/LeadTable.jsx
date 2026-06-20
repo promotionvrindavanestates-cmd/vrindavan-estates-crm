@@ -49,6 +49,14 @@ export default function LeadTable({
   const [bulkProjectMapping, setBulkProjectMapping] = useState({});
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
+  // Click-to-WhatsApp Assistant States
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [activeWhatsAppLead, setActiveWhatsAppLead] = useState(null);
+  const [activeWhatsAppPhone, setActiveWhatsAppPhone] = useState('');
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [customWhatsAppText, setCustomWhatsAppText] = useState('');
+
   // Extract unique projects, cities, budgets for dynamic filter dropdowns
   const uniqueProjects = [...new Set(leads.map(l => l.project).filter(Boolean))];
   const uniqueCities = [...new Set(leads.map(l => l.city).filter(Boolean))];
@@ -150,12 +158,65 @@ export default function LeadTable({
     return num.replace(/\D/g, '');
   };
 
-  const handleWhatsAppClick = (phone, leadName) => {
-    const cleanPhone = formatPhoneNumber(phone);
+  // Load WhatsApp templates on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const list = await api.getWhatsAppTemplates();
+        setWhatsAppTemplates(list || []);
+        if (list && list.length > 0) {
+          setSelectedTemplateId(list[0].id);
+        }
+      } catch (err) {
+        console.warn('Failed to load templates in LeadTable:', err);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  const handleWhatsAppClick = (phone, lead) => {
+    setActiveWhatsAppLead(lead);
+    setActiveWhatsAppPhone(phone);
+    setWhatsAppModalOpen(true);
+    setCustomWhatsAppText('');
+  };
+
+  const getInterpolatedWhatsAppMessage = () => {
+    if (!activeWhatsAppLead) return '';
+    
+    const template = whatsAppTemplates.find(t => t.id === selectedTemplateId);
+    if (!template) return customWhatsAppText || 'Hi, greetings from Vrindavan Estates!';
+    
+    let text = template.body_text;
+    text = text.replace(/{customer_name}/gi, activeWhatsAppLead.name || '');
+    text = text.replace(/{project_name}/gi, activeWhatsAppLead.project || 'Vrindavan Estates');
+    text = text.replace(/{price}/gi, activeWhatsAppLead.budget || 'N/A');
+    text = text.replace(/{location}/gi, activeWhatsAppLead.city || 'Vrindavan');
+    text = text.replace(/{executive_name}/gi, currentUser.full_name || 'Our Executive');
+    text = text.replace(/{unit_number}/gi, activeWhatsAppLead.unit_number || 'your unit');
+    text = text.replace(/{token_amount}/gi, activeWhatsAppLead.booking_token_amount || 'token amount');
+    
+    return text;
+  };
+
+  const handleSendWhatsAppMessage = async () => {
+    if (!activeWhatsAppLead) return;
+    
+    const messageText = getInterpolatedWhatsAppMessage();
+    const cleanPhone = formatPhoneNumber(activeWhatsAppPhone);
     const waPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const text = encodeURIComponent(`Hi ${leadName}, greetings from Vrindavan Estates! We are following up regarding your query. How can we assist you today?`);
-    const url = `https://wa.me/${waPhone}?text=${text}`;
+    
+    const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(messageText)}`;
+    
+    try {
+      await api.logWhatsAppClick(activeWhatsAppLead.id, activeWhatsAppPhone, messageText);
+    } catch (err) {
+      console.warn('Failed to log WhatsApp campaign click:', err);
+    }
+    
     window.open(url, window.Capacitor ? '_system' : '_blank');
+    setWhatsAppModalOpen(false);
+    setActiveWhatsAppLead(null);
   };
 
   const handleCallClick = (phone, lead) => {
@@ -499,7 +560,7 @@ export default function LeadTable({
                           <button 
                             class="action-icon-btn whatsapp" 
                             title="WhatsApp Chat"
-                            onClick={() => handleWhatsAppClick(l.phone1, l.name)}
+                            onClick={() => handleWhatsAppClick(l.phone1, l)}
                           >
                             <MessageSquare size={12} />
                           </button>
@@ -518,7 +579,7 @@ export default function LeadTable({
                             <button 
                               class="action-icon-btn whatsapp" 
                               title="WhatsApp Chat Phone 2"
-                              onClick={() => handleWhatsAppClick(l.phone2, l.name)}
+                              onClick={() => handleWhatsAppClick(l.phone2, l)}
                             >
                               <MessageSquare size={12} />
                             </button>
@@ -785,6 +846,76 @@ export default function LeadTable({
                 disabled={bulkAssigning}
               >
                 {bulkAssigning ? 'Reassigning...' : `Execute Assignment (${selectedLeadIds.length} Leads)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Click-to-WhatsApp Assistant Modal */}
+      {whatsAppModalOpen && activeWhatsAppLead && (
+        <div class="modal-overlay">
+          <div class="modal-content" style={{ maxWidth: '540px' }}>
+            <div class="modal-header">
+              <h2>💬 Click-to-WhatsApp Assistant</h2>
+              <button class="close-btn" onClick={() => { setWhatsAppModalOpen(false); setActiveWhatsAppLead(null); }}>×</button>
+            </div>
+            <div class="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ fontSize: '13px', background: 'rgba(255,255,255,0.01)', padding: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                Sending to: <strong style={{ color: 'var(--primary)' }}>{activeWhatsAppLead.name}</strong> ({activeWhatsAppPhone})
+              </div>
+              
+              <div class="form-group">
+                <label>Select Message Template</label>
+                <select 
+                  class="form-control" 
+                  value={selectedTemplateId} 
+                  onChange={e => {
+                    setSelectedTemplateId(e.target.value);
+                    if (e.target.value === 'custom') setCustomWhatsAppText('');
+                  }}
+                >
+                  {whatsAppTemplates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                  ))}
+                  <option value="custom">-- Custom Free-form Message --</option>
+                </select>
+              </div>
+              
+              {selectedTemplateId === 'custom' ? (
+                <div class="form-group">
+                  <label>Custom Message Text</label>
+                  <textarea 
+                    class="form-control" 
+                    rows="4" 
+                    value={customWhatsAppText} 
+                    onChange={e => setCustomWhatsAppText(e.target.value)} 
+                    placeholder="Type your WhatsApp message here..."
+                  />
+                </div>
+              ) : (
+                <div class="form-group">
+                  <label>Message Preview (Auto-filled Variables)</label>
+                  <div style={{ 
+                    background: 'rgba(0,0,0,0.2)', 
+                    padding: '12px', 
+                    borderRadius: 'var(--radius-md)', 
+                    fontSize: '13px', 
+                    whiteSpace: 'pre-wrap', 
+                    fontFamily: 'monospace',
+                    lineHeight: '1.4',
+                    border: '1px solid var(--border-color)',
+                    minHeight: '80px'
+                  }}>
+                    {getInterpolatedWhatsAppMessage()}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div class="modal-footer" style={{ display: 'flex', justifySelf: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <button class="btn btn-secondary" onClick={() => { setWhatsAppModalOpen(false); setActiveWhatsAppLead(null); }}>Cancel</button>
+              <button class="btn btn-primary" onClick={handleSendWhatsAppMessage}>
+                🚀 Open WhatsApp & Log
               </button>
             </div>
           </div>

@@ -2005,6 +2005,119 @@ const DB = {
       missed: missedReminders.length,
       upcoming: upcomingReminders.length
     };
+  },
+
+  async getNotificationsAlerts(userId, role, since) {
+    const sinceTimestamp = since || new Date(Date.now() - 60000).toISOString();
+
+    if (this.isCloud()) {
+      let leadsQuery = supabase
+        .from('leads')
+        .select('*, assigned_employee:users!assigned_employee_id(*)')
+        .gt('created_at', sinceTimestamp);
+      if (role === 'employee') {
+        leadsQuery = leadsQuery.eq('assigned_employee_id', userId);
+      }
+      const { data: newLeads, error: leadsErr } = await leadsQuery;
+      if (leadsErr) throw leadsErr;
+
+      let bookingsQuery = supabase
+        .from('bookings')
+        .select('*, leads(*), projects(*), inventory(*)')
+        .gt('created_at', sinceTimestamp);
+      const { data: newBookings, error: bookingsErr } = await bookingsQuery;
+      if (bookingsErr) throw bookingsErr;
+
+      let filteredBookings = newBookings || [];
+      if (role === 'employee') {
+        filteredBookings = filteredBookings.filter(b => b.executive_id === userId || (b.leads && b.leads.assigned_employee_id === userId));
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      let remindersQuery = supabase
+        .from('reminders')
+        .select('*, leads(*)')
+        .eq('reminder_date', todayStr)
+        .eq('is_read', false);
+      if (role === 'employee') {
+        remindersQuery = remindersQuery.eq('assigned_employee_id', userId);
+      }
+      const { data: dueReminders, error: remErr } = await remindersQuery;
+      if (remErr) throw remErr;
+
+      let missedQuery = supabase
+        .from('reminders')
+        .select('*, leads(*)')
+        .lt('reminder_date', todayStr)
+        .eq('is_read', false);
+      if (role === 'employee') {
+        missedQuery = missedQuery.eq('assigned_employee_id', userId);
+      }
+      const { data: missedReminders, error: missErr } = await missedQuery;
+      if (missErr) throw missErr;
+
+      return {
+        newLeads: newLeads || [],
+        newBookings: filteredBookings || [],
+        dueReminders: dueReminders || [],
+        missedReminders: missedReminders || []
+      };
+    } else {
+      const db = loadLocalDb();
+      const sinceDate = new Date(sinceTimestamp);
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      const newLeads = db.leads.filter(l => {
+        const isNew = new Date(l.created_at) > sinceDate;
+        const isMatch = role === 'employee' ? l.assigned_employee_id === userId : true;
+        return isNew && isMatch;
+      }).map(l => {
+        const emp = db.users.find(u => u.id === l.assigned_employee_id);
+        return { ...l, assigned_employee: emp || null };
+      });
+
+      const newBookings = db.bookings.filter(b => {
+        const isNew = new Date(b.created_at) > sinceDate;
+        let isMatch = true;
+        if (role === 'employee') {
+          const lead = db.leads.find(l => l.id === b.lead_id);
+          isMatch = b.executive_id === userId || (lead && lead.assigned_employee_id === userId);
+        }
+        return isNew && isMatch;
+      }).map(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        const proj = db.projects.find(p => p.id === b.project_id);
+        const inv = db.inventory.find(i => i.id === b.inventory_id);
+        return { ...b, leads: lead || null, projects: proj || null, inventory: inv || null };
+      });
+
+      const dueReminders = (db.reminders || []).filter(r => {
+        const isToday = r.reminder_date === todayStr;
+        const isActive = !r.is_read;
+        const isMatch = role === 'employee' ? r.assigned_employee_id === userId : true;
+        return isToday && isActive && isMatch;
+      }).map(r => {
+        const lead = db.leads.find(l => l.id === r.lead_id);
+        return { ...r, leads: lead || null };
+      });
+
+      const missedReminders = (db.reminders || []).filter(r => {
+        const isPast = r.reminder_date < todayStr;
+        const isActive = !r.is_read;
+        const isMatch = role === 'employee' ? r.assigned_employee_id === userId : true;
+        return isPast && isActive && isMatch;
+      }).map(r => {
+        const lead = db.leads.find(l => l.id === r.lead_id);
+        return { ...r, leads: lead || null };
+      });
+
+      return {
+        newLeads,
+        newBookings,
+        dueReminders,
+        missedReminders
+      };
+    }
   }
 };
 
