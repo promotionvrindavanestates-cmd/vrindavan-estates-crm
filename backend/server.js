@@ -1999,6 +1999,16 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
       callsToday = callLogs.filter(c => c.call_date && c.call_date.startsWith(todayStr)).length;
     }
 
+    // Booking & Revenue summary calculations
+    const payments = await DB.getPayments();
+    const filteredPayments = role === 'employee' ? payments.filter(p => p.bookings && p.bookings.executive_id === userId) : payments;
+    const thisMonthPrefix = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+
+    const todayBookingsCount = filteredBookings.filter(b => b.created_at && b.created_at.startsWith(todayStr)).length;
+    const monthlyBookingsCount = filteredBookings.filter(b => b.created_at && b.created_at.startsWith(thisMonthPrefix)).length;
+    const collectionReceived = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
+    const pendingCollection = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.balance) || 0), 0);
+
     // Lead Source Distribution
     const sourceMap = { Facebook: 0, Instagram: 0, Google: 0, Website: 0, WhatsApp: 0, 'Walk-In': 0, Referral: 0, MagicBricks: 0, '99acres': 0, Housing: 0 };
     leads.forEach(l => {
@@ -2017,6 +2027,7 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
       const empVisits = siteVisits.filter(v => v.leads && v.leads.assigned_employee_id === emp.id && v.outcome && v.outcome !== 'Scheduled');
       const conversionRate = empLeads.length > 0 ? (empBookings.length / empLeads.length) * 100 : 0;
       const revenueClosed = empBookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+      const empCallsToday = empCalls.filter(c => c.call_date && c.call_date.startsWith(todayStr)).length;
       return {
         id: emp.id,
         name: emp.full_name,
@@ -2026,7 +2037,8 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         siteVisitsCount: empVisits.length,
         bookingsCount: empBookings.length,
         revenueClosed,
-        conversionRate: Math.round(conversionRate * 10) / 10
+        conversionRate: Math.round(conversionRate * 10) / 10,
+        callsTodayCount: empCallsToday
       };
     });
     // Sort by bookings then conversion rate for Ranking Board
@@ -2048,7 +2060,11 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         completedVisits,
         totalBookedCount,
         revenueEarned,
-        callsToday
+        callsToday,
+        todayBookingsCount,
+        monthlyBookingsCount,
+        collectionReceived,
+        pendingCollection
       },
       funnel: {
         new: leads.filter(l => l.status === 'New').length,

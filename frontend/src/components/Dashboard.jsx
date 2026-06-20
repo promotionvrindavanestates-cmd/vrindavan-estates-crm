@@ -1,14 +1,74 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy, Eye } from 'lucide-react';
-import HeatMapWidgets from './HeatMapWidgets';
 import RecentActivities from './RecentActivities';
 
-export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown, onSelectEmployee }) {
+export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown, onOpenLeadDrawer }) {
   const [stats, setStats] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [activeWhatsAppLead, setActiveWhatsAppLead] = useState(null);
+  const [activeWhatsAppPhone, setActiveWhatsAppPhone] = useState('');
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [customWhatsAppText, setCustomWhatsAppText] = useState('');
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const list = await api.getWhatsAppTemplates();
+        setWhatsAppTemplates(list || []);
+        if (list && list.length > 0) {
+          setSelectedTemplateId(list[0].id);
+        }
+      } catch (err) {
+        console.warn('Failed to load templates in Dashboard:', err);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  const handleWhatsAppClick = (phone, lead) => {
+    setActiveWhatsAppLead(lead);
+    setActiveWhatsAppPhone(phone);
+    setWhatsAppModalOpen(true);
+    setCustomWhatsAppText('');
+  };
+
+  const getInterpolatedWhatsAppMessage = () => {
+    if (!activeWhatsAppLead) return '';
+    const template = whatsAppTemplates.find(t => t.id === selectedTemplateId);
+    if (!template) return customWhatsAppText || 'Hi, greetings from Vrindavan Estates!';
+    
+    let text = template.body_text;
+    text = text.replace(/{customer_name}/gi, activeWhatsAppLead.name || '');
+    text = text.replace(/{project_name}/gi, activeWhatsAppLead.project || 'Vrindavan Estates');
+    text = text.replace(/{price}/gi, activeWhatsAppLead.budget || 'N/A');
+    text = text.replace(/{location}/gi, activeWhatsAppLead.city || 'Vrindavan');
+    text = text.replace(/{executive_name}/gi, 'Our Executive');
+    text = text.replace(/{unit_number}/gi, activeWhatsAppLead.unit_number || 'your unit');
+    text = text.replace(/{token_amount}/gi, activeWhatsAppLead.booking_token_amount || 'token amount');
+    return text;
+  };
+
+  const handleSendWhatsAppMessage = async () => {
+    if (!activeWhatsAppLead) return;
+    const messageText = getInterpolatedWhatsAppMessage();
+    const cleanPhone = activeWhatsAppPhone.replace(/\D/g, '');
+    const waPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(messageText)}`;
+    
+    try {
+      await api.logWhatsAppClick(activeWhatsAppLead.id, activeWhatsAppPhone, messageText);
+    } catch (err) {
+      console.warn('Failed to log WhatsApp click activity:', err);
+    }
+    window.open(url, '_blank');
+    setWhatsAppModalOpen(false);
+  };
 
   useEffect(() => {
     fetchDashboardStats();
@@ -318,28 +378,169 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
         </div>
       </div>
 
-      {/* CRM Activity & Heatmaps */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column' }}>
+      {/* Operations & Analytics Section (Replacing Heatmaps) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+        
+        {/* Widget 1: My Follow-Ups Due Today */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
+            <Calendar size={18} style={{ color: 'var(--color-info)' }} />
+            My Follow-Ups Due Today
+          </h3>
+          <div style={{ overflowY: 'auto', flex: 1, maxHeight: '300px' }}>
+            <table style={{ width: '100%', fontSize: '12px' }}>
+              <thead>
+                <tr>
+                  <th>Lead Name</th>
+                  <th>Mobile</th>
+                  <th>Time</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const todayRemindersList = activeReminders.filter(r => r.reminder_date === todayStr && r.leads);
+                  if (todayRemindersList.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan="4" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                          No follow-ups due today.
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return todayRemindersList.map(r => (
+                    <tr key={r.id}>
+                      <td style={{ fontWeight: '600' }}>{r.leads.name}</td>
+                      <td>{r.leads.phone1}</td>
+                      <td>{r.reminder_time || 'N/A'}</td>
+                      <td style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          onClick={() => onSelectLead && onSelectLead(r.leads)}
+                          title="Log Call"
+                        >
+                          <Phone size={10} /> Call
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px', borderColor: '#22c55e', color: '#22c55e' }}
+                          onClick={() => handleWhatsAppClick(r.leads.phone1, r.leads)}
+                          title="Send WhatsApp"
+                        >
+                          <MessageSquare size={10} /> WA
+                        </button>
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Widget 2: Hot Leads Widget */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
+            <TrendingUp size={18} style={{ color: 'var(--color-hot)' }} />
+            Top 10 Hot Leads
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: 1, maxHeight: '300px' }}>
+            {(() => {
+              const topHotLeads = [...leads]
+                .filter(l => l.status === 'Hot')
+                .sort((a, b) => new Date(b.created_at || b.updated_at) - new Date(a.created_at || a.updated_at))
+                .slice(0, 10);
+              
+              if (topHotLeads.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    No active hot leads found.
+                  </div>
+                );
+              }
+              return topHotLeads.map(l => (
+                <div 
+                  key={l.id} 
+                  style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '8px 12px', 
+                    background: 'rgba(255, 255, 255, 0.01)', 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
+                  onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(223, 177, 91, 0.04)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)'}
+                >
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)' }}>{l.name}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{l.project || 'No Project'} | {l.phone1}</div>
+                  </div>
+                  <span className="badge badge-hot" style={{ fontSize: '10px' }}>HOT</span>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+
+        {/* Widget 3: Recent Activities Feed */}
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '350px' }}>
           <RecentActivities limit={10} />
         </div>
-      </div>
-      
-      <div style={{ marginBottom: '24px' }}>
-        <HeatMapWidgets leads={leads} />
-      </div>
 
-      {/* Employee Performance Dashboard: Leaderboard Ranking Board */}
-      <div class="table-panel" style={{ margin: 0 }}>
-        <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Trophy size={18} style={{ color: 'var(--primary)' }} />
-            Vrindavan Estates Employee Ranking Board
+        {/* Widget 4: Booking & Revenue Summary */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
+            <BarChart2 size={18} style={{ color: 'var(--primary)' }} />
+            Booking & Revenue Summary
           </h3>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Updated live based on bookings and conversions</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', flex: 1, alignContent: 'center' }}>
+            <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Today's Bookings</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
+                {stats?.summary?.todayBookingsCount || 0}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Monthly Bookings</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
+                {stats?.summary?.monthlyBookingsCount || 0}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Collection Received</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#22c55e', marginTop: '4px' }}>
+                ₹{(stats?.summary?.collectionReceived || 0).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pending Collection</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '4px' }}>
+                ₹{(stats?.summary?.pendingCollection || 0).toLocaleString()}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="table-container">
+      </div>
+
+      {/* Widget 5: Employee Performance Snapshot */}
+      <div className="table-panel" style={{ margin: 0 }}>
+        <div className="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Trophy size={18} style={{ color: 'var(--primary)' }} />
+            Vrindavan Estates Employee Performance Snapshot
+          </h3>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Click columns/rows to filter leads directory</span>
+        </div>
+
+        <div className="table-container">
           {loading ? (
             <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
               Calculating conversion rates and rankings...
@@ -351,36 +552,34 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
           ) : (
             <>
               <style>{`
-                .clickable-row {
+                .snapshot-row {
                   cursor: pointer;
                   transition: background 0.15s ease;
                 }
-                .clickable-row:hover {
+                .snapshot-row:hover {
                   background: rgba(223, 177, 91, 0.04) !important;
                 }
-                .clickable-row .view-details-icon {
-                  opacity: 0.2;
-                  transition: opacity 0.15s ease;
-                  display: inline-flex;
-                  align-items: center;
-                }
-                .clickable-row:hover .view-details-icon {
-                  opacity: 1;
+                .snapshot-clickable-cell {
+                  text-align: center;
+                  cursor: pointer;
+                  text-decoration: underline;
                   color: var(--primary);
+                  font-weight: 600;
+                  transition: color 0.15s ease;
+                }
+                .snapshot-clickable-cell:hover {
+                  color: #fff;
                 }
               `}</style>
               <table style={{ width: '100%', fontSize: '13px' }}>
                 <thead>
                   <tr>
                     <th style={{ width: '80px', textAlign: 'center' }}>Rank</th>
-                    <th>Executive Name</th>
-                    <th style={{ textAlign: 'center' }}>Leads Owned</th>
-                    <th style={{ textAlign: 'center' }}>Calls Made</th>
-                    <th style={{ textAlign: 'center' }}>Connected Calls</th>
-                    <th style={{ textAlign: 'center' }}>Site Visits Completed</th>
-                    <th style={{ textAlign: 'center' }}>Bookings Confirmed</th>
-                    <th style={{ textAlign: 'right', paddingRight: '15px' }}>Revenue Closed</th>
-                    <th style={{ textAlign: 'center' }}>Conversion %</th>
+                    <th>Employee Name</th>
+                    <th style={{ textAlign: 'center' }}>Leads Assigned</th>
+                    <th style={{ textAlign: 'center' }}>Calls Today</th>
+                    <th style={{ textAlign: 'center' }}>Site Visits</th>
+                    <th style={{ textAlign: 'center' }}>Bookings</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -390,24 +589,26 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                     let trophyEmoji = '';
                     
                     if (rank === 1) {
-                      rankBadgeColor = '#dfb15b'; // gold
+                      rankBadgeColor = '#dfb15b';
                       trophyEmoji = '🏆';
                     } else if (rank === 2) {
-                      rankBadgeColor = '#94a3b8'; // silver
+                      rankBadgeColor = '#94a3b8';
                       trophyEmoji = '🥈';
                     } else if (rank === 3) {
-                      rankBadgeColor = '#b45309'; // bronze
+                      rankBadgeColor = '#b45309';
                       trophyEmoji = '🥉';
                     }
 
                     return (
                       <tr 
                         key={emp.id} 
-                        className="clickable-row"
-                        onClick={() => onSelectEmployee && onSelectEmployee(emp.id)}
+                        className="snapshot-row"
                         style={{ background: rank <= 3 ? 'rgba(219, 178, 93, 0.02)' : 'inherit' }}
                       >
-                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                        <td 
+                          style={{ textAlign: 'center', fontWeight: 'bold' }}
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount })}
+                        >
                           <span 
                             style={{ 
                               background: rank <= 3 ? rankBadgeColor : 'none', 
@@ -420,24 +621,38 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                             #{rank} {trophyEmoji}
                           </span>
                         </td>
-                        <td style={{ fontWeight: '600' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {emp.name}
-                            <span className="view-details-icon" title="View Performance Details">
-                              <Eye size={12} />
-                            </span>
-                          </div>
+                        <td 
+                          style={{ fontWeight: '600' }}
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount })}
+                        >
+                          {emp.name}
                         </td>
-                        <td style={{ textAlign: 'center' }}>{emp.leadsCount}</td>
-                        <td style={{ textAlign: 'center' }}>{emp.callsCount}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--color-info)' }}>{emp.connectedCallsCount}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--primary)' }}>{emp.siteVisitsCount}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{emp.bookingsCount}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: '#22c55e', paddingRight: '15px' }}>₹{(emp.revenueClosed || 0).toLocaleString()}</td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                          <span class={`badge ${emp.conversionRate >= 15 ? 'badge-success' : (emp.conversionRate >= 5 ? 'badge-warm' : 'badge-cold')}`}>
-                            {emp.conversionRate}%
-                          </span>
+                        <td 
+                          className="snapshot-clickable-cell"
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount })}
+                        >
+                          {emp.leadsCount}
+                        </td>
+                        <td 
+                          className="snapshot-clickable-cell"
+                          style={{ color: 'var(--color-info)' }}
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount, calls_today: 'true' })}
+                        >
+                          {emp.callsTodayCount || 0}
+                        </td>
+                        <td 
+                          className="snapshot-clickable-cell"
+                          style={{ color: 'var(--primary)' }}
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount, site_visit_completed: 'true' })}
+                        >
+                          {emp.siteVisitsCount}
+                        </td>
+                        <td 
+                          className="snapshot-clickable-cell"
+                          style={{ color: 'var(--color-success)', fontWeight: 'bold' }}
+                          onClick={() => onDrillDown && onDrillDown('Employee Leads', { assigned_employee_id: emp.id, employee_name: emp.name, leads_count: emp.leadsCount, status: 'Booked' })}
+                        >
+                          {emp.bookingsCount}
                         </td>
                       </tr>
                     );
@@ -448,6 +663,68 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
           )}
         </div>
       </div>
+
+      {/* WhatsApp Modal */}
+      {whatsAppModalOpen && (
+        <div className="modal-overlay" style={{ display: 'flex', zIndex: 9999 }}>
+          <div className="modal-content" style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h3>Send WhatsApp Assistant</h3>
+              <button className="close-btn" onClick={() => setWhatsAppModalOpen(false)}>&times;</button>
+            </div>
+            
+            <div className="form-group">
+              <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Select WhatsApp Template</label>
+              <select 
+                className="form-control" 
+                value={selectedTemplateId} 
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+              >
+                {whatsAppTemplates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                ))}
+                <option value="">Custom Message (No Template)</option>
+              </select>
+            </div>
+
+            {selectedTemplateId ? (
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Template Preview</label>
+                <div style={{ 
+                  background: 'var(--bg-input)', 
+                  padding: '10px', 
+                  borderRadius: '4px', 
+                  fontSize: '12px',
+                  color: 'var(--text-main)',
+                  whiteSpace: 'pre-wrap',
+                  border: '1px solid var(--border-color)',
+                  maxHeight: '150px',
+                  overflowY: 'auto'
+                }}>
+                  {getInterpolatedWhatsAppMessage()}
+                </div>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Custom Message Text</label>
+                <textarea 
+                  className="form-control" 
+                  rows={4}
+                  value={customWhatsAppText}
+                  onChange={(e) => setCustomWhatsAppText(e.target.value)}
+                  placeholder="Type your custom greeting..."
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+              <button className="btn btn-secondary" onClick={() => setWhatsAppModalOpen(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSendWhatsAppMessage}>Send WhatsApp</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -42,6 +42,7 @@ export default function LeadTable({
   const [totalPages, setTotalPages] = useState(1);
   const [limit, setLimit] = useState(50);
   const [loadingLeads, setLoadingLeads] = useState(false);
+  const [employeeFilterHeading, setEmployeeFilterHeading] = useState('');
 
   // Row selection states for bulk assignments
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
@@ -94,6 +95,23 @@ export default function LeadTable({
       setSelectedStatus(targetStatus);
       setCallsToday(targetCallsToday);
       setSiteVisitCompleted(targetSiteVisitCompleted);
+
+      if (initialFilters.assigned_employee_id) {
+        setSelectedEmployee(initialFilters.assigned_employee_id);
+        const name = initialFilters.employee_name || 'Executive';
+        const count = initialFilters.leads_count || 0;
+        let suffix = '';
+        if (targetStatus === 'Booked') {
+          suffix = ' - Bookings';
+        } else if (targetCallsToday === 'true') {
+          suffix = ' - Calls Today';
+        } else if (targetSiteVisitCompleted === 'true') {
+          suffix = ' - Site Visits';
+        }
+        setEmployeeFilterHeading(`Showing Leads Assigned To: ${name}${suffix} (${count} Leads)`);
+      } else {
+        setEmployeeFilterHeading('');
+      }
 
       // If either advanced filter is activated, open the advanced section
       if (targetCallsToday || targetSiteVisitCompleted) {
@@ -435,7 +453,10 @@ export default function LeadTable({
                 id="filter-employee"
                 class="form-control"
                 value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
+                onChange={(e) => {
+                  setSelectedEmployee(e.target.value);
+                  setEmployeeFilterHeading('');
+                }}
               >
                 <option value="">All Employees</option>
                 {employees.map(emp => (
@@ -478,6 +499,7 @@ export default function LeadTable({
               setSiteVisitEnd('');
               setCallsToday('');
               setSiteVisitCompleted('');
+              setEmployeeFilterHeading('');
             }}
           >
             Reset All Filters
@@ -545,7 +567,7 @@ export default function LeadTable({
       <div class="table-panel">
         <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h3>Leads Directory ({filteredLeads.length})</h3>
+            <h3>{employeeFilterHeading || `Leads Directory (${filteredLeads.length})`}</h3>
             
             {/* Bulk Actions Indicator & Trigger */}
             {selectedLeadIds.length > 0 && currentUser.role === 'admin' && (
