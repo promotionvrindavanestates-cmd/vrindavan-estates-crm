@@ -347,5 +347,8 @@ export const api = {
     }),
 
   getRecentActivities: (limit) => 
-    request(`/api/activities/recent${limit ? `?limit=${limit}` : ''}`)
+    request(`/api/activities/recent${limit ? `?limit=${limit}` : ''}`),
+
+  getEmployeePerformance: (id) =>
+    request(`/api/employees/${id}/performance`)
 };

@@ -16,6 +16,7 @@ import ReportsAnalytics from './components/ReportsAnalytics';
 import LeadDetailsModal from './components/LeadDetailsModal';
 import RemindersModal from './components/RemindersModal';
 import LeadDetailDrawer from './components/LeadDetailDrawer';
+import EmployeeDetailDrawer from './components/EmployeeDetailDrawer';
 import LeadPipeline from './components/LeadPipeline';
 import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello } from 'lucide-react';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
@@ -30,10 +31,17 @@ export default function App() {
   const [kpiFilters, setKpiFilters] = useState(null);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [employeeDrawerOpen, setEmployeeDrawerOpen] = useState(false);
 
   const handleOpenLeadDrawer = (leadId) => {
     setDrawerLeadId(leadId);
     setDrawerOpen(true);
+  };
+
+  const handleOpenEmployeeDrawer = (employeeId) => {
+    setSelectedEmployeeId(employeeId);
+    setEmployeeDrawerOpen(true);
   };
 
   const handleDrillDown = (metricName, filterParams) => {
@@ -500,6 +508,7 @@ export default function App() {
                 employees={employees} 
                 onSelectLead={handleSelectLeadFromDashboard} 
                 onDrillDown={handleDrillDown}
+                onSelectEmployee={handleOpenEmployeeDrawer}
               />
             )}
 
@@ -616,6 +625,16 @@ export default function App() {
           leadId={drawerLeadId}
           currentUser={currentUser}
           employees={employees}
+          onRefreshData={fetchCRMData}
+        />
+
+        {/* Employee Detail Side Drawer */}
+        <EmployeeDetailDrawer
+          isOpen={employeeDrawerOpen}
+          onClose={() => setEmployeeDrawerOpen(false)}
+          employeeId={selectedEmployeeId}
+          employees={employees}
+          currentUser={currentUser}
           onRefreshData={fetchCRMData}
         />
 

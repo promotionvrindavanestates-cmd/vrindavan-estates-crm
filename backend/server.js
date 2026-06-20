@@ -1830,6 +1830,17 @@ app.get('/api/activities/recent', authenticateToken, async (req, res) => {
   }
 });
 
+// Employee Performance stats API
+app.get('/api/employees/:id/performance', authenticateToken, async (req, res) => {
+  try {
+    const stats = await DB.getEmployeePerformanceStats(req.params.id);
+    res.json(stats);
+  } catch (error) {
+    console.error('Failed to fetch employee performance stats:', error);
+    res.status(500).json({ error: 'Failed to fetch employee performance stats' });
+  }
+});
+
 // --- PHASE 3: UNIFIED TIMELINE API ---
 
 app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {

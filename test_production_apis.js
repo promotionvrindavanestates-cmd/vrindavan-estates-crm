@@ -56,11 +56,13 @@ async function runTests() {
     }
   };
 
-  console.log('\n--- TESTING PHASE 4A ENDPOINTS ---');
+  console.log('\n--- TESTING CRM ENDPOINTS ---');
   await testEndpoint('/api/notifications/alerts');
   await testEndpoint('/api/reminders/widgets');
   await testEndpoint('/api/dashboard/advanced');
   await testEndpoint('/api/whatsapp/templates');
+  await testEndpoint('/api/activities/recent');
+  await testEndpoint('/api/payments');
 }
 
 runTests();

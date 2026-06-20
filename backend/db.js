@@ -325,6 +325,7 @@ const DB = {
       if (filters.status) query = query.eq('status', filters.status);
       if (filters.assigned_employee_id) query = query.eq('assigned_employee_id', filters.assigned_employee_id);
       if (filters.source) query = query.eq('lead_source', filters.source);
+      if (filters.site_visit_status) query = query.eq('site_visit_status', filters.site_visit_status);
       
       // Phase 3 Filters
       if (filters.created_start) query = query.gte('created_at', filters.created_start);
@@ -398,6 +399,7 @@ const DB = {
       if (filters.status) results = results.filter(l => l.status === filters.status);
       if (filters.assigned_employee_id) results = results.filter(l => l.assigned_employee_id === filters.assigned_employee_id);
       if (filters.source) results = results.filter(l => l.lead_source === filters.source);
+      if (filters.site_visit_status) results = results.filter(l => l.site_visit_status === filters.site_visit_status);
 
       // Phase 3 Filters local
       if (filters.created_start) {
@@ -895,6 +897,359 @@ const DB = {
           leads: lead ? { name: lead.name } : null
         };
       });
+    }
+  },
+
+  async getEmployeePerformanceStats(employeeId) {
+    if (this.isCloud()) {
+      // 1. Get Employee Profile
+      const { data: profile, error: uErr } = await supabase
+        .from('users')
+        .select('id, username, full_name, role, status, created_at, phone')
+        .eq('id', employeeId)
+        .single();
+      if (uErr) throw uErr;
+
+      // 2. Get Leads Assigned stats grouped by status
+      const { data: leads, error: lErr } = await supabase
+        .from('leads')
+        .select('status')
+        .eq('assigned_employee_id', employeeId);
+      if (lErr) throw lErr;
+
+      const leadsCount = leads.length;
+      const statusCounts = { New: 0, Hot: 0, Warm: 0, Cold: 0, Booked: 0 };
+      leads.forEach(l => {
+        if (statusCounts[l.status] !== undefined) statusCounts[l.status]++;
+      });
+
+      // 3. Get Calls Made
+      const { data: calls, error: cErr } = await supabase
+        .from('call_logs')
+        .select('response, call_date')
+        .eq('caller_id', employeeId);
+      if (cErr) throw cErr;
+
+      const callsMade = calls.length;
+      const notConnectedResponses = ['Not Picked', 'Busy', 'Failed', 'Not Connected'];
+      let connectedCalls = 0;
+      let notConnectedCalls = 0;
+      calls.forEach(c => {
+        if (notConnectedResponses.includes(c.response)) {
+          notConnectedCalls++;
+        } else {
+          connectedCalls++;
+        }
+      });
+
+      // 4. Reminders
+      const { data: reminders, error: rErr } = await supabase
+        .from('reminders')
+        .select('is_read')
+        .eq('assigned_employee_id', employeeId);
+      if (rErr) throw rErr;
+
+      let followUpsPending = 0;
+      let followUpsCompleted = 0;
+      reminders.forEach(r => {
+        if (r.is_read) {
+          followUpsCompleted++;
+        } else {
+          followUpsPending++;
+        }
+      });
+
+      // 5. Site Visits Outcome
+      const { data: visits, error: vErr } = await supabase
+        .from('site_visits')
+        .select('outcome, created_at, leads!inner(assigned_employee_id)')
+        .eq('leads.assigned_employee_id', employeeId);
+      if (vErr) throw vErr;
+
+      let visitsScheduled = 0;
+      let visitsCompleted = 0;
+      let visitsCancelled = 0;
+      visits.forEach(v => {
+        if (v.outcome === 'Scheduled') {
+          visitsScheduled++;
+        } else if (v.outcome === 'Cancelled' || v.outcome === 'Not Interested') {
+          visitsCancelled++;
+        } else {
+          visitsCompleted++;
+        }
+      });
+
+      // 6. Booking stats & values
+      const { data: bookings, error: bErr } = await supabase
+        .from('bookings')
+        .select('id, token_amount, booking_amount, created_at, payments(amount_received, balance, total_cost)')
+        .eq('executive_id', employeeId);
+      if (bErr) throw bErr;
+
+      const totalBookings = bookings.length;
+      let bookingValue = 0;
+      let collectionReceived = 0;
+      let pendingCollection = 0;
+
+      bookings.forEach(b => {
+        const token = parseFloat(b.token_amount) || 0;
+        const bookingAmt = parseFloat(b.booking_amount) || 0;
+        bookingValue += (token + bookingAmt);
+        
+        if (b.payments && b.payments.length > 0) {
+          const pay = b.payments[0];
+          collectionReceived += (parseFloat(pay.amount_received) || 0);
+          pendingCollection += (parseFloat(pay.balance) || 0);
+        }
+      });
+
+      // 7. Trends (Last 6 Months)
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const trends = {};
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        trends[key] = {
+          month: `${monthNames[d.getMonth()]} ${d.getFullYear().toString().substr(-2)}`,
+          calls: 0,
+          visits: 0,
+          bookings: 0,
+          revenue: 0
+        };
+      }
+
+      // Group Calls trend
+      calls.forEach(c => {
+        if (!c.call_date) return;
+        const date = new Date(c.call_date);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) trends[key].calls++;
+      });
+
+      // Group Visits trend
+      visits.forEach(v => {
+        if (!v.created_at) return;
+        const date = new Date(v.created_at);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) trends[key].visits++;
+      });
+
+      // Group Bookings & Revenue trend
+      bookings.forEach(b => {
+        if (!b.created_at) return;
+        const date = new Date(b.created_at);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) {
+          trends[key].bookings++;
+          const token = parseFloat(b.token_amount) || 0;
+          const bookingAmt = parseFloat(b.booking_amount) || 0;
+          trends[key].revenue += (token + bookingAmt);
+        }
+      });
+
+      const trendList = Object.values(trends);
+
+      // Conversion funnel (this employee's leads)
+      const funnel = {
+        new: leads.filter(l => l.status === 'New').length,
+        contacted: leads.filter(l => ['Attempted', 'Connected', 'Warm', 'Cold', 'Interested'].includes(l.status)).length,
+        visit: leads.filter(l => ['Site Visit Scheduled', 'Site Visit Done'].includes(l.status)).length,
+        negotiation: leads.filter(l => ['Negotiation', 'Hot'].includes(l.status)).length,
+        booked: leads.filter(l => l.status === 'Booked').length
+      };
+
+      const conversionRate = leadsCount > 0 ? Math.round((totalBookings / leadsCount) * 100) : 0;
+
+      return {
+        profile,
+        metrics: {
+          leadsOwned: leadsCount,
+          newLeads: statusCounts.New,
+          hotLeads: statusCounts.Hot,
+          warmLeads: statusCounts.Warm,
+          coldLeads: statusCounts.Cold,
+          bookedLeads: statusCounts.Booked,
+          callsMade,
+          connectedCalls,
+          notConnectedCalls,
+          followUpsPending,
+          followUpsCompleted,
+          visitsScheduled,
+          visitsCompleted,
+          visitsCancelled,
+          totalBookings,
+          bookingValue,
+          collectionReceived,
+          pendingCollection,
+          conversionRate
+        },
+        trends: trendList,
+        funnel
+      };
+    } else {
+      // Local fallback DB
+      const db = loadLocalDb();
+      const profile = db.users.find(u => u.id === employeeId);
+      if (!profile) throw new Error('Employee not found');
+
+      const empLeads = db.leads.filter(l => l.assigned_employee_id === employeeId);
+      const leadsCount = empLeads.length;
+
+      const statusCounts = { New: 0, Hot: 0, Warm: 0, Cold: 0, Booked: 0 };
+      empLeads.forEach(l => {
+        if (statusCounts[l.status] !== undefined) statusCounts[l.status]++;
+      });
+
+      const calls = db.call_logs.filter(c => c.caller_id === employeeId);
+      const callsMade = calls.length;
+      const notConnectedResponses = ['Not Picked', 'Busy', 'Failed', 'Not Connected'];
+      let connectedCalls = 0;
+      let notConnectedCalls = 0;
+      calls.forEach(c => {
+        if (notConnectedResponses.includes(c.response)) {
+          notConnectedCalls++;
+        } else {
+          connectedCalls++;
+        }
+      });
+
+      const reminders = (db.reminders || []).filter(r => r.assigned_employee_id === employeeId);
+      let followUpsPending = 0;
+      let followUpsCompleted = 0;
+      reminders.forEach(r => {
+        if (r.is_read) {
+          followUpsCompleted++;
+        } else {
+          followUpsPending++;
+        }
+      });
+
+      const visits = (db.site_visits || []).filter(v => {
+        const lead = db.leads.find(l => l.id === v.lead_id);
+        return lead && lead.assigned_employee_id === employeeId;
+      });
+
+      let visitsScheduled = 0;
+      let visitsCompleted = 0;
+      let visitsCancelled = 0;
+      visits.forEach(v => {
+        if (v.outcome === 'Scheduled') {
+          visitsScheduled++;
+        } else if (v.outcome === 'Cancelled' || v.outcome === 'Not Interested') {
+          visitsCancelled++;
+        } else {
+          visitsCompleted++;
+        }
+      });
+
+      const bookings = db.bookings.filter(b => b.executive_id === employeeId);
+      const totalBookings = bookings.length;
+      let bookingValue = 0;
+      let collectionReceived = 0;
+      let pendingCollection = 0;
+
+      bookings.forEach(b => {
+        const token = parseFloat(b.token_amount) || 0;
+        const bookingAmt = parseFloat(b.booking_amount) || 0;
+        bookingValue += (token + bookingAmt);
+        
+        const pay = db.payments.find(p => p.booking_id === b.id);
+        if (pay) {
+          collectionReceived += (parseFloat(pay.amount_received) || 0);
+          pendingCollection += (parseFloat(pay.balance) || 0);
+        }
+      });
+
+      // Trends (Last 6 Months)
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const trends = {};
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        trends[key] = {
+          month: `${monthNames[d.getMonth()]} ${d.getFullYear().toString().substr(-2)}`,
+          calls: 0,
+          visits: 0,
+          bookings: 0,
+          revenue: 0
+        };
+      }
+
+      calls.forEach(c => {
+        if (!c.call_date) return;
+        const date = new Date(c.call_date);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) trends[key].calls++;
+      });
+
+      visits.forEach(v => {
+        const createdDate = v.created_at || v.check_in_time || v.check_out_time;
+        if (!createdDate) return;
+        const date = new Date(createdDate);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) trends[key].visits++;
+      });
+
+      bookings.forEach(b => {
+        if (!b.created_at) return;
+        const date = new Date(b.created_at);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (trends[key]) {
+          trends[key].bookings++;
+          const token = parseFloat(b.token_amount) || 0;
+          const bookingAmt = parseFloat(b.booking_amount) || 0;
+          trends[key].revenue += (token + bookingAmt);
+        }
+      });
+
+      const trendList = Object.values(trends);
+
+      const funnel = {
+        new: empLeads.filter(l => l.status === 'New').length,
+        contacted: empLeads.filter(l => ['Attempted', 'Connected', 'Warm', 'Cold', 'Interested'].includes(l.status)).length,
+        visit: empLeads.filter(l => ['Site Visit Scheduled', 'Site Visit Done'].includes(l.status)).length,
+        negotiation: empLeads.filter(l => ['Negotiation', 'Hot'].includes(l.status)).length,
+        booked: empLeads.filter(l => l.status === 'Booked').length
+      };
+
+      const conversionRate = leadsCount > 0 ? Math.round((totalBookings / leadsCount) * 100) : 0;
+
+      return {
+        profile: {
+          id: profile.id,
+          username: profile.username,
+          full_name: profile.full_name,
+          role: profile.role,
+          status: profile.status,
+          created_at: profile.created_at,
+          phone: profile.phone
+        },
+        metrics: {
+          leadsOwned: leadsCount,
+          newLeads: statusCounts.New,
+          hotLeads: statusCounts.Hot,
+          warmLeads: statusCounts.Warm,
+          coldLeads: statusCounts.Cold,
+          bookedLeads: statusCounts.Booked,
+          callsMade,
+          connectedCalls,
+          notConnectedCalls,
+          followUpsPending,
+          followUpsCompleted,
+          visitsScheduled,
+          visitsCompleted,
+          visitsCancelled,
+          totalBookings,
+          bookingValue,
+          collectionReceived,
+          pendingCollection,
+          conversionRate
+        },
+        trends: trendList,
+        funnel
+      };
     }
   },
 

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy } from 'lucide-react';
+import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy, Eye } from 'lucide-react';
 import HeatMapWidgets from './HeatMapWidgets';
 import RecentActivities from './RecentActivities';
 
-export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown }) {
+export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown, onSelectEmployee }) {
   const [stats, setStats] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -349,69 +349,102 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
               No employee data registered in system.
             </div>
           ) : (
-            <table style={{ width: '100%', fontSize: '13px' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: '80px', textAlign: 'center' }}>Rank</th>
-                  <th>Executive Name</th>
-                  <th style={{ textAlign: 'center' }}>Leads Owned</th>
-                  <th style={{ textAlign: 'center' }}>Calls Made</th>
-                  <th style={{ textAlign: 'center' }}>Connected Calls</th>
-                  <th style={{ textAlign: 'center' }}>Site Visits Completed</th>
-                  <th style={{ textAlign: 'center' }}>Bookings Confirmed</th>
-                  <th style={{ textAlign: 'right', paddingRight: '15px' }}>Revenue Closed</th>
-                  <th style={{ textAlign: 'center' }}>Conversion %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.employeePerformance.map((emp, idx) => {
-                  const rank = idx + 1;
-                  let rankBadgeColor = 'var(--text-muted)';
-                  let trophyEmoji = '';
-                  
-                  if (rank === 1) {
-                    rankBadgeColor = '#dfb15b'; // gold
-                    trophyEmoji = '🏆';
-                  } else if (rank === 2) {
-                    rankBadgeColor = '#94a3b8'; // silver
-                    trophyEmoji = '🥈';
-                  } else if (rank === 3) {
-                    rankBadgeColor = '#b45309'; // bronze
-                    trophyEmoji = '🥉';
-                  }
+            <>
+              <style>{`
+                .clickable-row {
+                  cursor: pointer;
+                  transition: background 0.15s ease;
+                }
+                .clickable-row:hover {
+                  background: rgba(223, 177, 91, 0.04) !important;
+                }
+                .clickable-row .view-details-icon {
+                  opacity: 0.2;
+                  transition: opacity 0.15s ease;
+                  display: inline-flex;
+                  align-items: center;
+                }
+                .clickable-row:hover .view-details-icon {
+                  opacity: 1;
+                  color: var(--primary);
+                }
+              `}</style>
+              <table style={{ width: '100%', fontSize: '13px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '80px', textAlign: 'center' }}>Rank</th>
+                    <th>Executive Name</th>
+                    <th style={{ textAlign: 'center' }}>Leads Owned</th>
+                    <th style={{ textAlign: 'center' }}>Calls Made</th>
+                    <th style={{ textAlign: 'center' }}>Connected Calls</th>
+                    <th style={{ textAlign: 'center' }}>Site Visits Completed</th>
+                    <th style={{ textAlign: 'center' }}>Bookings Confirmed</th>
+                    <th style={{ textAlign: 'right', paddingRight: '15px' }}>Revenue Closed</th>
+                    <th style={{ textAlign: 'center' }}>Conversion %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.employeePerformance.map((emp, idx) => {
+                    const rank = idx + 1;
+                    let rankBadgeColor = 'var(--text-muted)';
+                    let trophyEmoji = '';
+                    
+                    if (rank === 1) {
+                      rankBadgeColor = '#dfb15b'; // gold
+                      trophyEmoji = '🏆';
+                    } else if (rank === 2) {
+                      rankBadgeColor = '#94a3b8'; // silver
+                      trophyEmoji = '🥈';
+                    } else if (rank === 3) {
+                      rankBadgeColor = '#b45309'; // bronze
+                      trophyEmoji = '🥉';
+                    }
 
-                  return (
-                    <tr key={emp.id} style={{ background: rank <= 3 ? 'rgba(219, 178, 93, 0.02)' : 'inherit' }}>
-                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                        <span 
-                          style={{ 
-                            background: rank <= 3 ? rankBadgeColor : 'none', 
-                            color: rank <= 3 ? '#000' : 'var(--text-muted)',
-                            padding: '3px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px'
-                          }}
-                        >
-                          #{rank} {trophyEmoji}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: '600' }}>{emp.name}</td>
-                      <td style={{ textAlign: 'center' }}>{emp.leadsCount}</td>
-                      <td style={{ textAlign: 'center' }}>{emp.callsCount}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--color-info)' }}>{emp.connectedCallsCount}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--primary)' }}>{emp.siteVisitsCount}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{emp.bookingsCount}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 'bold', color: '#22c55e', paddingRight: '15px' }}>₹{(emp.revenueClosed || 0).toLocaleString()}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                        <span class={`badge ${emp.conversionRate >= 15 ? 'badge-success' : (emp.conversionRate >= 5 ? 'badge-warm' : 'badge-cold')}`}>
-                          {emp.conversionRate}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr 
+                        key={emp.id} 
+                        className="clickable-row"
+                        onClick={() => onSelectEmployee && onSelectEmployee(emp.id)}
+                        style={{ background: rank <= 3 ? 'rgba(219, 178, 93, 0.02)' : 'inherit' }}
+                      >
+                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                          <span 
+                            style={{ 
+                              background: rank <= 3 ? rankBadgeColor : 'none', 
+                              color: rank <= 3 ? '#000' : 'var(--text-muted)',
+                              padding: '3px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px'
+                            }}
+                          >
+                            #{rank} {trophyEmoji}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: '600' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {emp.name}
+                            <span className="view-details-icon" title="View Performance Details">
+                              <Eye size={12} />
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>{emp.leadsCount}</td>
+                        <td style={{ textAlign: 'center' }}>{emp.callsCount}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--color-info)' }}>{emp.connectedCallsCount}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--primary)' }}>{emp.siteVisitsCount}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{emp.bookingsCount}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: '#22c55e', paddingRight: '15px' }}>₹{(emp.revenueClosed || 0).toLocaleString()}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                          <span class={`badge ${emp.conversionRate >= 15 ? 'badge-success' : (emp.conversionRate >= 5 ? 'badge-warm' : 'badge-cold')}`}>
+                            {emp.conversionRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       </div>
