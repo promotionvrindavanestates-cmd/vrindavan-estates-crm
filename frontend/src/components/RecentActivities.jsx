@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../utils/api';
-import { Activity, Phone, Calendar, UserPlus, FileText, Smartphone, Laptop, Clock, MessageSquare, MapPin } from 'lucide-react';
+import { Activity, Phone, Calendar, UserPlus, FileText, Smartphone, Laptop, Clock, MapPin } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function RecentActivities({ limit = 15 }) {
   const [activities, setActivities] = useState([]);
@@ -40,7 +40,7 @@ export default function RecentActivities({ limit = 15 }) {
       return <UserPlus size={14} style={{ color: '#8b5cf6' }} />;
     }
     if (act.includes('whatsapp') || act.includes('message') || act.includes('campaign')) {
-      return <MessageSquare size={14} style={{ color: '#10b981' }} />;
+      return <FaWhatsapp size={14} style={{ color: '#25D366' }} />;
     }
     if (act.includes('reminder') || act.includes('follow-up') || act.includes('added')) {
       return <Calendar size={14} style={{ color: 'var(--primary)' }} />;

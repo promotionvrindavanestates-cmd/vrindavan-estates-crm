@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, MessageSquare, Award as Trophy, Eye } from 'lucide-react';
+import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, Award as Trophy, Eye } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 import RecentActivities from './RecentActivities';
 
 export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown, onOpenLeadDrawer }) {
@@ -281,28 +282,28 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                       <td>{r.reminder_time || 'N/A'}</td>
                       <td style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         <button 
-                          className="btn btn-primary" 
-                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          className="call-action-btn" 
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
                           onClick={() => onSelectLead && onSelectLead(r.leads)}
-                          title="Log Call"
+                          title="Call Lead"
                         >
-                          <Phone size={10} /> Call
+                          📞 Call
                         </button>
                         <button 
-                          className="btn btn-secondary" 
-                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px', borderColor: '#22c55e', color: '#22c55e' }}
+                          className="whatsapp-action-btn" 
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
                           onClick={() => handleWhatsAppClick(r.leads.phone1, r.leads)}
-                          title="Send WhatsApp"
+                          title="WhatsApp Customer"
                         >
-                          <MessageSquare size={10} /> WA
+                          <FaWhatsapp size={12} /> WhatsApp
                         </button>
                         <button 
-                          className="btn btn-secondary" 
-                          style={{ padding: '3px 6px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                          className="open-action-btn" 
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
                           onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(r.leads.id)}
-                          title="Open Lead Details"
+                          title="Open Lead"
                         >
-                          <Eye size={10} /> Open
+                          👁 Open
                         </button>
                       </td>
                     </tr>

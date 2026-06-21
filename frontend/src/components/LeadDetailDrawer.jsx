@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { 
-  X, Phone, MessageSquare, Calendar, Clock, Award, PhoneCall, 
+  X, Phone, Calendar, Clock, Award, PhoneCall, 
   Check, Compass, CheckCircle2, AlertCircle, ArrowRightLeft, 
   Database, User, MapPin, Building, DollarSign, ChevronRight,
   TrendingUp, RefreshCw
 } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 const CALL_RESPONSES = ['Connected', 'Not Picked', 'Busy', 'Interested', 'Site Visit', 'Follow Up', 'Not Interested', 'Booked'];
 
@@ -395,7 +396,7 @@ export default function LeadDetailDrawer({
       case 'site-visit-in': return <MapPin size={12} style={{ color: '#eab308' }} />;
       case 'site-visit-out': return <MapPin size={12} style={{ color: 'var(--color-success)' }} />;
       case 'booking': return <Award size={12} style={{ color: 'var(--color-success)' }} />;
-      case 'whatsapp': return <MessageSquare size={12} style={{ color: '#128C7E' }} />;
+      case 'whatsapp': return <FaWhatsapp size={12} style={{ color: '#25D366' }} />;
       default: return <AlertCircle size={12} style={{ color: 'var(--primary)' }} />;
     }
   };
@@ -740,7 +741,7 @@ export default function LeadDetailDrawer({
                   style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#25D366', color: '#000', fontWeight: 700 }}
                   onClick={handleSendWhatsApp}
                 >
-                  <MessageSquare size={16} /> Send via WhatsApp Web
+                  <FaWhatsapp size={16} /> Send via WhatsApp Web
                 </button>
               </div>
             )}

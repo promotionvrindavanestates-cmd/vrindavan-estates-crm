@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../utils/api';
-import { MapPin, Calendar, Clock, Award, PhoneCall, Check, Compass, CheckCircle2, AlertCircle, MessageSquare, ArrowRightLeft, Database } from 'lucide-react';
+import { MapPin, Calendar, Clock, Award, PhoneCall, Check, Compass, CheckCircle2, AlertCircle, ArrowRightLeft, Database } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function LeadDetailsModal({ isOpen, onClose, lead, onSaveSuccess }) {
   const [siteVisits, setSiteVisits] = useState([]);
@@ -126,7 +126,7 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onSaveSuccess 
       case 'booking':
         return <Award size={14} style={{ color: 'var(--color-success)' }} />;
       case 'whatsapp':
-        return <MessageSquare size={14} style={{ color: '#128C7E' }} />;
+        return <FaWhatsapp size={14} style={{ color: '#25D366' }} />;
       default:
         return <AlertCircle size={14} style={{ color: 'var(--primary)' }} />;
     }

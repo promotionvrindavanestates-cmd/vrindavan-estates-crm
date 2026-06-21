@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { BadgeCent, Landmark, ShieldAlert, Calendar, MessageSquare, Phone, Plus, Filter, Clock, CheckCircle, Search } from 'lucide-react';
+import { BadgeCent, Landmark, ShieldAlert, Calendar, Phone, Plus, Filter, Clock, CheckCircle, Search } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function CollectionDashboard({ currentUser, onOpenLeadDrawer }) {
   const [analytics, setAnalytics] = useState(null);
@@ -292,11 +293,11 @@ export default function CollectionDashboard({ currentUser, onOpenLeadDrawer }) {
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
                             onClick={() => handleSendWhatsApp(m)}
-                            className="btn btn-secondary"
-                            title="Send WhatsApp Reminder"
-                            style={{ padding: '4px 8px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}
+                            className="whatsapp-action-btn"
+                            title="WhatsApp Customer"
+                            style={{ padding: '4px 8px', fontSize: '11px' }}
                           >
-                            <MessageSquare size={13} style={{ color: '#22c55e' }} />
+                            <FaWhatsapp size={12} /> WhatsApp
                           </button>
                           
                           {balance > 0 && (

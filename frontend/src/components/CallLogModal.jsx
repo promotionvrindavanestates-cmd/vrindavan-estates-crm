@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { PhoneCall, Calendar, Clock, MessageSquare } from 'lucide-react';
+import { PhoneCall, Calendar, Clock } from 'lucide-react';
 
 const RESPONSES = ['Connected', 'Not Picked', 'Busy', 'Interested', 'Site Visit', 'Follow Up', 'Not Interested', 'Booked'];
 

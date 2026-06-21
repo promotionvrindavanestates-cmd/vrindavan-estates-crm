@@ -846,3 +846,64 @@ tr:hover td {
   text-decoration: underline;
   font-weight: 800;
 }
+
+/* Phase 6 UI Enhancement: Action Button Standardizer */
+.whatsapp-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #25D366 !important;
+  background-color: rgba(37, 211, 102, 0.15) !important;
+  border: 1px solid rgba(37, 211, 102, 0.35) !important;
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none !important;
+}
+.whatsapp-action-btn:hover {
+  color: #128C7E !important;
+  background-color: rgba(37, 211, 102, 0.25) !important;
+}
+
+.call-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary) !important;
+  background-color: rgba(223, 177, 91, 0.15) !important;
+  border: 1px solid rgba(223, 177, 91, 0.35) !important;
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none !important;
+}
+.call-action-btn:hover {
+  color: var(--text-main) !important;
+  background-color: rgba(223, 177, 91, 0.25) !important;
+}
+
+.open-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-main) !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none !important;
+}
+.open-action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--primary) !important;
+}

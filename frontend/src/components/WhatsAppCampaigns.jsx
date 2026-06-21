@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { MessageSquare, Plus, Send, RefreshCw, Eye, ListFilter, Users } from 'lucide-react';
+import { Plus, RefreshCw, Eye, ListFilter, Users } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function WhatsAppCampaigns({ currentUser }) {
   const [templates, setTemplates] = useState([]);
@@ -325,7 +326,7 @@ export default function WhatsAppCampaigns({ currentUser }) {
 
             <div style={{ marginTop: '25px', display: 'flex', gap: '10px' }}>
               <button type="submit" class="btn btn-primary" disabled={recipientsCount === 0}>
-                <Send size={14} /> Launch Campaign
+                <FaWhatsapp size={14} /> Launch Campaign
               </button>
               <button type="button" class="btn btn-secondary" onClick={() => setIsAddingCampaign(false)}>Cancel</button>
             </div>
@@ -341,7 +342,7 @@ export default function WhatsAppCampaigns({ currentUser }) {
                 {isAdmin && (
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button class="btn btn-primary" onClick={() => setIsAddingCampaign(true)}>
-                      <Send size={14} /> New Campaign
+                      <FaWhatsapp size={14} /> New Campaign
                     </button>
                   </div>
                 )}

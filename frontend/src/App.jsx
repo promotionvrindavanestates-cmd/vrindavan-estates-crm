@@ -21,7 +21,8 @@ import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
 import CollectionDashboard from './components/CollectionDashboard';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent } from 'lucide-react';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -483,7 +484,7 @@ export default function App() {
             class={`nav-tab ${activeTab === 'whatsapp' ? 'active' : ''}`}
             onClick={() => setActiveTab('whatsapp')}
           >
-            <MessageSquare size={15} /> WhatsApp
+            <FaWhatsapp size={15} style={{ color: '#25D366' }} /> WhatsApp
           </div>
           <div 
             class={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}

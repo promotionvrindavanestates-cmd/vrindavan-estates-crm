@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Phone, MessageSquare, Edit2, Trash2, UserPlus, PhoneCall, Plus, History, Filter, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
+import { Phone, Edit2, Trash2, UserPlus, PhoneCall, Plus, History, Filter, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function LeadTable({ 
   leads = [], 
@@ -675,43 +676,54 @@ export default function LeadTable({
                       </td>
                       
                       <td data-label="Contact Info">
-                        <div class="phone-actions">
-                          <span>{l.phone1}</span>
-                          <button 
-                            class="action-icon-btn call" 
-                            title="Call Lead"
-                            onClick={() => handleCallClick(l.phone1, l)}
-                          >
-                            <Phone size={12} />
-                          </button>
-                          <button 
-                            class="action-icon-btn whatsapp" 
-                            title="WhatsApp Chat"
-                            onClick={() => handleWhatsAppClick(l.phone1, l)}
-                          >
-                            <MessageSquare size={12} />
-                          </button>
-                        </div>
-                        
-                        {l.phone2 && (
-                          <div class="phone-actions" style={{ marginTop: '4px' }}>
-                            <span>{l.phone2}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div><strong>P1:</strong> {l.phone1}</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' }}>
                             <button 
-                              class="action-icon-btn call" 
-                              title="Call Lead Phone 2"
-                              onClick={() => handleCallClick(l.phone2, l)}
+                              className="call-action-btn" 
+                              onClick={() => handleCallClick(l.phone1, l)}
+                              title="Call Lead"
                             >
-                              <Phone size={12} />
+                              📞 Call
                             </button>
                             <button 
-                              class="action-icon-btn whatsapp" 
-                              title="WhatsApp Chat Phone 2"
-                              onClick={() => handleWhatsAppClick(l.phone2, l)}
+                              className="whatsapp-action-btn" 
+                              onClick={() => handleWhatsAppClick(l.phone1, l)}
+                              title="WhatsApp Customer"
                             >
-                              <MessageSquare size={12} />
+                              <FaWhatsapp size={14} /> WhatsApp
+                            </button>
+                            <button 
+                              className="open-action-btn" 
+                              onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
+                              title="Open Lead"
+                            >
+                              👁 Open
                             </button>
                           </div>
-                        )}
+                          
+                          {l.phone2 && (
+                            <>
+                              <div style={{ marginTop: '4px' }}><strong>P2:</strong> {l.phone2}</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                <button 
+                                  className="call-action-btn" 
+                                  onClick={() => handleCallClick(l.phone2, l)}
+                                  title="Call Lead Phone 2"
+                                >
+                                  📞 Call
+                                </button>
+                                <button 
+                                  className="whatsapp-action-btn" 
+                                  onClick={() => handleWhatsAppClick(l.phone2, l)}
+                                  title="WhatsApp Customer Phone 2"
+                                >
+                                  <FaWhatsapp size={14} /> WhatsApp
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
 
                         {(l.last_call_date || l.last_response) && (
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>

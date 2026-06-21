@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../utils/api';
-import { Landmark, TrendingUp, DollarSign, Calendar, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
+import { Landmark, TrendingUp, DollarSign, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 
 export default function RevenueAnalytics() {
   const [payments, setPayments] = useState([]);
@@ -243,20 +243,12 @@ export default function RevenueAnalytics() {
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <button
-                            className="btn btn-secondary"
-                            style={{ 
-                              padding: '4px 8px', 
-                              fontSize: '11px', 
-                              display: 'inline-flex', 
-                              alignItems: 'center', 
-                              gap: '4px',
-                              color: 'var(--primary)',
-                              border: '1px solid rgba(223, 177, 91, 0.2)'
-                            }}
+                            className="whatsapp-action-btn"
+                            style={{ padding: '4px 8px', fontSize: '11px' }}
                             onClick={() => sendWhatsAppReminder(p)}
                             title="Send WhatsApp Payment Reminder"
                           >
-                            <MessageSquare size={12} /> Remind
+                            <FaWhatsapp size={12} /> WhatsApp
                           </button>
                         </td>
                       </tr>

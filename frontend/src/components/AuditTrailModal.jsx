@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { History, ArrowRightLeft, Clock, User, MessageSquareCode } from 'lucide-react';
+import { History, ArrowRightLeft, Clock, User } from 'lucide-react';
 
 export default function AuditTrailModal({ isOpen, onClose, lead }) {
   const [audits, setAudits] = useState([]);

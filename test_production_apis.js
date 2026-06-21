@@ -63,6 +63,10 @@ async function runTests() {
   await testEndpoint('/api/whatsapp/templates');
   await testEndpoint('/api/activities/recent');
   await testEndpoint('/api/payments');
+  await testEndpoint('/api/analytics/roi');
+  await testEndpoint('/api/analytics/funnel');
+  await testEndpoint('/api/analytics/performance');
+  await testEndpoint('/api/analytics/incentives');
   
   const empRes = await testEndpoint('/api/employees');
   if (empRes.ok && Array.isArray(empRes.data) && empRes.data.length > 0) {
