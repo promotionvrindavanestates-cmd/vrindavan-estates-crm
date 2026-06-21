@@ -267,6 +267,86 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
+  // Mobile call logs synchronization poller (APK only)
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!window.Capacitor) return; // Android APK only
+
+    const syncAndroidCallLogs = async () => {
+      // Access callLog Cordova plugin if loaded
+      const callLog = window.plugins && window.plugins.callLog;
+      if (!callLog) return;
+
+      const hasReadPermission = () => {
+        return new Promise((resolve) => {
+          callLog.hasReadPermission(resolve, () => resolve(false));
+        });
+      };
+
+      const requestReadPermission = () => {
+        return new Promise((resolve) => {
+          callLog.requestReadPermission(() => resolve(true), () => resolve(false));
+        });
+      };
+
+      const fetchCallLogs = (sinceMs) => {
+        return new Promise((resolve) => {
+          const filters = sinceMs ? [{ name: 'date', value: sinceMs, operator: '>=' }] : [];
+          callLog.getCallLog(filters, resolve, () => resolve([]));
+        });
+      };
+
+      try {
+        let isGranted = await hasReadPermission();
+        if (!isGranted) {
+          isGranted = await requestReadPermission();
+        }
+
+        if (isGranted) {
+          // Sync calls from last 24 hours
+          const lastSyncTime = parseInt(localStorage.getItem('last_call_log_sync_time') || '0');
+          const sinceMs = lastSyncTime || (Date.now() - 24 * 60 * 60 * 1000);
+          
+          const logs = await fetchCallLogs(sinceMs);
+          if (logs && logs.length > 0) {
+            // Map logs to match sync format
+            // cordova-plugin-calllog fields: number, type (1: incoming, 2: outgoing, 3: missed), duration (secs), date (timestamp ms)
+            const callTypeMap = { 1: 'Incoming', 2: 'Outgoing', 3: 'Missed' };
+            const formatted = logs.map(l => ({
+              id: `${l.type}_${l.number}_${l.date}`,
+              number: l.number,
+              type: callTypeMap[l.type] || 'Outgoing',
+              duration: l.duration,
+              timestamp: new Date(l.date).toISOString()
+            }));
+
+            const res = await api.syncMobileCalls(formatted);
+            if (res.synced && res.synced.length > 0) {
+              // Store sync time
+              localStorage.setItem('last_call_log_sync_time', Date.now().toString());
+              
+              // Refresh details
+              fetchCRMData();
+              
+              // Trigger a toast showing how many calls were synced
+              setActiveToast({
+                title: '📲 Mobile Calls Synced',
+                body: `Successfully matched and synced ${res.synced.length} mobile call(s) with CRM leads.`
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Call Log Sync failed:', err);
+      }
+    };
+
+    // Trigger sync immediately and check every 60 seconds
+    syncAndroidCallLogs();
+    const intervalId = setInterval(syncAndroidCallLogs, 60000);
+    return () => clearInterval(intervalId);
+  }, [currentUser]);
+
   const handlePopupCall = () => {
     if (activeAlertReminder && activeAlertReminder.leads) {
       setSelectedLeadForCall(activeAlertReminder.leads);

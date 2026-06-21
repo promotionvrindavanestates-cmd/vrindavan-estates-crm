@@ -407,6 +407,20 @@ export const api = {
   getIncentivesData: (employeeId = '') => 
     request(`/api/analytics/incentives${employeeId ? `?employee_id=${employeeId}` : ''}`),
 
+  syncMobileCalls: (calls) =>
+    request('/api/mobile/call-logs/sync', {
+      method: 'POST',
+      body: JSON.stringify({ calls })
+    }),
+
+  getPendingMobileCalls: () => request('/api/mobile/call-logs/pending'),
+
+  savePendingCallNotes: (id, payload) =>
+    request(`/api/mobile/call-logs/${id}/notes`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+
   updateEmployeeCommission: (id, commissionPct) => 
     request(`/api/employees/${id}/commission`, {
       method: 'PUT',

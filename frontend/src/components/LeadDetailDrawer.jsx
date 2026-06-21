@@ -40,6 +40,15 @@ export default function LeadDetailDrawer({
   const [callCreateReminder, setCallCreateReminder] = useState(true);
   const [callSendWhatsAppReminder, setCallSendWhatsAppReminder] = useState(true);
   const [callDuration, setCallDuration] = useState('');
+
+  // Sync Mobile Calls Enhancement States
+  const [activeInlineCallNotesId, setActiveInlineCallNotesId] = useState(null);
+  const [inlineNotesText, setInlineNotesText] = useState('');
+  const [inlineActionTaken, setInlineActionTaken] = useState('None');
+  const [inlineFollowUpDate, setInlineFollowUpDate] = useState('');
+  const [inlineFollowUpTime, setInlineFollowUpTime] = useState('');
+  const [inlineCreateReminder, setInlineCreateReminder] = useState(true);
+  const [inlineSaving, setInlineSaving] = useState(false);
   
   // GPS SITE VISIT check-in / check-out
   const [siteVisits, setSiteVisits] = useState([]);
@@ -75,6 +84,34 @@ export default function LeadDetailDrawer({
       setShowBookingPanel(false);
     }
   }, [isOpen, leadId]);
+
+  const handleSaveInlineNotes = async (e, callId) => {
+    e.preventDefault();
+    setInlineSaving(true);
+    try {
+      const followUpDatetime = (inlineActionTaken !== 'None' && inlineFollowUpDate)
+        ? new Date(`${inlineFollowUpDate}T${inlineFollowUpTime || '09:00'}:00`).toISOString()
+        : null;
+
+      await api.savePendingCallNotes(callId, {
+        notes: inlineNotesText,
+        action_taken: inlineActionTaken,
+        follow_up_date: inlineFollowUpDate || null,
+        follow_up_time: inlineFollowUpTime || null,
+        follow_up_datetime: followUpDatetime,
+        create_reminder: inlineCreateReminder
+      });
+
+      alert('Call notes saved successfully!');
+      setActiveInlineCallNotesId(null);
+      fetchLeadDetails();
+      if (onRefreshData) onRefreshData();
+    } catch (err) {
+      alert(`Failed to save notes: ${err.message}`);
+    } finally {
+      setInlineSaving(false);
+    }
+  };
 
   const fetchLeadDetails = async () => {
     setLoading(true);
@@ -706,6 +743,29 @@ export default function LeadDetailDrawer({
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{new Date(ev.date).toLocaleDateString()}</span>
                         </div>
                         <div style={{ color: 'var(--text-main)', fontSize: '11px' }}>{ev.description}</div>
+                        {ev.type === 'call' && (
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px', marginBottom: '4px' }}>
+                            <span style={{ 
+                              fontSize: '9.5px', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              background: ev.call_type === 'Missed' ? 'rgba(239, 68, 68, 0.15)' : ev.call_type === 'Incoming' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                              color: ev.call_type === 'Missed' ? '#ef4444' : ev.call_type === 'Incoming' ? '#10b981' : '#3b82f6',
+                              fontWeight: 'bold'
+                            }}>
+                              📞 {ev.call_type || 'Outgoing'}
+                            </span>
+                            <span style={{ 
+                              fontSize: '9.5px', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              color: 'var(--text-muted)'
+                            }}>
+                              💻 {ev.synced_from_device ? 'Mobile Sync' : 'Manual Log'}
+                            </span>
+                          </div>
+                        )}
                         {ev.type === 'call' && ev.duration > 0 && (
                           <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
                             ⏱ Duration: {Math.floor(ev.duration / 60)}m {ev.duration % 60}s
@@ -715,6 +775,127 @@ export default function LeadDetailDrawer({
                           <div style={{ fontSize: '10px', color: 'var(--primary)', marginTop: '2px' }}>
                             🗓 Next Action: {ev.action_taken} {ev.follow_up_date ? `on ${ev.follow_up_date}` : ''}
                           </div>
+                        )}
+                        {ev.type === 'call' && ev.needs_notes && activeInlineCallNotesId !== ev.id && (
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              setActiveInlineCallNotesId(ev.id);
+                              setInlineNotesText('');
+                              setInlineActionTaken('None');
+                              setInlineFollowUpDate('');
+                              setInlineFollowUpTime('');
+                              setInlineCreateReminder(true);
+                            }}
+                            className="btn btn-secondary"
+                            style={{ 
+                              padding: '4px 10px', 
+                              fontSize: '11px', 
+                              marginTop: '6px', 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              color: 'var(--primary)',
+                              borderColor: 'var(--primary)',
+                              background: 'rgba(223, 177, 91, 0.05)'
+                            }}
+                          >
+                            📝 Add Call Notes
+                          </button>
+                        )}
+                        {ev.type === 'call' && activeInlineCallNotesId === ev.id && (
+                          <form 
+                            onSubmit={(e) => handleSaveInlineNotes(e, ev.id)} 
+                            style={{ 
+                              marginTop: '10px', 
+                              padding: '12px', 
+                              background: 'var(--bg-card)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: '6px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <strong style={{ fontSize: '11.5px', color: 'var(--primary)' }}>Add Call Notes & Next Steps</strong>
+                              <button 
+                                type="button" 
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                onClick={() => setActiveInlineCallNotesId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Notes / Remarks *</label>
+                              <textarea 
+                                className="form-control"
+                                rows="2"
+                                value={inlineNotesText}
+                                onChange={e => setInlineNotesText(e.target.value)}
+                                placeholder="Enter details of the call..."
+                                style={{ fontSize: '11.5px', padding: '6px' }}
+                                required
+                              />
+                            </div>
+
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Next Action</label>
+                              <select 
+                                className="form-control" 
+                                value={inlineActionTaken} 
+                                onChange={e => setInlineActionTaken(e.target.value)} 
+                                style={{ padding: '4px 8px', fontSize: '11.5px' }}
+                              >
+                                {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                              </select>
+                            </div>
+
+                            {inlineActionTaken !== 'None' && (
+                              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <label style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Date</label>
+                                    <input 
+                                      type="date" 
+                                      className="form-control" 
+                                      value={inlineFollowUpDate} 
+                                      onChange={e => setInlineFollowUpDate(e.target.value)} 
+                                      style={{ padding: '4px 6px', fontSize: '11px' }} 
+                                      required 
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <label style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Time</label>
+                                    <input 
+                                      type="time" 
+                                      className="form-control" 
+                                      value={inlineFollowUpTime} 
+                                      onChange={e => setInlineFollowUpTime(e.target.value)} 
+                                      style={{ padding: '4px 6px', fontSize: '11px' }} 
+                                      required 
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10.5px', cursor: 'pointer', fontWeight: 'normal', margin: 0 }}>
+                                  <input type="checkbox" checked={inlineCreateReminder} onChange={e => setInlineCreateReminder(e.target.checked)} />
+                                  Create automatic reminder
+                                </label>
+                              </div>
+                            )}
+
+                            <button 
+                              type="submit" 
+                              className="btn btn-primary" 
+                              style={{ padding: '6px', fontSize: '11px', marginTop: '4px' }} 
+                              disabled={inlineSaving}
+                            >
+                              {inlineSaving ? 'Saving...' : 'Save Notes'}
+                            </button>
+                          </form>
                         )}
                         <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
                           By: {ev.user} {ev.device ? `(${ev.device})` : ''}

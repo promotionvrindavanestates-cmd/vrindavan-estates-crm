@@ -409,6 +409,75 @@ app.get('/api/leads/:id/call-logs', authenticateToken, async (req, res) => {
   }
 });
 
+// --- MOBILE CALL LOG SYNCHRONIZATION ENDPOINTS ---
+
+app.post('/api/mobile/call-logs/sync', authenticateToken, async (req, res) => {
+  const { calls } = req.body;
+  if (!Array.isArray(calls)) {
+    return res.status(400).json({ error: 'calls parameter must be an array' });
+  }
+  try {
+    const synced = await DB.syncMobileCalls(req.user.id, req.user.role, calls);
+    res.json({ message: 'Mobile call logs processed', synced });
+  } catch (e) {
+    console.error('Mobile call sync error:', e);
+    res.status(500).json({ error: 'Failed to sync mobile call logs' });
+  }
+});
+
+app.get('/api/mobile/call-logs/pending', authenticateToken, async (req, res) => {
+  try {
+    const pending = await DB.getPendingCallLogs(req.user.id, req.user.role);
+    res.json(pending);
+  } catch (e) {
+    console.error('Fetch pending call logs error:', e);
+    res.status(500).json({ error: 'Failed to fetch pending call logs' });
+  }
+});
+
+app.put('/api/mobile/call-logs/:id/notes', authenticateToken, async (req, res) => {
+  const { notes, action_taken, follow_up_date, follow_up_time, follow_up_datetime, create_reminder } = req.body;
+  try {
+    const updated = await DB.completeCallNotes(
+      req.params.id,
+      notes,
+      action_taken || 'None',
+      follow_up_date || null,
+      follow_up_time || null,
+      follow_up_datetime || null,
+      create_reminder || false
+    );
+    
+    // Log audit trail
+    await DB.logAudit(
+      updated.lead_id,
+      'Notes Added',
+      `Added notes to mobile call log: ${notes || ''}. Action: ${action_taken || 'None'}`,
+      req.user.id,
+      req.user.full_name
+    );
+
+    // If follow-up date and create_reminder is set, automatically create a reminder
+    if (create_reminder && follow_up_date) {
+      await DB.createReminder({
+        lead_id: updated.lead_id,
+        title: `Follow-up: ${action_taken || 'Mobile Call Notes'}`,
+        type: 'Follow-up',
+        reminder_date: follow_up_date,
+        reminder_time: follow_up_time || '09:00:00',
+        notes: notes || '',
+        is_read: false,
+        assigned_employee_id: req.user.id
+      });
+    }
+
+    res.json({ message: 'Call notes saved successfully', call: updated });
+  } catch (e) {
+    console.error('Save pending call notes error:', e);
+    res.status(500).json({ error: 'Failed to save call notes' });
+  }
+});
+
 // --- ENTERPRISE HISTORY TRAILS ENDPOINTS ---
 
 // Fetch audit trail for a lead
@@ -2001,7 +2070,10 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
         action_taken: c.action_taken || null,
         follow_up_date: c.follow_up_date || null,
         follow_up_time: c.follow_up_time || null,
-        follow_up_datetime: c.follow_up_datetime || null
+        follow_up_datetime: c.follow_up_datetime || null,
+        call_type: c.call_type || 'Outgoing',
+        synced_from_device: c.synced_from_device || false,
+        needs_notes: c.needs_notes || false
       });
     });
 
@@ -2112,11 +2184,20 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
     
     // Count calls today
     let callsToday = 0;
+    let connectedCallsToday = 0;
+    let missedCallsToday = 0;
+    const notConnectedResponses = ['Not Picked', 'Busy', 'Failed', 'Not Connected'];
+
+    let todayCalls = [];
     if (role === 'employee') {
-      callsToday = callLogs.filter(c => c.caller_id === userId && c.call_date && c.call_date.startsWith(todayStr)).length;
+      todayCalls = callLogs.filter(c => c.caller_id === userId && c.call_date && c.call_date.startsWith(todayStr));
     } else {
-      callsToday = callLogs.filter(c => c.call_date && c.call_date.startsWith(todayStr)).length;
+      todayCalls = callLogs.filter(c => c.call_date && c.call_date.startsWith(todayStr));
     }
+    
+    callsToday = todayCalls.length;
+    connectedCallsToday = todayCalls.filter(c => !notConnectedResponses.includes(c.response)).length;
+    missedCallsToday = todayCalls.filter(c => c.response === 'Not Picked' || c.call_type === 'Missed' || c.response === 'Not Connected').length;
 
     // Booking & Revenue summary calculations
     const payments = await DB.getPayments();
@@ -2206,6 +2287,8 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
         totalBookedCount,
         revenueEarned,
         callsToday,
+        connectedCallsToday,
+        missedCallsToday,
         todayBookingsCount,
         monthlyBookingsCount,
         collectionReceived,

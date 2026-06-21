@@ -11,6 +11,17 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
   const [error, setError] = useState('');
   const [activeFollowUpTab, setActiveFollowUpTab] = useState('today'); // 'today', 'missed', 'upcoming'
 
+  // Sync Mobile Calls Enhancement States
+  const [pendingCalls, setPendingCalls] = useState([]);
+  const [selectedCallForNotes, setSelectedCallForNotes] = useState(null);
+  const [callNotesModalOpen, setCallNotesModalOpen] = useState(false);
+  const [notesText, setNotesText] = useState('');
+  const [actionTaken, setActionTaken] = useState('None');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpTime, setFollowUpTime] = useState('');
+  const [createReminder, setCreateReminder] = useState(true);
+  const [savingNotes, setSavingNotes] = useState(false);
+
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [activeWhatsAppLead, setActiveWhatsAppLead] = useState(null);
   const [activeWhatsAppPhone, setActiveWhatsAppPhone] = useState('');
@@ -72,9 +83,50 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
     setWhatsAppModalOpen(false);
   };
 
+  const fetchPendingCalls = async () => {
+    try {
+      const data = await api.getPendingMobileCalls();
+      setPendingCalls(data || []);
+    } catch (e) {
+      console.warn('Failed to fetch pending mobile calls:', e);
+    }
+  };
+
+  const handleSaveCallNotes = async (e) => {
+    e.preventDefault();
+    if (!selectedCallForNotes) return;
+    setSavingNotes(true);
+    try {
+      const followUpDatetime = (actionTaken !== 'None' && followUpDate) 
+        ? new Date(`${followUpDate}T${followUpTime || '09:00'}:00`).toISOString() 
+        : null;
+
+      await api.savePendingCallNotes(selectedCallForNotes.id, {
+        notes: notesText,
+        action_taken: actionTaken,
+        follow_up_date: followUpDate || null,
+        follow_up_time: followUpTime || null,
+        follow_up_datetime: followUpDatetime,
+        create_reminder: createReminder
+      });
+
+      alert('Call notes saved successfully!');
+      setCallNotesModalOpen(false);
+      setSelectedCallForNotes(null);
+      fetchPendingCalls();
+      fetchDashboardStats();
+      fetchRemindersList();
+    } catch (err) {
+      alert(`Failed to save notes: ${err.message}`);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   useEffect(() => {
     fetchDashboardStats();
     fetchRemindersList();
+    fetchPendingCalls();
   }, [leads, employees]); // Refresh when core data changes
 
   const fetchDashboardStats = async () => {
@@ -148,6 +200,12 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
         <div class="metric-card warm" onClick={() => onDrillDown && onDrillDown('Calls Today', { calls_today: 'true' })}>
           <div class="metric-label">Calls Today</div>
           <div class="metric-value">{stats ? stats.summary.callsToday : 0}</div>
+          {stats && (
+            <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.8, display: 'flex', gap: '8px', justifyContent: 'center' }}>
+              <span>Conn: {stats.summary.connectedCallsToday || 0}</span>
+              <span>Missed: {stats.summary.missedCallsToday || 0}</span>
+            </div>
+          )}
         </div>
         <div class="metric-card info" onClick={() => onDrillDown && onDrillDown('Completed Visits', { site_visit_completed: 'true' })}>
           <div class="metric-label">Completed Visits</div>
@@ -386,6 +444,61 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
             </table>
           </div>
         </div>
+
+        {/* Widget: Pending Mobile Call Notes Synchronization */}
+        {pendingCalls.length > 0 && (
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '380px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)', fontSize: '14px', margin: 0 }}>
+                <Phone size={16} style={{ color: '#f59e0b' }} />
+                Pending Mobile Call Notes ({pendingCalls.length})
+              </h3>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, maxHeight: '280px' }}>
+              <table style={{ width: '100%', fontSize: '12px' }}>
+                <thead>
+                  <tr>
+                    <th>Lead Name</th>
+                    <th>Call Detail</th>
+                    <th style={{ textAlign: 'center' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingCalls.map(c => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: '600' }}>{c.leads?.name || 'Unknown Lead'}</td>
+                      <td>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {c.call_type} ({c.duration}s)
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          {new Date(c.created_at || c.call_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="open-action-btn"
+                          style={{ padding: '4px 8px', fontSize: '11px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)' }}
+                          onClick={() => {
+                            setSelectedCallForNotes(c);
+                            setNotesText('');
+                            setActionTaken('None');
+                            setFollowUpDate('');
+                            setFollowUpTime('');
+                            setCreateReminder(true);
+                            setCallNotesModalOpen(true);
+                          }}
+                        >
+                          📝 Notes
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Widget 2: Hot Leads Widget */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
@@ -790,6 +903,113 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
               <button className="btn btn-secondary" onClick={() => setWhatsAppModalOpen(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSendWhatsAppMessage}>Send WhatsApp</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Mobile Call Notes Modal */}
+      {callNotesModalOpen && selectedCallForNotes && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">📝 Add Call Notes: {selectedCallForNotes.leads?.name}</h3>
+            </div>
+            <form onSubmit={handleSaveCallNotes}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Call Details</label>
+                  <div style={{ background: 'var(--bg-main)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '13px' }}>
+                    <strong>Type:</strong> {selectedCallForNotes.call_type} | <strong>Duration:</strong> {selectedCallForNotes.duration}s | <strong>Time:</strong> {new Date(selectedCallForNotes.created_at || selectedCallForNotes.call_date).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Employee Call Notes *</label>
+                  <textarea 
+                    className="form-control"
+                    rows="3"
+                    value={notesText}
+                    onChange={(e) => setNotesText(e.target.value)}
+                    placeholder="Enter discussion details, customer response, etc."
+                    required
+                  ></textarea>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Next Scheduled Action</label>
+                  <select 
+                    className="form-control"
+                    value={actionTaken}
+                    onChange={(e) => setActionTaken(e.target.value)}
+                  >
+                    <option value="None">None</option>
+                    <option value="Callback Scheduled">Callback Scheduled</option>
+                    <option value="Site Visit Scheduled">Site Visit Scheduled</option>
+                    <option value="Meeting Arranged">Meeting Arranged</option>
+                    <option value="Information Sent">Information Sent</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+
+                {actionTaken !== 'None' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Follow-Up Date *</label>
+                      <input 
+                        type="date"
+                        className="form-control"
+                        value={followUpDate}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Follow-Up Time</label>
+                      <input 
+                        type="time"
+                        className="form-control"
+                        value={followUpTime}
+                        onChange={(e) => setFollowUpTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {actionTaken !== 'None' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
+                    <input 
+                      type="checkbox"
+                      id="create_reminder_cb"
+                      checked={createReminder}
+                      onChange={(e) => setCreateReminder(e.target.checked)}
+                    />
+                    <label htmlFor="create_reminder_cb" style={{ fontSize: '13px', cursor: 'pointer' }}>
+                      Automatically create reminder on Dashboard
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setCallNotesModalOpen(false);
+                    setSelectedCallForNotes(null);
+                  }}
+                  disabled={savingNotes}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={savingNotes}
+                >
+                  {savingNotes ? 'Saving...' : 'Save Notes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

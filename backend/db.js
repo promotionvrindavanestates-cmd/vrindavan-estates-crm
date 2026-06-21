@@ -702,7 +702,7 @@ const DB = {
   },
 
   // --- CALL LOGGING ---
-  async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null) {
+  async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null, call_type = 'Outgoing', synced_from_device = false, device_call_id = null, needs_notes = false) {
     if (this.isCloud()) {
       const { error: logError } = await supabase
         .from('call_logs')
@@ -715,7 +715,11 @@ const DB = {
           action_taken,
           follow_up_date,
           follow_up_time,
-          follow_up_datetime
+          follow_up_datetime,
+          call_type,
+          synced_from_device,
+          device_call_id,
+          needs_notes
         }]);
       if (logError) throw logError;
 
@@ -744,6 +748,10 @@ const DB = {
         follow_up_date,
         follow_up_time,
         follow_up_datetime,
+        call_type,
+        synced_from_device,
+        device_call_id,
+        needs_notes,
         call_date: new Date().toISOString()
       };
       db.call_logs.push(newLog);
@@ -769,6 +777,184 @@ const DB = {
     } else {
       const db = loadLocalDb();
       return db.call_logs || [];
+    }
+  },
+
+  async syncMobileCalls(userId, role, calls) {
+    const normalizePhone = (num) => {
+      if (!num) return '';
+      const cleaned = num.replace(/\D/g, '');
+      return cleaned.slice(-10);
+    };
+
+    // 1. Fetch leads
+    let leads = [];
+    if (this.isCloud()) {
+      let query = supabase.from('leads').select('id, name, phone1, phone2, assigned_employee_id');
+      if (role === 'employee') {
+        query = query.eq('assigned_employee_id', userId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      leads = data || [];
+    } else {
+      const db = loadLocalDb();
+      leads = db.leads || [];
+      if (role === 'employee') {
+        leads = leads.filter(l => l.assigned_employee_id === userId);
+      }
+    }
+
+    // 2. Fetch already synced call ids
+    let existingIds = new Set();
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('call_logs').select('device_call_id').not('device_call_id', 'is', null);
+      if (error) throw error;
+      data.forEach(c => existingIds.add(c.device_call_id));
+    } else {
+      const db = loadLocalDb();
+      const logs = db.call_logs || [];
+      logs.forEach(c => {
+        if (c.device_call_id) existingIds.add(c.device_call_id);
+      });
+    }
+
+    const syncedCalls = [];
+
+    // 3. Process each call
+    for (const call of calls) {
+      if (existingIds.has(call.id)) continue; // Already synced
+
+      const callType = call.type || 'Outgoing';
+      const callDuration = call.duration || 0;
+      const callTimestamp = call.timestamp || new Date().toISOString();
+      const callPhoneNormalized = normalizePhone(call.number);
+
+      if (!callPhoneNormalized) continue;
+
+      // Find match
+      const matchedLead = leads.find(l => {
+        const p1 = normalizePhone(l.phone1);
+        const p2 = normalizePhone(l.phone2);
+        return p1 === callPhoneNormalized || p2 === callPhoneNormalized;
+      });
+
+      if (matchedLead) {
+        // Automatically sync to that lead
+        const outcome = callType === 'Missed' ? 'Not Picked' : 'Connected';
+        const defaultNotes = `Mobile ${callType.toLowerCase()} call log synced automatically.`;
+        
+        // Insert call log
+        await this.logCall(
+          matchedLead.id,
+          userId,
+          outcome,
+          defaultNotes,
+          callDuration,
+          null, // action_taken
+          null, // follow_up_date
+          null, // follow_up_time
+          null, // follow_up_datetime
+          callType, // call_type
+          true, // synced_from_device
+          call.id, // device_call_id
+          true // needs_notes
+        );
+
+        syncedCalls.push({
+          id: call.id,
+          leadName: matchedLead.name,
+          number: call.number,
+          type: callType,
+          duration: callDuration,
+          timestamp: callTimestamp
+        });
+      }
+    }
+
+    return syncedCalls;
+  },
+
+  async getPendingCallLogs(userId, role) {
+    if (this.isCloud()) {
+      let query = supabase.from('call_logs').select('*, leads(*)').eq('needs_notes', true);
+      if (role === 'employee') {
+        query = query.eq('caller_id', userId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      let logs = db.call_logs || [];
+      logs = logs.filter(c => c.needs_notes === true);
+      if (role === 'employee') {
+        logs = logs.filter(c => c.caller_id === userId);
+      }
+      return logs.map(c => {
+        const lead = db.leads.find(l => l.id === c.lead_id);
+        return { ...c, leads: lead || null };
+      });
+    }
+  },
+
+  async completeCallNotes(callId, notes, actionTaken, followUpDate, followUpTime, followUpDatetime, createReminder) {
+    // 1. Get the call log first to find the lead
+    let callLog = null;
+    if (this.isCloud()) {
+      const { data, error } = await supabase.from('call_logs').select('*').eq('id', callId).single();
+      if (error) throw error;
+      callLog = data;
+    } else {
+      const db = loadLocalDb();
+      callLog = db.call_logs.find(c => c.id === callId);
+    }
+
+    if (!callLog) throw new Error('Call log not found');
+
+    const updateFields = {
+      notes: notes || '',
+      action_taken: actionTaken !== 'None' ? actionTaken : null,
+      follow_up_date: actionTaken !== 'None' && followUpDate ? followUpDate : null,
+      follow_up_time: actionTaken !== 'None' && followUpTime ? followUpTime : null,
+      follow_up_datetime: actionTaken !== 'None' && followUpDate ? followUpDatetime : null,
+      needs_notes: false
+    };
+
+    if (this.isCloud()) {
+      // Update call log
+      const { data, error: updateError } = await supabase
+        .from('call_logs')
+        .update(updateFields)
+        .eq('id', callId)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+
+      // Update lead
+      await supabase
+        .from('leads')
+        .update({
+          follow_up_date: (actionTaken !== 'None' && followUpDate) ? followUpDate : undefined
+        })
+        .eq('id', callLog.lead_id);
+
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.call_logs.findIndex(c => c.id === callId);
+      if (idx !== -1) {
+        db.call_logs[idx] = { ...db.call_logs[idx], ...updateFields };
+        
+        const leadIdx = db.leads.findIndex(l => l.id === callLog.lead_id);
+        if (leadIdx !== -1 && actionTaken !== 'None' && followUpDate) {
+          db.leads[leadIdx].follow_up_date = followUpDate;
+        }
+        
+        saveLocalDb(db);
+        return db.call_logs[idx];
+      }
+      throw new Error('Call log not found');
     }
   },
 
