@@ -425,5 +425,10 @@ export const api = {
     request(`/api/employees/${id}/commission`, {
       method: 'PUT',
       body: JSON.stringify({ commission_percentage: commissionPct })
-    })
+    }),
+
+  getWhatsAppChats: (leadId) => request(`/api/whatsapp/chats/${leadId}`),
+  syncWhatsAppChats: (messages) => request('/api/whatsapp/chats/sync', { method: 'POST', body: JSON.stringify({ messages }) }),
+  simulateWhatsAppMessage: (leadId, text, direction) => request('/api/whatsapp/messages/simulate', { method: 'POST', body: JSON.stringify({ leadId, text, direction }) }),
+  getSalesIntelligenceDashboard: () => request('/api/dashboard/sales-intelligence')
 };

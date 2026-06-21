@@ -113,6 +113,7 @@ function loadLocalDb() {
     if (!data.distribution_rules) data.distribution_rules = [];
     if (!data.site_visits) data.site_visits = [];
     if (!data.booking_milestones) data.booking_milestones = [];
+    if (!data.whatsapp_messages) data.whatsapp_messages = [];
     data.users.forEach(u => {
       if (!u.status) u.status = 'active';
       if (!u.token_version) u.token_version = 1;
@@ -702,7 +703,8 @@ const DB = {
   },
 
   // --- CALL LOGGING ---
-  async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null, call_type = 'Outgoing', synced_from_device = false, device_call_id = null, needs_notes = false) {
+  async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null, call_type = 'Outgoing', synced_from_device = false, device_call_id = null, needs_notes = false, extra = {}) {
+    const { start_time, end_time, device_id, recording_url, recording_duration, recording_timestamp } = extra || {};
     if (this.isCloud()) {
       const { error: logError } = await supabase
         .from('call_logs')
@@ -719,7 +721,13 @@ const DB = {
           call_type,
           synced_from_device,
           device_call_id,
-          needs_notes
+          needs_notes,
+          start_time: start_time || null,
+          end_time: end_time || null,
+          device_id: device_id || null,
+          recording_url: recording_url || null,
+          recording_duration: recording_duration || 0,
+          recording_timestamp: recording_timestamp || null
         }]);
       if (logError) throw logError;
 
@@ -752,6 +760,12 @@ const DB = {
         synced_from_device,
         device_call_id,
         needs_notes,
+        start_time: start_time || null,
+        end_time: end_time || null,
+        device_id: device_id || null,
+        recording_url: recording_url || null,
+        recording_duration: recording_duration || 0,
+        recording_timestamp: recording_timestamp || null,
         call_date: new Date().toISOString()
       };
       db.call_logs.push(newLog);
@@ -858,7 +872,15 @@ const DB = {
           callType, // call_type
           true, // synced_from_device
           call.id, // device_call_id
-          true // needs_notes
+          true, // needs_notes
+          {
+            start_time: call.start_time || callTimestamp,
+            end_time: call.end_time || callTimestamp,
+            device_id: call.device_id || 'unknown_device',
+            recording_url: call.recording_url || null,
+            recording_duration: call.recording_duration || 0,
+            recording_timestamp: call.recording_timestamp || null
+          }
         );
 
         syncedCalls.push({
@@ -3669,6 +3691,291 @@ const DB = {
     });
 
     return report;
+  },
+
+  async getWhatsAppMessages(leadId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('sent_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_messages) db.whatsapp_messages = [];
+      return db.whatsapp_messages
+        .filter(m => m.lead_id === leadId)
+        .sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
+    }
+  },
+
+  async getAllWhatsAppMessages() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*');
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      return db.whatsapp_messages || [];
+    }
+  },
+
+  async logWhatsAppMessage(leadId, direction, text, mediaUrl = null, templateName = null, sentAt = null) {
+    const formatted = {
+      lead_id: leadId,
+      direction,
+      message_text: text,
+      media_url: mediaUrl || null,
+      template_name: templateName || null,
+      sent_at: sentAt || new Date().toISOString()
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .insert([formatted])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_messages) db.whatsapp_messages = [];
+      const newMsg = {
+        id: generateUuid(),
+        created_at: new Date().toISOString(),
+        ...formatted
+      };
+      db.whatsapp_messages.push(newMsg);
+      saveLocalDb(db);
+      return newMsg;
+    }
+  },
+
+  async getSalesIntelligenceDashboard(userId = null, role = 'admin') {
+    let leads = [];
+    let callLogs = [];
+    let whatsappMsgs = [];
+    let siteVisits = [];
+    let bookings = [];
+    let payments = [];
+    let employees = [];
+    let reminders = [];
+    
+    if (this.isCloud()) {
+      const [lRes, cRes, wRes, sRes, bRes, pRes, eRes, rRes] = await Promise.all([
+        supabase.from('leads').select('*'),
+        supabase.from('call_logs').select('*'),
+        supabase.from('whatsapp_messages').select('*'),
+        supabase.from('site_visits').select('*'),
+        supabase.from('bookings').select('*'),
+        supabase.from('payments').select('*, bookings(*)'),
+        supabase.from('users').select('*'),
+        supabase.from('reminders').select('*')
+      ]);
+      
+      leads = lRes.data || [];
+      callLogs = cRes.data || [];
+      whatsappMsgs = wRes.data || [];
+      siteVisits = sRes.data || [];
+      bookings = bRes.data || [];
+      payments = pRes.data || [];
+      employees = eRes.data || [];
+      reminders = rRes.data || [];
+    } else {
+      const db = loadLocalDb();
+      leads = db.leads || [];
+      callLogs = db.call_logs || [];
+      whatsappMsgs = db.whatsapp_messages || [];
+      siteVisits = db.site_visits || [];
+      bookings = db.bookings || [];
+      payments = db.payments || [];
+      employees = db.users || [];
+      reminders = db.reminders || [];
+    }
+    
+    // 1. Role filtering
+    if (role === 'employee' && userId) {
+      leads = leads.filter(l => l.assigned_employee_id === userId);
+      callLogs = callLogs.filter(c => c.caller_id === userId);
+      whatsappMsgs = whatsappMsgs.filter(w => leads.some(l => l.id === w.lead_id));
+      siteVisits = siteVisits.filter(v => v.lead_id && leads.some(l => l.id === v.lead_id));
+      bookings = bookings.filter(b => b.executive_id === userId);
+      payments = payments.filter(p => p.bookings && p.bookings.executive_id === userId);
+      reminders = reminders.filter(r => r.assigned_employee_id === userId);
+    }
+    
+    // 2. Sales Intelligence KPIs
+    const totalLeads = leads.length;
+    const totalCalls = callLogs.length;
+    const connectedCalls = callLogs.filter(c => !['Not Picked', 'Busy', 'Failed', 'Not Connected', 'Missed'].includes(c.response)).length;
+    const whatsappActivity = whatsappMsgs.length;
+    const totalSiteVisits = siteVisits.length;
+    const totalBookings = bookings.length;
+    
+    const totalCollections = payments.reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
+    const totalRevenue = bookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+    
+    const conversionRate = totalLeads > 0 ? parseFloat(((totalBookings / totalLeads) * 100).toFixed(1)) : 0;
+    
+    // 3. Source ROI Dashboard
+    const sources = ['Facebook Ads', 'Google Ads', 'MagicBricks', '99acres', 'Walk-ins', 'Referrals'];
+    const sourceCostMap = {
+      'Facebook Ads': 15000,
+      'Google Ads': 25000,
+      'MagicBricks': 10000,
+      '99acres': 10000,
+      'Walk-ins': 0,
+      'Referrals': 5000
+    };
+    
+    const sourceROI = sources.map(source => {
+      const sourceLeads = leads.filter(l => {
+        const src = l.lead_source || '';
+        if (source === 'Facebook Ads') return src.toLowerCase().includes('facebook') || src.toLowerCase().includes('fb');
+        if (source === 'Google Ads') return src.toLowerCase().includes('google') || src.toLowerCase().includes('adwords');
+        if (source === 'MagicBricks') return src.toLowerCase().includes('magic');
+        if (source === '99acres') return src.toLowerCase().includes('99');
+        if (source === 'Walk-ins') return src.toLowerCase().includes('walk');
+        if (source === 'Referrals') return src.toLowerCase().includes('referral') || src.toLowerCase().includes('ref');
+        return false;
+      });
+      
+      const leadIdsSet = new Set(sourceLeads.map(l => l.id));
+      const sourceVisits = siteVisits.filter(v => v.lead_id && leadIdsSet.has(v.lead_id)).length;
+      
+      const sourceBookings = bookings.filter(b => b.lead_id && leadIdsSet.has(b.lead_id));
+      const sourceRevenue = sourceBookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+      
+      const cost = sourceCostMap[source] || 5000;
+      const roi = cost > 0 ? parseFloat((((sourceRevenue - cost) / cost) * 100).toFixed(1)) : (sourceRevenue > 0 ? 100.0 : 0.0);
+      
+      return {
+        source,
+        leads: sourceLeads.length,
+        visits: sourceVisits,
+        bookings: sourceBookings.length,
+        revenue: sourceRevenue,
+        roi
+      };
+    });
+    
+    // 4. Executive Scorecards
+    const executives = employees.filter(e => e.role === 'employee');
+    const scorecards = executives.map(exec => {
+      const empLeads = leads.filter(l => l.assigned_employee_id === exec.id);
+      const empCalls = callLogs.filter(c => c.caller_id === exec.id);
+      const empTalkTime = empCalls.reduce((sum, c) => sum + (c.duration || 0), 0);
+      const empWhatsapp = whatsappMsgs.filter(w => empLeads.some(l => l.id === w.lead_id)).length;
+      
+      const empReminders = reminders.filter(r => r.assigned_employee_id === exec.id);
+      const completedReminders = empReminders.filter(r => r.is_read).length;
+      const compliance = empReminders.length > 0 ? Math.round((completedReminders / empReminders.length) * 100) : 100;
+      
+      const empVisits = siteVisits.filter(v => empLeads.some(l => l.id === v.lead_id)).length;
+      const empBookings = bookings.filter(b => b.executive_id === exec.id);
+      const empRevenue = empBookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+      
+      const empBookingIds = new Set(empBookings.map(b => b.id));
+      const empCollections = payments
+        .filter(p => {
+          if (p.bookings) return p.bookings.executive_id === exec.id;
+          return empBookingIds.has(p.booking_id);
+        })
+        .reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
+      
+      const conv = empLeads.length > 0 ? parseFloat(((empBookings.length / empLeads.length) * 100).toFixed(1)) : 0;
+      
+      // Score formula: 20% compliance + 30% conversion + 25% calls completed (target 50) + 25% bookings (target 5)
+      const callScore = Math.min((empCalls.length / 50) * 25, 25);
+      const bookingScore = Math.min((empBookings.length / 5) * 25, 25);
+      const complianceScore = (compliance / 100) * 20;
+      const convScore = Math.min((conv / 20) * 30, 30);
+      const performanceScore = Math.round(callScore + bookingScore + complianceScore + convScore);
+      
+      return {
+        id: exec.id,
+        name: exec.full_name,
+        username: exec.username,
+        calls: empCalls.length,
+        talkTime: empTalkTime,
+        whatsappActivity: empWhatsapp,
+        compliance,
+        siteVisits: empVisits,
+        bookings: empBookings.length,
+        collections: empCollections,
+        revenueGenerated: empRevenue,
+        conversion: conv,
+        performanceScore
+      };
+    });
+    
+    // Sort leaderboard by performanceScore descending
+    const leaderboard = [...scorecards].sort((a, b) => b.performanceScore - a.performanceScore);
+    
+    // 5. Management Reports (Daily, Weekly, Monthly)
+    const now = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    
+    const filterByTimeRange = (list, days, dateField = 'created_at') => {
+      const cutoff = new Date(now.getTime() - days * oneDayMs);
+      return list.filter(item => {
+        const dateVal = new Date(item[dateField] || item.created_at || now);
+        return dateVal >= cutoff;
+      });
+    };
+    
+    const generateReportForDays = (days) => {
+      const rangeLeads = filterByTimeRange(leads, days, 'created_at');
+      const rangeCalls = filterByTimeRange(callLogs, days, 'call_date');
+      const rangeConnectedCalls = rangeCalls.filter(c => !['Not Picked', 'Busy', 'Failed', 'Not Connected', 'Missed'].includes(c.response));
+      const rangeWhatsapp = filterByTimeRange(whatsappMsgs, days, 'sent_at');
+      const rangeVisits = filterByTimeRange(siteVisits, days, 'check_in_time');
+      const rangeBookings = filterByTimeRange(bookings, days, 'created_at');
+      
+      const rangeCollections = filterByTimeRange(payments, days, 'payment_date').reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
+      const rangeRevenue = rangeBookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+      
+      return {
+        leads: rangeLeads.length,
+        calls: rangeCalls.length,
+        connectedCalls: rangeConnectedCalls.length,
+        whatsapp: rangeWhatsapp.length,
+        siteVisits: rangeVisits.length,
+        bookings: rangeBookings.length,
+        collections: rangeCollections,
+        revenue: rangeRevenue
+      };
+    };
+    
+    const dailyReport = generateReportForDays(1);
+    const weeklyReport = generateReportForDays(7);
+    const monthlyReport = generateReportForDays(30);
+    
+    return {
+      kpis: {
+        totalLeads,
+        totalCalls,
+        connectedCalls,
+        whatsappActivity,
+        siteVisits: totalSiteVisits,
+        bookings: totalBookings,
+        collections: totalCollections,
+        revenue: totalRevenue,
+        conversionRate
+      },
+      sourceROI,
+      leaderboard,
+      scorecards,
+      reports: {
+        daily: dailyReport,
+        weekly: weeklyReport,
+        monthly: monthlyReport
+      }
+    };
   },
 
   async updateEmployeeCommission(id, commissionPct) {

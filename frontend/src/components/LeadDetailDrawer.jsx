@@ -71,6 +71,13 @@ export default function LeadDetailDrawer({
   const [bookingTotalCost, setBookingTotalCost] = useState('');
   const [bookingSaving, setBookingSaving] = useState(false);
 
+  // WhatsApp Chats Sync states
+  const [whatsAppChats, setWhatsAppChats] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [simMsgText, setSimMsgText] = useState('');
+  const [simDirection, setSimDirection] = useState('Incoming');
+  const [simulating, setSimulating] = useState(false);
+
   useEffect(() => {
     if (isOpen && leadId) {
       fetchLeadDetails();
@@ -82,8 +89,45 @@ export default function LeadDetailDrawer({
       setSiteVisits([]);
       setActiveCheckInVisit(null);
       setShowBookingPanel(false);
+      setWhatsAppChats([]);
+      setSimMsgText('');
+      setSimDirection('Incoming');
     }
   }, [isOpen, leadId]);
+
+  useEffect(() => {
+    if (isOpen && leadId && activeTab === 'whatsapp') {
+      fetchWhatsAppChats();
+    }
+  }, [activeTab, isOpen, leadId]);
+
+  const fetchWhatsAppChats = async () => {
+    setChatLoading(true);
+    try {
+      const data = await api.getWhatsAppChats(leadId);
+      setWhatsAppChats(data || []);
+    } catch (e) {
+      console.error('Error fetching whatsapp chats:', e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleSimulateMsgSubmit = async (e) => {
+    e.preventDefault();
+    if (!simMsgText.trim()) return;
+    setSimulating(true);
+    try {
+      await api.simulateWhatsAppMessage(leadId, simMsgText, simDirection);
+      setSimMsgText('');
+      fetchWhatsAppChats();
+      fetchTimeline();
+    } catch (err) {
+      alert(`Simulation failed: ${err.message}`);
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const handleSaveInlineNotes = async (e, callId) => {
     e.preventDefault();
@@ -473,6 +517,9 @@ export default function LeadDetailDrawer({
       case 'site-visit-out': return <MapPin size={12} style={{ color: 'var(--color-success)' }} />;
       case 'booking': return <Award size={12} style={{ color: 'var(--color-success)' }} />;
       case 'whatsapp': return <FaWhatsapp size={12} style={{ color: '#25D366' }} />;
+      case 'whatsapp-chat': return <FaWhatsapp size={12} style={{ color: '#10B981' }} />;
+      case 'reminder': return <Calendar size={12} style={{ color: '#F59E0B' }} />;
+      case 'payment': return <DollarSign size={12} style={{ color: '#10B981' }} />;
       default: return <AlertCircle size={12} style={{ color: 'var(--primary)' }} />;
     }
   };
@@ -897,6 +944,19 @@ export default function LeadDetailDrawer({
                             </button>
                           </form>
                         )}
+                        {ev.type === 'call' && ev.recording_url && (
+                          <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>🎙 Call Recording Available ({ev.recording_duration || 0}s)</span>
+                            { (currentUser.role === 'admin' || lead.assigned_employee_id === currentUser.id) ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <audio src={ev.recording_url} controls style={{ height: '20px', width: '130px' }} />
+                                <a href={ev.recording_url} download style={{ padding: '2px 6px', fontSize: '9px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--primary)', textDecoration: 'none' }}>Download</a>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '9px', color: '#ef4444', fontStyle: 'italic' }}>🔐 Access Restricted</span>
+                            )}
+                          </div>
+                        )}
                         <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
                           By: {ev.user} {ev.device ? `(${ev.device})` : ''}
                         </div>
@@ -1020,31 +1080,109 @@ export default function LeadDetailDrawer({
               </div>
             )}
 
-            {/* Tab content 3: WhatsApp Click-to-Send templates */}
+            {/* Tab content 3: WhatsApp Click-to-Send templates & Live Chat Sync */}
             {activeTab === 'whatsapp' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="form-group">
-                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>WhatsApp Template Variable Mappings</label>
-                  <select className="form-control" value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} style={{ fontSize: '12px' }}>
-                    {whatsAppTemplates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
-                    ))}
-                  </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Click-to-Send template selector */}
+                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Click-To-WhatsApp Templates</h4>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <select className="form-control" value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} style={{ fontSize: '12px' }}>
+                      {whatsAppTemplates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '10px', borderRadius: 'var(--radius-sm)', fontSize: '11.5px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>Message Preview:</div>
+                    <p style={{ margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>{getInterpolatedWhatsAppMessage()}</p>
+                  </div>
+
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#25D366', color: '#000', fontWeight: 700, padding: '8px', fontSize: '12px' }}
+                    onClick={handleSendWhatsApp}
+                  >
+                    <FaWhatsapp size={15} /> Send Template via WhatsApp
+                  </button>
                 </div>
 
-                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-md)', fontSize: '12px' }}>
-                  <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: '6px' }}>Message Preview:</div>
-                  <p style={{ margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>{getInterpolatedWhatsAppMessage()}</p>
-                </div>
+                <hr style={{ border: '0', borderTop: '1px solid var(--border-color)', margin: '4px 0' }} />
 
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
-                  style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#25D366', color: '#000', fontWeight: 700 }}
-                  onClick={handleSendWhatsApp}
-                >
-                  <FaWhatsapp size={16} /> Send via WhatsApp Web
-                </button>
+                {/* Direct Chat Sync History */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Direct Message Sync Log</h4>
+                  
+                  {chatLoading ? (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>Loading messages...</div>
+                  ) : whatsAppChats.length === 0 ? (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>No direct chats synced yet.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', padding: '8px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                      {whatsAppChats.map(chat => (
+                        <div 
+                          key={chat.id} 
+                          style={{ 
+                            alignSelf: chat.direction === 'Outgoing' ? 'flex-end' : 'flex-start',
+                            maxWidth: '85%',
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            background: chat.direction === 'Outgoing' ? 'rgba(37, 211, 102, 0.08)' : 'rgba(255,255,255,0.03)',
+                            border: chat.direction === 'Outgoing' ? '1px solid rgba(37, 211, 102, 0.3)' : '1px solid var(--border-color)',
+                            fontSize: '11px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }}
+                        >
+                          <div style={{ color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                            {chat.message_text}
+                          </div>
+                          {chat.template_name && (
+                            <span style={{ fontSize: '8px', color: 'var(--primary)', fontStyle: 'italic' }}>
+                              Template: {chat.template_name}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '8px', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
+                            {new Date(chat.sent_at || chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Simulator Panel */}
+                  <form onSubmit={handleSimulateMsgSubmit} style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--primary)' }}>⚡ Sync Simulator (Test Tool)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <select className="form-control" value={simDirection} onChange={e => setSimDirection(e.target.value)} style={{ padding: '4px', fontSize: '11px', height: '28px', background: 'var(--bg-card)' }}>
+                          <option value="Incoming">Incoming (Client)</option>
+                          <option value="Outgoing">Outgoing (Agent)</option>
+                        </select>
+                      </div>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        placeholder="Type message..." 
+                        value={simMsgText} 
+                        onChange={e => setSimMsgText(e.target.value)}
+                        style={{ padding: '4px 8px', fontSize: '11px', height: '28px' }}
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="btn btn-secondary" 
+                      style={{ padding: '4px 8px', fontSize: '10px', alignSelf: 'flex-end' }}
+                      disabled={simulating}
+                    >
+                      {simulating ? 'Syncing...' : 'Simulate WhatsApp Msg'}
+                    </button>
+                  </form>
+
+                </div>
               </div>
             )}
 
