@@ -1924,7 +1924,7 @@ const DB = {
       booking_amount: bookingData.booking_amount ? parseFloat(bookingData.booking_amount) : 0.00,
       booking_date: bookingData.booking_date || new Date().toISOString().split('T')[0],
       executive_id: bookingData.executive_id || createdByUserId,
-      status: bookingData.status || 'Token Booking'
+      status: bookingData.status || 'Token Received'
     };
 
     const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
@@ -2110,7 +2110,7 @@ const DB = {
       // Sync inventory status based on booking status
       if (booking.inventory_id) {
         let invStatus = 'Available';
-        if (status === 'Token Booking') invStatus = 'Token';
+        if (status === 'Token Booking' || status === 'Token Received') invStatus = 'Token';
         else if (status === 'Booking Confirmed') invStatus = 'Booked';
         else if (status === 'Agreement Pending') invStatus = 'Booked';
         else if (status === 'Registry Pending') invStatus = 'Registry Pending';
@@ -2140,7 +2140,7 @@ const DB = {
         const booking = db.bookings[idx];
 
         let invStatus = 'Available';
-        if (status === 'Token Booking') invStatus = 'Token';
+        if (status === 'Token Booking' || status === 'Token Received') invStatus = 'Token';
         else if (status === 'Booking Confirmed') invStatus = 'Booked';
         else if (status === 'Agreement Pending') invStatus = 'Booked';
         else if (status === 'Registry Pending') invStatus = 'Registry Pending';
@@ -4149,5 +4149,7 @@ const DB = {
     }
   }
 };
+
+DB.supabase = supabase;
 
 module.exports = DB;

@@ -1537,7 +1537,7 @@ const originalLogCall = DB.logCall;
 DB.logCall = async function(leadId, callerId, response, notes, ...args) {
   const result = await originalLogCall.call(DB, leadId, callerId, response, notes, ...args);
   if (DB.isCloud()) {
-    const { supabase } = require('./db');
+    const supabase = DB.supabase;
     await supabase.from('leads').update({ last_activity_date: new Date().toISOString() }).eq('id', leadId);
   } else {
     const fs = require('fs');
