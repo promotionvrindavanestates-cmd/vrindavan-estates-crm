@@ -93,12 +93,14 @@ export default function LeadTable({
       const targetSiteVisitCompleted = initialFilters.site_visit_completed || '';
       const targetCreatedStart = initialFilters.created_start || '';
       const targetCreatedEnd = initialFilters.created_end || '';
+      const targetSource = initialFilters.source || '';
 
       setSelectedStatus(targetStatus);
       setCallsToday(targetCallsToday);
       setSiteVisitCompleted(targetSiteVisitCompleted);
       setCreatedStart(targetCreatedStart);
       setCreatedEnd(targetCreatedEnd);
+      setSelectedSource(targetSource);
 
       if (initialFilters.assigned_employee_id) {
         setSelectedEmployee(initialFilters.assigned_employee_id);
@@ -113,6 +115,8 @@ export default function LeadTable({
           suffix = ' - Site Visits';
         }
         setEmployeeFilterHeading(`Showing Leads Assigned To: ${name}${suffix} (${count} Leads)`);
+      } else if (targetSource) {
+        setEmployeeFilterHeading(`Showing Leads from Source: ${targetSource}`);
       } else if (initialFilters.created_start || initialFilters.created_end) {
         setEmployeeFilterHeading(`Showing Leads Created: ${initialFilters.created_start || 'Start'} to ${initialFilters.created_end || 'End'}`);
       } else {
@@ -120,7 +124,7 @@ export default function LeadTable({
       }
 
       // If either advanced filter is activated, open the advanced section
-      if (targetCallsToday || targetSiteVisitCompleted) {
+      if (targetCallsToday || targetSiteVisitCompleted || targetSource) {
         setShowAdvanced(true);
       }
 

@@ -393,5 +393,21 @@ export const api = {
 
   getCollectionAnalytics: () => request('/api/collections/analytics'),
   
-  getCollectionReminders: () => request('/api/collections/reminders')
+  getCollectionReminders: () => request('/api/collections/reminders'),
+
+  getSourceRoiStats: () => request('/api/analytics/roi'),
+
+  getFunnelStats: (employeeId = '') => 
+    request(`/api/analytics/funnel${employeeId ? `?employee_id=${employeeId}` : ''}`),
+
+  getEmployeePerformanceReports: () => request('/api/analytics/performance'),
+
+  getIncentivesData: (employeeId = '') => 
+    request(`/api/analytics/incentives${employeeId ? `?employee_id=${employeeId}` : ''}`),
+
+  updateEmployeeCommission: (id, commissionPct) => 
+    request(`/api/employees/${id}/commission`, {
+      method: 'PUT',
+      body: JSON.stringify({ commission_percentage: commissionPct })
+    })
 };

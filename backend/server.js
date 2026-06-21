@@ -2193,6 +2193,64 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
   }
 });
 
+// --- PHASE 6: DASHBOARD ANALYTICS & INCENTIVES ENDPOINTS ---
+
+app.get('/api/analytics/roi', authenticateToken, async (req, res) => {
+  try {
+    const roiStats = await DB.getSourceRoiStats();
+    res.json(roiStats);
+  } catch (error) {
+    console.error('Failed to fetch ROI stats:', error);
+    res.status(500).json({ error: 'Failed to fetch ROI stats' });
+  }
+});
+
+app.get('/api/analytics/funnel', authenticateToken, async (req, res) => {
+  try {
+    const employeeId = req.query.employee_id || null;
+    const funnelStats = await DB.getFunnelStats(employeeId);
+    res.json(funnelStats);
+  } catch (error) {
+    console.error('Failed to fetch funnel stats:', error);
+    res.status(500).json({ error: 'Failed to fetch funnel stats' });
+  }
+});
+
+app.get('/api/analytics/performance', authenticateToken, async (req, res) => {
+  try {
+    const report = await DB.getEmployeePerformanceReports();
+    res.json(report);
+  } catch (error) {
+    console.error('Failed to fetch performance report:', error);
+    res.status(500).json({ error: 'Failed to fetch performance report' });
+  }
+});
+
+app.get('/api/analytics/incentives', authenticateToken, async (req, res) => {
+  try {
+    const employeeId = req.user.role === 'admin' ? (req.query.employee_id || null) : req.user.id;
+    const incentivesData = await DB.getIncentivesData(employeeId);
+    res.json(incentivesData);
+  } catch (error) {
+    console.error('Failed to fetch incentives data:', error);
+    res.status(500).json({ error: 'Failed to fetch incentives data' });
+  }
+});
+
+app.put('/api/employees/:id/commission', authenticateToken, requireAdmin, async (req, res) => {
+  const { commission_percentage } = req.body;
+  if (commission_percentage === undefined || isNaN(parseFloat(commission_percentage))) {
+    return res.status(400).json({ error: 'Invalid or missing commission_percentage' });
+  }
+  try {
+    const updated = await DB.updateEmployeeCommission(req.params.id, parseFloat(commission_percentage));
+    res.json({ message: 'Employee commission updated successfully', user: updated });
+  } catch (error) {
+    console.error('Failed to update employee commission:', error);
+    res.status(500).json({ error: 'Failed to update employee commission' });
+  }
+});
+
 app.get('/api/leads/duplicates', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const list = await DB.getDuplicateLeads();

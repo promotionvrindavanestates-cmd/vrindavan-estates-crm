@@ -198,7 +198,7 @@ const DB = {
     if (this.isCloud()) {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, full_name, phone, role, status, token_version')
+        .select('id, username, full_name, phone, role, status, token_version, commission_percentage')
         .eq('role', 'employee');
       if (error) throw error;
       return data;
@@ -211,7 +211,8 @@ const DB = {
         phone: u.phone,
         role: u.role,
         status: u.status,
-        token_version: u.token_version
+        token_version: u.token_version,
+        commission_percentage: u.commission_percentage !== undefined ? parseFloat(u.commission_percentage) : 1.50
       }));
     }
   },
@@ -3163,6 +3164,308 @@ const DB = {
       upcoming,
       overdue
     };
+  },
+
+  async getSourceRoiStats() {
+    if (this.isCloud()) {
+      const { data: leads, error: errLeads } = await supabase
+        .from('leads')
+        .select('id, lead_source, status');
+      if (errLeads) throw errLeads;
+
+      const { data: bookings, error: errBookings } = await supabase
+        .from('bookings')
+        .select('id, lead_id, token_amount, booking_amount');
+      if (errBookings) throw errBookings;
+
+      const leadMap = {};
+      leads.forEach(l => {
+        leadMap[l.id] = l.lead_source || 'Website';
+      });
+
+      const stats = {};
+      const targetSources = ['Facebook', 'Instagram', 'Google', 'Website', 'Referral'];
+      targetSources.forEach(s => {
+        stats[s] = { source: s, leads: 0, bookings: 0, revenue: 0 };
+      });
+
+      leads.forEach(l => {
+        const src = l.lead_source || 'Website';
+        const standardizedSrc = targetSources.includes(src) ? src : 'Website';
+        stats[standardizedSrc].leads++;
+      });
+
+      bookings.forEach(b => {
+        const src = leadMap[b.lead_id] || 'Website';
+        const standardizedSrc = targetSources.includes(src) ? src : 'Website';
+        stats[standardizedSrc].bookings++;
+        stats[standardizedSrc].revenue += (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0);
+      });
+
+      return Object.values(stats).map(s => ({
+        ...s,
+        conversion: s.leads > 0 ? Math.round((s.bookings / s.leads) * 100 * 10) / 10 : 0
+      }));
+    } else {
+      const db = loadLocalDb();
+      const leads = db.leads || [];
+      const bookings = db.bookings || [];
+
+      const leadMap = {};
+      leads.forEach(l => {
+        leadMap[l.id] = l.lead_source || 'Website';
+      });
+
+      const stats = {};
+      const targetSources = ['Facebook', 'Instagram', 'Google', 'Website', 'Referral'];
+      targetSources.forEach(s => {
+        stats[s] = { source: s, leads: 0, bookings: 0, revenue: 0 };
+      });
+
+      leads.forEach(l => {
+        const src = l.lead_source || 'Website';
+        const standardizedSrc = targetSources.includes(src) ? src : 'Website';
+        stats[standardizedSrc].leads++;
+      });
+
+      bookings.forEach(b => {
+        const src = leadMap[b.lead_id] || 'Website';
+        const standardizedSrc = targetSources.includes(src) ? src : 'Website';
+        stats[standardizedSrc].bookings++;
+        stats[standardizedSrc].revenue += (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0);
+      });
+
+      return Object.values(stats).map(s => ({
+        ...s,
+        conversion: s.leads > 0 ? Math.round((s.bookings / s.leads) * 100 * 10) / 10 : 0
+      }));
+    }
+  },
+
+  async getFunnelStats(employeeId = null) {
+    let leads = [];
+    let bookings = [];
+    let callLogs = [];
+    let siteVisits = [];
+
+    if (this.isCloud()) {
+      let leadQuery = supabase.from('leads').select('id, status, assigned_employee_id');
+      if (employeeId) {
+        leadQuery = leadQuery.eq('assigned_employee_id', employeeId);
+      }
+      const { data: l } = await leadQuery;
+      leads = l || [];
+
+      const leadIds = leads.map(x => x.id);
+
+      if (leadIds.length > 0) {
+        const { data: b } = await supabase.from('bookings').select('token_amount, booking_amount, lead_id').in('lead_id', leadIds);
+        bookings = b || [];
+        const { data: c } = await supabase.from('call_logs').select('lead_id').in('lead_id', leadIds);
+        callLogs = c || [];
+        const { data: v } = await supabase.from('site_visits').select('lead_id').in('lead_id', leadIds);
+        siteVisits = v || [];
+      }
+    } else {
+      const db = loadLocalDb();
+      leads = db.leads || [];
+      if (employeeId) {
+        leads = leads.filter(l => l.assigned_employee_id === employeeId);
+      }
+      const leadIds = new Set(leads.map(x => x.id));
+      bookings = (db.bookings || []).filter(b => leadIds.has(b.lead_id));
+      callLogs = (db.call_logs || []).filter(c => leadIds.has(c.lead_id));
+      siteVisits = (db.site_visits || []).filter(v => leadIds.has(v.lead_id));
+    }
+
+    const contactedLeadIds = new Set(callLogs.map(c => c.lead_id));
+    const visitLeadIds = new Set(siteVisits.map(v => v.lead_id));
+    const bookedLeadIds = new Set(bookings.map(b => b.lead_id));
+
+    let contacted = leads.filter(l => contactedLeadIds.has(l.id) || ['Attempted', 'Connected', 'Warm', 'Cold', 'Interested'].includes(l.status)).length;
+    let visit = leads.filter(l => visitLeadIds.has(l.id) || ['Site Visit Scheduled', 'Site Visit Done'].includes(l.status)).length;
+    let negotiation = leads.filter(l => ['Negotiation', 'Hot'].includes(l.status)).length;
+    let booked = leads.filter(l => bookedLeadIds.has(l.id) || l.status === 'Booked').length;
+
+    const revenue = bookings.reduce((sum, b) => sum + (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0), 0);
+
+    return {
+      leads: leads.length,
+      contacted,
+      site_visit: visit,
+      negotiation,
+      booking: booked,
+      revenue
+    };
+  },
+
+  async getIncentivesData(employeeId = null) {
+    let bookings = [];
+    let users = [];
+
+    if (this.isCloud()) {
+      let query = supabase.from('bookings').select('*, leads(*), projects(*), users!executive_id(*)').order('booking_date', { ascending: false });
+      if (employeeId) {
+        query = query.eq('executive_id', employeeId);
+      }
+      const { data: b, error } = await query;
+      if (error) throw error;
+      bookings = b || [];
+
+      const { data: u } = await supabase.from('users').select('id, full_name, role, commission_percentage');
+      users = u || [];
+    } else {
+      const db = loadLocalDb();
+      bookings = db.bookings || [];
+      if (employeeId) {
+        bookings = bookings.filter(b => b.executive_id === employeeId);
+      }
+      bookings = bookings.map(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        const proj = db.projects.find(pr => pr.id === b.project_id);
+        const exec = db.users.find(u => u.id === b.executive_id);
+        return {
+          ...b,
+          leads: lead || null,
+          projects: proj || null,
+          users: exec || null
+        };
+      });
+      users = db.users || [];
+    }
+
+    const formattedBookings = bookings.map(b => {
+      const value = (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0);
+      const commissionRate = b.users && b.users.commission_percentage !== undefined ? parseFloat(b.users.commission_percentage) : 1.50;
+      const incentive = (value * commissionRate) / 100;
+      return {
+        id: b.id,
+        customer_name: b.leads ? b.leads.name : 'N/A',
+        lead_id: b.lead_id,
+        project_name: b.projects ? b.projects.name : 'N/A',
+        unit_number: b.unit_number || 'N/A',
+        booking_date: b.booking_date || b.created_at,
+        booking_value: value,
+        executive_name: b.users ? b.users.full_name : 'System',
+        executive_id: b.executive_id,
+        commission_rate: commissionRate,
+        incentive_amount: incentive
+      };
+    });
+
+    return {
+      bookings: formattedBookings,
+      default_commission: 1.50
+    };
+  },
+
+  async getEmployeePerformanceReports() {
+    let users = [];
+    let leads = [];
+    let callLogs = [];
+    let reminders = [];
+    let siteVisits = [];
+    let bookings = [];
+    let payments = [];
+
+    if (this.isCloud()) {
+      const { data: u } = await supabase.from('users').select('id, full_name, username, status, commission_percentage').eq('role', 'employee');
+      users = u || [];
+      const { data: l } = await supabase.from('leads').select('id, assigned_employee_id, status');
+      leads = l || [];
+      const { data: c } = await supabase.from('call_logs').select('caller_id');
+      callLogs = c || [];
+      const { data: r } = await supabase.from('reminders').select('assigned_employee_id, is_read');
+      reminders = r || [];
+      const { data: v } = await supabase.from('site_visits').select('id, lead_id, outcome');
+      siteVisits = v || [];
+      const { data: b } = await supabase.from('bookings').select('id, lead_id, executive_id');
+      bookings = b || [];
+      const { data: p } = await supabase.from('payments').select('amount_received, booking_id');
+      payments = p || [];
+    } else {
+      const db = loadLocalDb();
+      users = (db.users || []).filter(u => u.role === 'employee');
+      leads = db.leads || [];
+      callLogs = db.call_logs || [];
+      reminders = db.reminders || [];
+      siteVisits = db.site_visits || [];
+      bookings = db.bookings || [];
+      payments = db.payments || [];
+    }
+
+    const leadMap = {};
+    leads.forEach(l => {
+      leadMap[l.id] = l;
+    });
+
+    const report = users.map(u => {
+      const empLeads = leads.filter(l => l.assigned_employee_id === u.id);
+      const empLeadsCount = empLeads.length;
+      
+      const empCalls = callLogs.filter(c => c.caller_id === u.id).length;
+      
+      const empReminders = reminders.filter(r => r.assigned_employee_id === u.id);
+      const followUps = empReminders.length;
+      const followUpsCompleted = empReminders.filter(r => r.is_read).length;
+      const followUpsPending = followUps - followUpsCompleted;
+
+      const empVisits = siteVisits.filter(v => {
+        const lead = leadMap[v.lead_id];
+        return lead && lead.assigned_employee_id === u.id && v.outcome && v.outcome !== 'Scheduled';
+      }).length;
+
+      const empBookings = bookings.filter(b => b.executive_id === u.id);
+      const bookingsCount = empBookings.length;
+
+      const empBookingIds = new Set(empBookings.map(b => b.id));
+      const collections = payments
+        .filter(p => empBookingIds.has(p.booking_id))
+        .reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
+
+      const conversion = empLeadsCount > 0 ? Math.round((bookingsCount / empLeadsCount) * 100 * 10) / 10 : 0;
+
+      return {
+        employee_id: u.id,
+        name: u.full_name,
+        username: u.username,
+        status: u.status || 'active',
+        commission_percentage: u.commission_percentage !== undefined ? parseFloat(u.commission_percentage) : 1.50,
+        leads_count: empLeadsCount,
+        calls: empCalls,
+        follow_ups: followUps,
+        follow_ups_completed: followUpsCompleted,
+        follow_ups_pending: followUpsPending,
+        site_visits: empVisits,
+        bookings: bookingsCount,
+        collections,
+        conversion
+      };
+    });
+
+    return report;
+  },
+
+  async updateEmployeeCommission(id, commissionPct) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ commission_percentage: commissionPct })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.users.findIndex(u => u.id === id);
+      if (idx !== -1) {
+        db.users[idx].commission_percentage = parseFloat(commissionPct);
+        saveLocalDb(db);
+        return db.users[idx];
+      }
+      throw new Error('User not found');
+    }
   }
 };
 

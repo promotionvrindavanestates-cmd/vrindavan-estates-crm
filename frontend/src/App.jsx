@@ -599,7 +599,7 @@ export default function App() {
             )}
 
             {activeTab === 'reports' && (
-              <ReportsAnalytics currentUser={currentUser} />
+              <ReportsAnalytics currentUser={currentUser} onDrillDown={handleDrillDown} />
             )}
 
             {activeTab === 'employees' && currentUser.role === 'admin' && (
