@@ -93,6 +93,8 @@ export const api = {
     return request(`/api/leads${queryString ? `?${queryString}` : ''}`);
   },
 
+  getLeadById: (id) => request(`/api/leads/${id}`),
+
   createLead: (leadData) =>
     request('/api/leads', {
       method: 'POST',

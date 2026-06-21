@@ -20,6 +20,7 @@ export default function LeadDetailDrawer({
 }) {
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('timeline'); // 'timeline', 'calls', 'whatsapp', 'gps'
   
   // Timeline Events
@@ -70,6 +71,7 @@ export default function LeadDetailDrawer({
 
   const fetchLeadDetails = async () => {
     setLoading(true);
+    setError('');
     try {
       // Get lead by ID
       const data = await api.getLeadById(leadId, currentUser.id, currentUser.role);
@@ -81,6 +83,7 @@ export default function LeadDetailDrawer({
       fetchGPSDetails();
     } catch (err) {
       console.error('Failed to load lead details in drawer:', err);
+      setError('Unable to load lead details');
     } finally {
       setLoading(false);
     }
@@ -514,9 +517,20 @@ export default function LeadDetailDrawer({
           </button>
         </div>
 
-        {loading || !lead ? (
+        {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
             Retrieving lead data records...
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <p style={{ color: '#ef4444', marginBottom: '15px', fontSize: '13px' }}>{error}</p>
+            <button className="btn btn-primary" type="button" onClick={fetchLeadDetails} style={{ padding: '6px 16px', fontSize: '12px' }}>
+              Retry
+            </button>
+          </div>
+        ) : !lead ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+            No lead data available.
           </div>
         ) : (
           <div className="drawer-body">

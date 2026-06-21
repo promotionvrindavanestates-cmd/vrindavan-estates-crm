@@ -278,6 +278,19 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/leads/:id', authenticateToken, async (req, res) => {
+  try {
+    const lead = await DB.getLeadById(req.params.id, req.user.id, req.user.role);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found or access denied' });
+    }
+    res.json(lead);
+  } catch (error) {
+    console.error('Fetch lead by ID error:', error);
+    res.status(500).json({ error: 'Failed to fetch lead details' });
+  }
+});
+
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const oldLead = await DB.getLeadById(req.params.id, req.user.id, req.user.role);
