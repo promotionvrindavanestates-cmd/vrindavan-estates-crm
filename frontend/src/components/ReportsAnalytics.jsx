@@ -236,8 +236,8 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
                     <BarChart2 size={16} /> Lead Source Comparison
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {Object.keys(stats.sourceDistribution).map(src => {
-                      const count = stats.sourceDistribution[src];
+                    {Object.keys(stats?.sourceDistribution || {}).map(src => {
+                      const count = (stats?.sourceDistribution || {})[src];
                       const pct = stats.summary.totalLeads > 0 ? (count / stats.summary.totalLeads) * 100 : 0;
                       return (
                         <div key={src}>

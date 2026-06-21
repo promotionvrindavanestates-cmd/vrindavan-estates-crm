@@ -198,8 +198,8 @@ export default function CollectionDashboard({ currentUser, onOpenLeadDrawer }) {
         <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', marginBottom: '25px' }}>
           <h3 style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)', marginBottom: '15px' }}>💳 Collections by Mode of Payment</h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            {Object.keys(analytics.modeBreakdown).map(mode => {
-              const amount = analytics.modeBreakdown[mode];
+            {Object.keys(analytics?.modeBreakdown || {}).map(mode => {
+              const amount = (analytics?.modeBreakdown || {})[mode];
               const pct = analytics.receivedCollection > 0 ? (amount / analytics.receivedCollection) * 100 : 0;
               return (
                 <div key={mode} style={{ flex: '1 0 150px', background: 'rgba(255,255,255,0.01)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>

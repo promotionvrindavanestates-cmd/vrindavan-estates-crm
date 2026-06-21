@@ -73,7 +73,7 @@ export default function IncentiveCalculator({ currentUser }) {
       monthly[key].bookingValue += val;
       monthly[key].earnings += incentive;
     });
-    return Object.values(monthly);
+    return Object.values(monthly || {});
   };
 
   const totalBookingValue = bookings.reduce((sum, b) => sum + (parseFloat(b.booking_value) || 0), 0);

@@ -235,8 +235,8 @@ export default function Dashboard({ leads = [], employees = [], lastUpdated, onS
     .map(r => r.leads);
 
   // SVG Chart Scaling Helpers
-  const maxSourceCount = stats && stats.sourceDistribution ? Math.max(...Object.values(stats.sourceDistribution), 1) : 1;
-  const sourceCounts = stats && stats.sourceDistribution ? Object.entries(stats.sourceDistribution).map(([name, count]) => ({ name, count })) : [];
+  const maxSourceCount = Math.max(...Object.values(stats?.sourceDistribution || {}), 1);
+  const sourceCounts = Object.entries(stats?.sourceDistribution || {}).map(([name, count]) => ({ name, count }));
 
   // Monthly Trend Area Chart (SVG)
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -253,7 +253,7 @@ export default function Dashboard({ leads = [], employees = [], lastUpdated, onS
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (monthlyCounts[key]) monthlyCounts[key].count++;
   });
-  const trendData = Object.values(monthlyCounts);
+  const trendData = Object.values(monthlyCounts || {});
   const maxTrendCount = Math.max(...trendData.map(t => t.count), 1);
 
   return (

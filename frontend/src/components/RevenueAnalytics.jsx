@@ -57,7 +57,7 @@ export default function RevenueAnalytics() {
     }
   });
 
-  const trendData = Object.values(monthlyCollections);
+  const trendData = Object.values(monthlyCollections || {});
   const maxTrendAmount = Math.max(...trendData.map(t => t.amount), 1);
 
   // Quick WhatsApp reminder
