@@ -235,8 +235,8 @@ export default function Dashboard({ leads = [], employees = [], lastUpdated, onS
     .map(r => r.leads);
 
   // SVG Chart Scaling Helpers
-  const maxSourceCount = stats ? Math.max(...Object.values(stats.sourceDistribution), 1) : 1;
-  const sourceCounts = stats ? Object.entries(stats.sourceDistribution).map(([name, count]) => ({ name, count })) : [];
+  const maxSourceCount = stats && stats.sourceDistribution ? Math.max(...Object.values(stats.sourceDistribution), 1) : 1;
+  const sourceCounts = stats && stats.sourceDistribution ? Object.entries(stats.sourceDistribution).map(([name, count]) => ({ name, count })) : [];
 
   // Monthly Trend Area Chart (SVG)
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -317,7 +317,7 @@ export default function Dashboard({ leads = [], employees = [], lastUpdated, onS
             <div className="metric-card warm" onClick={() => onDrillDown && onDrillDown('Calls Today', { calls_today: 'true' })}>
               <div className="metric-label">Calls Today</div>
               <div className="metric-value">{stats ? stats.summary.callsToday : 0}</div>
-              {stats && (
+              {stats && stats.summary && (
                 <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.8, display: 'flex', gap: '8px', justifyContent: 'center' }}>
                   <span>Conn: {stats.summary.connectedCallsToday || 0}</span>
                   <span>Missed: {stats.summary.missedCallsToday || 0}</span>
