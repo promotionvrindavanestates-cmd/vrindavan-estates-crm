@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Download, Users, RefreshCw, BarChart2, Calendar, FileSpreadsheet, ShieldAlert, ArrowRight, Landmark, PhoneCall, Award, MapPin, TrendingUp, Trophy, BadgeCent } from 'lucide-react';
 import RevenueAnalytics from './RevenueAnalytics';
-import SourceRoiDashboard from './SourceRoiDashboard';
 import IncentiveCalculator from './IncentiveCalculator';
-import EmployeePerformanceReports from './EmployeePerformanceReports';
+const SourceRoiDashboard = React.lazy(() => import('./SourceRoiDashboard'));
+const EmployeePerformanceReports = React.lazy(() => import('./EmployeePerformanceReports'));
 import EmployeeDashboardView from './EmployeeDashboardView';
 
 export default function ReportsAnalytics({ currentUser, onDrillDown }) {
@@ -291,7 +291,9 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
 
           {/* Phase 6: Source ROI Dashboard */}
           {activeSubTab === 'roi' && (
-            <SourceRoiDashboard onDrillDown={onDrillDown} />
+            <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading ROI Dashboard...</div>}>
+              <SourceRoiDashboard onDrillDown={onDrillDown} />
+            </React.Suspense>
           )}
 
           {/* Phase 6: Employee Dashboard */}
@@ -498,7 +500,9 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
 
           {/* Phase 6: Employee Performance Reports */}
           {activeSubTab === 'performance' && isAdmin && (
-            <EmployeePerformanceReports onDrillDown={onDrillDown} />
+            <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Performance Reports...</div>}>
+              <EmployeePerformanceReports onDrillDown={onDrillDown} />
+            </React.Suspense>
           )}
 
           {/* CSV/Excel Exports Sub Tab (Admin only) */}

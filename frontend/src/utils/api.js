@@ -29,40 +29,86 @@ export const setAuthToken = (newToken) => {
   }
 };
 
+const cache = {};
+const CACHE_TTL = 60000; // 60 seconds
+
 const request = async (url, options = {}) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  const method = options.method || 'GET';
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Invalidate cache on mutations (POST, PUT, DELETE)
+  if (method !== 'GET') {
+    for (const key in cache) {
+      delete cache[key];
+    }
   }
 
-  const response = await fetch(`${getBaseUrl()}${url}`, {
-    ...options,
-    headers,
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    // Session expired or unauthorized, logout
-    setAuthToken('');
-    window.location.reload();
-    throw new Error('Session expired. Please log in again.');
+  const cacheKey = `${method}:${url}:${options.body || ''}`;
+  if (method === 'GET' && (
+    url.includes('/api/dashboard/widgets') ||
+    url.includes('/api/dashboard/advanced') ||
+    url.includes('/api/notifications/alerts') ||
+    url.includes('/api/reminders')
+  )) {
+    const cached = cache[cacheKey];
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      console.log(`[Cache Hit] Returning cached response for: ${url}`);
+      return cached.data;
+    }
   }
 
-  // Handle binary downloads (xlsx/csv export)
-  const contentType = response.headers.get('content-type');
-  if (contentType && (contentType.includes('sheet') || contentType.includes('csv'))) {
-    if (!response.ok) throw new Error('File download failed');
-    return response.blob();
-  }
+  const label = `API Request: ${method} ${url}`;
+  console.time(label);
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${getBaseUrl()}${url}`, {
+      ...options,
+      headers,
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      // Session expired or unauthorized, logout
+      setAuthToken('');
+      window.location.reload();
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    // Handle binary downloads (xlsx/csv export)
+    const contentType = response.headers.get('content-type');
+    if (contentType && (contentType.includes('sheet') || contentType.includes('csv'))) {
+      if (!response.ok) throw new Error('File download failed');
+      return response.blob();
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed');
+    }
+
+    // Cache the response
+    if (method === 'GET' && (
+      url.includes('/api/dashboard/widgets') ||
+      url.includes('/api/dashboard/advanced') ||
+      url.includes('/api/notifications/alerts') ||
+      url.includes('/api/reminders')
+    )) {
+      cache[cacheKey] = {
+        timestamp: Date.now(),
+        data: data
+      };
+    }
+
+    return data;
+  } finally {
+    console.timeEnd(label);
   }
-  return data;
 };
 
 export const api = {
@@ -86,8 +132,12 @@ export const api = {
   // Leads
   getLeads: (params = {}) => {
     const query = new URLSearchParams();
+    const limit = params.limit !== undefined ? params.limit : 20;
+    query.append('limit', limit);
     Object.keys(params).forEach(key => {
-      if (params[key]) query.append(key, params[key]);
+      if (key !== 'limit' && params[key] !== undefined && params[key] !== null && params[key] !== '') {
+        query.append(key, params[key]);
+      }
     });
     const queryString = query.toString();
     return request(`/api/leads${queryString ? `?${queryString}` : ''}`);
@@ -273,7 +323,16 @@ export const api = {
 
   // --- PHASE 2: INACTIVE QUEUE & ADVANCED DASHBOARD ---
   getInactiveLeadsQueue: (days) => request(`/api/leads/inactive-queue${days ? `?days=${days}` : ''}`),
-  getAdvancedDashboardStats: () => request('/api/dashboard/advanced'),
+  getAdvancedDashboardStats: (params = {}) => {
+    const query = new URLSearchParams();
+    Object.keys(params).forEach(key => {
+      if (params[key] !== undefined && params[key] !== null) {
+        query.append(key, params[key]);
+      }
+    });
+    const queryString = query.toString();
+    return request(`/api/dashboard/advanced${queryString ? `?${queryString}` : ''}`);
+  },
 
   // --- PHASE 2: REPORTS EXPORT ---
   exportReport: async (type = 'bookings') => {
@@ -430,5 +489,11 @@ export const api = {
   getWhatsAppChats: (leadId) => request(`/api/whatsapp/chats/${leadId}`),
   syncWhatsAppChats: (messages) => request('/api/whatsapp/chats/sync', { method: 'POST', body: JSON.stringify({ messages }) }),
   simulateWhatsAppMessage: (leadId, text, direction) => request('/api/whatsapp/messages/simulate', { method: 'POST', body: JSON.stringify({ leadId, text, direction }) }),
-  getSalesIntelligenceDashboard: () => request('/api/dashboard/sales-intelligence')
+  getSalesIntelligenceDashboard: () => request('/api/dashboard/sales-intelligence'),
+  logWhatsAppActivity: (payload) => request('/api/whatsapp/activity', { method: 'POST', body: JSON.stringify(payload) }),
+  saveWhatsAppNotes: (payload) => request('/api/whatsapp/notes', { method: 'POST', body: JSON.stringify(payload) }),
+  createWhatsAppFollowUp: (payload) => request('/api/whatsapp/follow-up', { method: 'POST', body: JSON.stringify(payload) }),
+  getWhatsAppCommunicationHistory: (leadId) => request(`/api/whatsapp/communication-history/${leadId}`),
+  getBookingsForLead: (leadId) => request(`/api/bookings/lead/${leadId}`),
+  getPaymentsForLead: (leadId) => request(`/api/payments/lead/${leadId}`)
 };

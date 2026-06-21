@@ -22,7 +22,7 @@ export default function LeadDetailDrawer({
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('timeline'); // 'timeline', 'calls', 'whatsapp', 'gps'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'calls', 'whatsapp', 'site_visits', 'bookings', 'payments'
   
   // Timeline Events
   const [timelineEvents, setTimelineEvents] = useState([]);
@@ -78,10 +78,35 @@ export default function LeadDetailDrawer({
   const [simDirection, setSimDirection] = useState('Incoming');
   const [simulating, setSimulating] = useState(false);
 
+  // Phase 8B WhatsApp Center States
+  const [whatsappHistory, setWhatsappHistory] = useState([]);
+  const [whatsappHistoryLoading, setWhatsappHistoryLoading] = useState(false);
+  const [waNotesSummary, setWaNotesSummary] = useState('');
+  const [waNotesInterest, setWaNotesInterest] = useState('');
+  const [waNotesBudget, setWaNotesBudget] = useState('');
+  const [waNotesObjections, setWaNotesObjections] = useState('');
+  const [waNotesNextAction, setWaNotesNextAction] = useState('');
+  const [waNotesSaving, setWaNotesSaving] = useState(false);
+
+  const [waFollowUpDate, setWaFollowUpDate] = useState('');
+  const [waFollowUpTime, setWaFollowUpTime] = useState('');
+  const [waFollowUpNotes, setWaFollowUpNotes] = useState('');
+  const [waFollowUpPriority, setWaFollowUpPriority] = useState('Medium');
+  const [waFollowUpSaving, setWaFollowUpSaving] = useState(false);
+
+  // Bookings & Payments tabs states
+  const [drawerBookings, setDrawerBookings] = useState([]);
+  const [drawerBookingsLoading, setDrawerBookingsLoading] = useState(false);
+  const [drawerPayments, setDrawerPayments] = useState([]);
+  const [drawerPaymentsLoading, setDrawerPaymentsLoading] = useState(false);
+
   useEffect(() => {
     if (isOpen && leadId) {
       fetchLeadDetails();
       fetchWhatsAppTemplates();
+      fetchWhatsAppHistory();
+      fetchDrawerBookings();
+      fetchDrawerPayments();
     } else {
       setLead(null);
       setTimelineEvents([]);
@@ -92,14 +117,144 @@ export default function LeadDetailDrawer({
       setWhatsAppChats([]);
       setSimMsgText('');
       setSimDirection('Incoming');
+      setWhatsappHistory([]);
+      setDrawerBookings([]);
+      setDrawerPayments([]);
     }
   }, [isOpen, leadId]);
 
   useEffect(() => {
     if (isOpen && leadId && activeTab === 'whatsapp') {
       fetchWhatsAppChats();
+      fetchWhatsAppHistory();
     }
   }, [activeTab, isOpen, leadId]);
+
+  useEffect(() => {
+    if (isOpen && leadId) {
+      if (activeTab === 'bookings') {
+        fetchDrawerBookings();
+      } else if (activeTab === 'payments') {
+        fetchDrawerPayments();
+      } else if (activeTab === 'site_visits') {
+        fetchGPSDetails();
+      }
+    }
+  }, [activeTab, isOpen, leadId]);
+
+  const fetchWhatsAppHistory = async () => {
+    setWhatsappHistoryLoading(true);
+    try {
+      const data = await api.getWhatsAppCommunicationHistory(leadId);
+      setWhatsappHistory(data || []);
+    } catch (e) {
+      console.error('Error fetching whatsapp communication history:', e);
+    } finally {
+      setWhatsappHistoryLoading(false);
+    }
+  };
+
+  const fetchDrawerBookings = async () => {
+    setDrawerBookingsLoading(true);
+    try {
+      const data = await api.getBookingsForLead(leadId);
+      setDrawerBookings(data || []);
+    } catch (e) {
+      console.error('Error fetching bookings for lead:', e);
+    } finally {
+      setDrawerBookingsLoading(false);
+    }
+  };
+
+  const fetchDrawerPayments = async () => {
+    setDrawerPaymentsLoading(true);
+    try {
+      const data = await api.getPaymentsForLead(leadId);
+      setDrawerPayments(data || []);
+    } catch (e) {
+      console.error('Error fetching payments for lead:', e);
+    } finally {
+      setDrawerPaymentsLoading(false);
+    }
+  };
+
+  const handleSendWhatsAppWithLogging = async (actionType = 'WhatsApp Opened') => {
+    if (!lead) return;
+    const msg = getInterpolatedWhatsAppMessage();
+    const phone = lead.phone_whatsapp || lead.phone1 || '';
+    const cleanPhone = phone.replace(/\D/g, '');
+    const waPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`;
+    
+    try {
+      await api.logWhatsAppActivity({ leadId, actionType });
+      await api.logWhatsAppClick(lead.id, phone, msg);
+    } catch (e) {
+      console.warn('Failed to log WhatsApp activity:', e);
+    }
+    
+    window.open(url, '_blank');
+    fetchTimeline();
+    fetchWhatsAppHistory();
+  };
+
+  const handleWhatsAppNotesSubmit = async (e) => {
+    e.preventDefault();
+    if (!waNotesSummary) {
+      return alert('Discussion summary is required.');
+    }
+    setWaNotesSaving(true);
+    try {
+      await api.saveWhatsAppNotes({
+        leadId,
+        discussionSummary: waNotesSummary,
+        customerInterest: waNotesInterest,
+        budgetDiscussion: waNotesBudget,
+        objections: waNotesObjections,
+        nextAction: waNotesNextAction
+      });
+      alert('WhatsApp notes saved!');
+      setWaNotesSummary('');
+      setWaNotesInterest('');
+      setWaNotesBudget('');
+      setWaNotesObjections('');
+      setWaNotesNextAction('');
+      fetchTimeline();
+      fetchWhatsAppHistory();
+    } catch (err) {
+      alert(`Failed to save notes: ${err.message}`);
+    } finally {
+      setWaNotesSaving(false);
+    }
+  };
+
+  const handleWhatsAppFollowUpSubmit = async (e) => {
+    e.preventDefault();
+    if (!waFollowUpDate || !waFollowUpNotes) {
+      return alert('Date and reminder notes are required.');
+    }
+    setWaFollowUpSaving(true);
+    try {
+      await api.createWhatsAppFollowUp({
+        leadId,
+        title: `WhatsApp Follow-up: ${waFollowUpNotes.substring(0, 30)}`,
+        reminder_date: waFollowUpDate,
+        reminder_time: waFollowUpTime || '09:00:00',
+        notes: waFollowUpNotes,
+        priority: waFollowUpPriority
+      });
+      alert('Follow-up scheduled!');
+      setWaFollowUpDate('');
+      setWaFollowUpTime('');
+      setWaFollowUpNotes('');
+      setWaFollowUpPriority('Medium');
+      fetchTimeline();
+    } catch (err) {
+      alert(`Failed to schedule follow-up: ${err.message}`);
+    } finally {
+      setWaFollowUpSaving(false);
+    }
+  };
 
   const fetchWhatsAppChats = async () => {
     setChatLoading(true);
@@ -115,12 +270,13 @@ export default function LeadDetailDrawer({
 
   const handleSimulateMsgSubmit = async (e) => {
     e.preventDefault();
-    if (!simMsgText.trim()) return;
+    if (!simMsgText) return;
     setSimulating(true);
     try {
       await api.simulateWhatsAppMessage(leadId, simMsgText, simDirection);
       setSimMsgText('');
       fetchWhatsAppChats();
+      fetchWhatsAppHistory();
       fetchTimeline();
     } catch (err) {
       alert(`Simulation failed: ${err.message}`);
@@ -169,6 +325,9 @@ export default function LeadDetailDrawer({
       fetchTimeline();
       fetchCallHistory();
       fetchGPSDetails();
+      fetchWhatsAppHistory();
+      fetchDrawerBookings();
+      fetchDrawerPayments();
     } catch (err) {
       console.error('Failed to load lead details in drawer:', err);
       setError('Unable to load lead details');
@@ -501,6 +660,8 @@ export default function LeadDetailDrawer({
       setBookingTokenAmount('');
       setBookingTotalCost('');
       fetchLeadDetails();
+      fetchDrawerBookings();
+      fetchDrawerPayments();
       if (onRefreshData) onRefreshData();
     } catch (err) {
       alert(`Booking failed: ${err.message}`);
@@ -518,6 +679,8 @@ export default function LeadDetailDrawer({
       case 'booking': return <Award size={12} style={{ color: 'var(--color-success)' }} />;
       case 'whatsapp': return <FaWhatsapp size={12} style={{ color: '#25D366' }} />;
       case 'whatsapp-chat': return <FaWhatsapp size={12} style={{ color: '#10B981' }} />;
+      case 'whatsapp-activity': return <FaWhatsapp size={12} style={{ color: '#10B981' }} />;
+      case 'whatsapp-notes': return <Compass size={12} style={{ color: '#8b5cf6' }} />;
       case 'reminder': return <Calendar size={12} style={{ color: '#F59E0B' }} />;
       case 'payment': return <DollarSign size={12} style={{ color: '#10B981' }} />;
       default: return <AlertCircle size={12} style={{ color: 'var(--primary)' }} />;
@@ -764,15 +927,17 @@ export default function LeadDetailDrawer({
             )}
 
             {/* Tab switchers */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginTop: '8px' }}>
-              <div className={`drawer-tab ${activeTab === 'timeline' ? 'active' : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</div>
-              <div className={`drawer-tab ${activeTab === 'calls' ? 'active' : ''}`} onClick={() => { setActiveTab('calls'); fetchCallHistory(); }}>Calls Log</div>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginTop: '8px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+              <div className={`drawer-tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</div>
+              <div className={`drawer-tab ${activeTab === 'calls' ? 'active' : ''}`} onClick={() => { setActiveTab('calls'); fetchCallHistory(); }}>Calls</div>
               <div className={`drawer-tab ${activeTab === 'whatsapp' ? 'active' : ''}`} onClick={() => setActiveTab('whatsapp')}>WhatsApp</div>
-              <div className={`drawer-tab ${activeTab === 'gps' ? 'active' : ''}`} onClick={() => { setActiveTab('gps'); captureCoordinates(); fetchGPSDetails(); }}>GPS Geofence</div>
+              <div className={`drawer-tab ${activeTab === 'site_visits' ? 'active' : ''}`} onClick={() => { setActiveTab('site_visits'); captureCoordinates(); fetchGPSDetails(); }}>Site Visits</div>
+              <div className={`drawer-tab ${activeTab === 'bookings' ? 'active' : ''}`} onClick={() => { setActiveTab('bookings'); fetchDrawerBookings(); }}>Bookings</div>
+              <div className={`drawer-tab ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => { setActiveTab('payments'); fetchDrawerPayments(); }}>Payments</div>
             </div>
 
             {/* Tab content 1: Timeline events */}
-            {activeTab === 'timeline' && (
+            {activeTab === 'overview' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {timelineLoading ? (
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Loading timeline...</div>
@@ -1080,114 +1245,320 @@ export default function LeadDetailDrawer({
               </div>
             )}
 
-            {/* Tab content 3: WhatsApp Click-to-Send templates & Live Chat Sync */}
+            {/* Tab content 3: WhatsApp Center */}
             {activeTab === 'whatsapp' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Click-to-Send template selector */}
-                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Click-To-WhatsApp Templates</h4>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <select className="form-control" value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} style={{ fontSize: '12px' }}>
-                      {whatsAppTemplates.map(t => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
-                      ))}
-                    </select>
+                {/* Stats Header */}
+                <div style={{ display: 'flex', gap: '10px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Messages</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--primary)' }}>
+                      {whatsappHistory.filter(h => h.type === 'message').length}
+                    </div>
                   </div>
-
-                  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '10px', borderRadius: 'var(--radius-sm)', fontSize: '11.5px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>Message Preview:</div>
-                    <p style={{ margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>{getInterpolatedWhatsAppMessage()}</p>
+                  <div style={{ flex: 1, borderLeft: '1px solid var(--border-color)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Conversation</div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginTop: '4px' }}>
+                      {(() => {
+                        const msgs = whatsappHistory.filter(h => h.type === 'message');
+                        if (msgs.length === 0) return 'No conversation';
+                        const last = msgs[msgs.length - 1];
+                        return new Date(last.timestamp).toLocaleDateString();
+                      })()}
+                    </div>
                   </div>
+                </div>
 
+                {/* Quick Action Open WhatsApp */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <button 
                     type="button" 
                     className="btn btn-primary" 
-                    style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#25D366', color: '#000', fontWeight: 700, padding: '8px', fontSize: '12px' }}
-                    onClick={handleSendWhatsApp}
+                    style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#25D366', color: '#000', fontWeight: 700, padding: '8px', fontSize: '11px' }}
+                    onClick={() => handleSendWhatsAppWithLogging('WhatsApp Opened')}
                   >
-                    <FaWhatsapp size={15} /> Send Template via WhatsApp
+                    <FaWhatsapp size={15} /> Open WhatsApp
+                  </button>
+
+                  <select 
+                    className="form-control" 
+                    value={selectedTemplateId} 
+                    onChange={e => setSelectedTemplateId(e.target.value)} 
+                    style={{ fontSize: '12px', height: '34px', background: 'var(--bg-card)', padding: '6px' }}
+                  >
+                    {whatsAppTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '10px', borderRadius: 'var(--radius-sm)', fontSize: '11.5px' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>Message Preview:</div>
+                  <p style={{ margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>{getInterpolatedWhatsAppMessage()}</p>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', background: '#10B981', color: '#000', fontWeight: 700, padding: '6px', fontSize: '10.5px', marginTop: '8px', width: '100%' }}
+                    onClick={() => handleSendWhatsAppWithLogging('WhatsApp Template Sent')}
+                  >
+                    <FaWhatsapp size={13} /> Send Template
                   </button>
                 </div>
 
-                <hr style={{ border: '0', borderTop: '1px solid var(--border-color)', margin: '4px 0' }} />
-
-                {/* Direct Chat Sync History */}
+                {/* Unified WhatsApp History Feed */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Direct Message Sync Log</h4>
-                  
-                  {chatLoading ? (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>Loading messages...</div>
-                  ) : whatsAppChats.length === 0 ? (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>No direct chats synced yet.</div>
+                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>WhatsApp Chat & Log History</h4>
+                  {whatsappHistoryLoading ? (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>Loading history...</div>
+                  ) : whatsappHistory.length === 0 ? (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>No interactions recorded yet.</div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', padding: '8px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-                      {whatsAppChats.map(chat => (
-                        <div 
-                          key={chat.id} 
-                          style={{ 
-                            alignSelf: chat.direction === 'Outgoing' ? 'flex-end' : 'flex-start',
-                            maxWidth: '85%',
-                            padding: '8px 10px',
-                            borderRadius: '8px',
-                            background: chat.direction === 'Outgoing' ? 'rgba(37, 211, 102, 0.08)' : 'rgba(255,255,255,0.03)',
-                            border: chat.direction === 'Outgoing' ? '1px solid rgba(37, 211, 102, 0.3)' : '1px solid var(--border-color)',
-                            fontSize: '11px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px'
-                          }}
-                        >
-                          <div style={{ color: 'var(--text-main)', wordBreak: 'break-word' }}>
-                            {chat.message_text}
-                          </div>
-                          {chat.template_name && (
-                            <span style={{ fontSize: '8px', color: 'var(--primary)', fontStyle: 'italic' }}>
-                              Template: {chat.template_name}
-                            </span>
-                          )}
-                          <span style={{ fontSize: '8px', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
-                            {new Date(chat.sent_at || chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', padding: '8px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                      {whatsappHistory.map(item => {
+                        if (item.type === 'message') {
+                          return (
+                            <div 
+                              key={item.id} 
+                              style={{ 
+                                alignSelf: item.direction === 'Outgoing' ? 'flex-end' : 'flex-start',
+                                maxWidth: '85%',
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                background: item.direction === 'Outgoing' ? 'rgba(37, 211, 102, 0.08)' : 'rgba(255,255,255,0.03)',
+                                border: item.direction === 'Outgoing' ? '1px solid rgba(37, 211, 102, 0.3)' : '1px solid var(--border-color)',
+                                fontSize: '11px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                              }}
+                            >
+                              <div style={{ color: 'var(--text-main)', wordBreak: 'break-word' }}>{item.text}</div>
+                              {item.template_name && <span style={{ fontSize: '8px', color: 'var(--primary)', fontStyle: 'italic' }}>Template: {item.template_name}</span>}
+                              <span style={{ fontSize: '8px', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
+                                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          );
+                        } else if (item.type === 'activity') {
+                          return (
+                            <div 
+                              key={item.id} 
+                              style={{ 
+                                alignSelf: 'center',
+                                background: 'rgba(59, 130, 246, 0.08)',
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                borderRadius: '4px',
+                                padding: '4px 8px',
+                                fontSize: '9.5px',
+                                color: '#3b82f6',
+                                textAlign: 'center'
+                              }}
+                            >
+                              📱 {item.action_type} by {item.user} at {new Date(item.timestamp).toLocaleString()}
+                            </div>
+                          );
+                        } else if (item.type === 'notes') {
+                          return (
+                            <div 
+                              key={item.id} 
+                              style={{ 
+                                alignSelf: 'stretch',
+                                background: 'rgba(139, 92, 246, 0.05)',
+                                border: '1px solid rgba(139, 92, 246, 0.15)',
+                                borderRadius: '6px',
+                                padding: '8px 10px',
+                                fontSize: '11px',
+                                color: 'var(--text-main)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                              }}
+                            >
+                              <div style={{ fontWeight: 600, color: '#8b5cf6', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>📝 WhatsApp Notes Saved (by {item.user})</span>
+                                <span style={{ fontSize: '9px', fontWeight: 'normal', color: 'var(--text-muted)' }}>{new Date(item.timestamp).toLocaleDateString()}</span>
+                              </div>
+                              <div><strong>Summary:</strong> {item.discussion_summary || 'N/A'}</div>
+                              <div><strong>Interest:</strong> {item.customer_interest || 'N/A'}</div>
+                              <div><strong>Budget:</strong> {item.budget_discussion || 'N/A'}</div>
+                              {item.objections && <div><strong>Objections:</strong> {item.objections}</div>}
+                              {item.next_action && <div style={{ color: 'var(--primary)' }}><strong>Next Action:</strong> {item.next_action}</div>}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
                     </div>
                   )}
+                </div>
 
-                  {/* Simulator Panel */}
-                  <form onSubmit={handleSimulateMsgSubmit} style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--primary)' }}>⚡ Sync Simulator (Test Tool)</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <select className="form-control" value={simDirection} onChange={e => setSimDirection(e.target.value)} style={{ padding: '4px', fontSize: '11px', height: '28px', background: 'var(--bg-card)' }}>
-                          <option value="Incoming">Incoming (Client)</option>
-                          <option value="Outgoing">Outgoing (Agent)</option>
-                        </select>
-                      </div>
+                {/* Simulator Panel */}
+                <form onSubmit={handleSimulateMsgSubmit} style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--primary)' }}>⚡ Sync Simulator (Test Tool)</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <select className="form-control" value={simDirection} onChange={e => setSimDirection(e.target.value)} style={{ padding: '4px', fontSize: '11px', height: '28px', background: 'var(--bg-card)' }}>
+                      <option value="Incoming">Incoming (Client)</option>
+                      <option value="Outgoing">Outgoing (Agent)</option>
+                    </select>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      placeholder="Type message..." 
+                      value={simMsgText} 
+                      onChange={e => setSimMsgText(e.target.value)}
+                      style={{ padding: '4px 8px', fontSize: '11px', height: '28px' }}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '10px', alignSelf: 'flex-end' }} disabled={simulating}>
+                    {simulating ? 'Syncing...' : 'Simulate WhatsApp Msg'}
+                  </button>
+                </form>
+
+                {/* Structured Follow-Up Notes Form */}
+                <form onSubmit={handleWhatsAppNotesSubmit} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#8b5cf6', margin: 0 }}>📝 Structured WhatsApp Notes</h4>
+                  
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Discussion Summary *</label>
+                    <textarea 
+                      className="form-control" 
+                      value={waNotesSummary} 
+                      onChange={e => setWaNotesSummary(e.target.value)}
+                      placeholder="Summary of what was discussed..."
+                      style={{ fontSize: '11.5px', padding: '6px', background: 'var(--bg-card)' }}
+                      rows={2}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Customer Interest</label>
+                      <select 
+                        className="form-control" 
+                        value={waNotesInterest} 
+                        onChange={e => setWaNotesInterest(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '4px', background: 'var(--bg-card)', height: '28px' }}
+                      >
+                        <option value="">Select interest...</option>
+                        <option value="Very High">Very High</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                        <option value="Not Interested">Not Interested</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Budget Discussion</label>
                       <input 
                         type="text" 
                         className="form-control" 
-                        placeholder="Type message..." 
-                        value={simMsgText} 
-                        onChange={e => setSimMsgText(e.target.value)}
-                        style={{ padding: '4px 8px', fontSize: '11px', height: '28px' }}
+                        value={waNotesBudget} 
+                        onChange={e => setWaNotesBudget(e.target.value)}
+                        placeholder="e.g. Max 45L"
+                        style={{ fontSize: '11.5px', padding: '4px 8px', height: '28px' }}
                       />
                     </div>
-                    <button 
-                      type="submit" 
-                      className="btn btn-secondary" 
-                      style={{ padding: '4px 8px', fontSize: '10px', alignSelf: 'flex-end' }}
-                      disabled={simulating}
-                    >
-                      {simulating ? 'Syncing...' : 'Simulate WhatsApp Msg'}
-                    </button>
-                  </form>
+                  </div>
 
-                </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Objections / Concerns</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={waNotesObjections} 
+                      onChange={e => setWaNotesObjections(e.target.value)}
+                      placeholder="e.g. RERA approval, road width..."
+                      style={{ fontSize: '11.5px', padding: '6px', height: '28px' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Next Action / Commitment</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={waNotesNextAction} 
+                      onChange={e => setWaNotesNextAction(e.target.value)}
+                      placeholder="e.g. Schedule site visit for Sunday"
+                      style={{ fontSize: '11.5px', padding: '6px', height: '28px' }}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ background: '#8b5cf6', border: 'none', color: '#fff', fontSize: '11px', padding: '8px', fontWeight: 600 }} disabled={waNotesSaving}>
+                    {waNotesSaving ? 'Saving...' : 'Save WhatsApp Notes'}
+                  </button>
+                </form>
+
+                {/* Priority Follow-Up Scheduler Form */}
+                <form onSubmit={handleWhatsAppFollowUpSubmit} style={{ background: 'rgba(245, 158, 11, 0.02)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '14px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', margin: 0 }}>⏰ Priority Follow-Up Scheduler</h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Date *</label>
+                      <input 
+                        type="date" 
+                        className="form-control" 
+                        value={waFollowUpDate} 
+                        onChange={e => setWaFollowUpDate(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '4px', height: '28px' }}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Time</label>
+                      <input 
+                        type="time" 
+                        className="form-control" 
+                        value={waFollowUpTime} 
+                        onChange={e => setWaFollowUpTime(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '4px', height: '28px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '8px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Reminder Details *</label>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        value={waFollowUpNotes} 
+                        onChange={e => setWaFollowUpNotes(e.target.value)}
+                        placeholder="e.g. Call to discuss objections"
+                        style={{ fontSize: '11.5px', padding: '6px', height: '28px' }}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Priority</label>
+                      <select 
+                        className="form-control" 
+                        value={waFollowUpPriority} 
+                        onChange={e => setWaFollowUpPriority(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '4px', height: '28px', background: 'var(--bg-card)' }}
+                      >
+                        <option value="Low">🟢 Low</option>
+                        <option value="Medium">🟡 Medium</option>
+                        <option value="High">🔴 High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ background: '#f59e0b', border: 'none', color: '#000', fontSize: '11px', padding: '8px', fontWeight: 700 }} disabled={waFollowUpSaving}>
+                    {waFollowUpSaving ? 'Scheduling...' : 'Create Reminder'}
+                  </button>
+                </form>
+
               </div>
             )}
 
-            {/* Tab content 4: GPS Geofence */}
-            {activeTab === 'gps' && (
+            {/* Tab content 4: Site Visits & GPS Geofence */}
+            {activeTab === 'site_visits' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px', fontSize: '11.5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -1243,6 +1614,94 @@ export default function LeadDetailDrawer({
                     <button type="button" className="btn btn-primary" onClick={handleGPSCheckIn} style={{ padding: '6px 12px', fontSize: '11px' }}>
                       📍 GPS Check-In
                     </button>
+                  </div>
+                )}
+
+                {/* Site Visits History list */}
+                <div style={{ marginTop: '10px' }}>
+                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Site Visit History</h4>
+                  {siteVisits.length === 0 ? (
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No site visits logged yet.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {siteVisits.map(v => (
+                        <div key={v.id} style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: '11.5px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                            <span>📅 {new Date(v.visit_date).toLocaleDateString()}</span>
+                            <span style={{ color: v.outcome === 'Cancelled' ? 'var(--color-hot)' : 'var(--color-success)', fontWeight: 'bold' }}>{v.outcome || 'Scheduled'}</span>
+                          </div>
+                          {v.check_in_time && <div>Check-In: {new Date(v.check_in_time).toLocaleTimeString()}</div>}
+                          {v.check_out_time && <div>Check-Out: {new Date(v.check_out_time).toLocaleTimeString()}</div>}
+                          {v.feedback && <div style={{ fontStyle: 'italic', marginTop: '4px', color: 'var(--text-muted)' }}>"{v.feedback}"</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Tab content 5: Bookings */}
+            {activeTab === 'bookings' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Confirmed Bookings</h4>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={() => setShowBookingPanel(!showBookingPanel)}
+                    style={{ padding: '4px 8px', fontSize: '10.5px' }}
+                  >
+                    {showBookingPanel ? 'Cancel' : '+ Book New Unit'}
+                  </button>
+                </div>
+
+                {drawerBookingsLoading ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>Loading bookings...</div>
+                ) : drawerBookings.length === 0 && !showBookingPanel ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>No bookings confirmed yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {drawerBookings.map(b => (
+                      <div key={b.id} style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px', fontSize: '11.5px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                          <span>🏠 Unit {b.unit_number || 'N/A'}</span>
+                          <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>{b.status || 'Confirmed'}</span>
+                        </div>
+                        <div>Project: {b.projects ? b.projects.name : 'Vrindavan Estates'}</div>
+                        <div>Booking Date: {b.booking_date}</div>
+                        <div>Token Amount: ₹{parseFloat(b.token_amount).toLocaleString()}</div>
+                        <div>Total Booking Amount: ₹{parseFloat(b.booking_amount).toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab content 6: Payments */}
+            {activeTab === 'payments' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', margin: 0 }}>Payment Installments & Schedule</h4>
+                {drawerPaymentsLoading ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px' }}>Loading payment records...</div>
+                ) : drawerPayments.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px', border: '1px dashed var(--border-color)', borderRadius: '6px' }}>No payment schedules found. Make sure a unit booking is confirmed first.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {drawerPayments.map(p => (
+                      <div key={p.id} style={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px', fontSize: '11.5px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                          <span>💰 Payment Record</span>
+                          <span style={{ color: p.status === 'Completed' ? 'var(--color-success)' : '#eab308', fontWeight: 'bold' }}>{p.status || 'Pending'}</span>
+                        </div>
+                        <div>Unit: {p.bookings ? p.bookings.unit_number : 'N/A'}</div>
+                        <div>Total Cost: ₹{parseFloat(p.total_cost).toLocaleString()}</div>
+                        <div>Received: ₹{parseFloat(p.amount_received).toLocaleString()}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--color-hot)' }}>Balance: ₹{parseFloat(p.balance).toLocaleString()}</div>
+                        {p.due_date && <div>Due Date: {p.due_date}</div>}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

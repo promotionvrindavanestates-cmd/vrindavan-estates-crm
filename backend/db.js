@@ -114,6 +114,8 @@ function loadLocalDb() {
     if (!data.site_visits) data.site_visits = [];
     if (!data.booking_milestones) data.booking_milestones = [];
     if (!data.whatsapp_messages) data.whatsapp_messages = [];
+    if (!data.whatsapp_activities) data.whatsapp_activities = [];
+    if (!data.whatsapp_notes) data.whatsapp_notes = [];
     data.users.forEach(u => {
       if (!u.status) u.status = 'active';
       if (!u.token_version) u.token_version = 1;
@@ -706,30 +708,46 @@ const DB = {
   async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null, call_type = 'Outgoing', synced_from_device = false, device_call_id = null, needs_notes = false, extra = {}) {
     const { start_time, end_time, device_id, recording_url, recording_duration, recording_timestamp } = extra || {};
     if (this.isCloud()) {
-      const { error: logError } = await supabase
-        .from('call_logs')
-        .insert([{ 
-          lead_id: leadId, 
-          caller_id: callerId, 
-          response, 
-          notes,
-          duration,
-          action_taken,
-          follow_up_date,
-          follow_up_time,
-          follow_up_datetime,
-          call_type,
-          synced_from_device,
-          device_call_id,
-          needs_notes,
-          start_time: start_time || null,
-          end_time: end_time || null,
-          device_id: device_id || null,
-          recording_url: recording_url || null,
-          recording_duration: recording_duration || 0,
-          recording_timestamp: recording_timestamp || null
-        }]);
-      if (logError) throw logError;
+      try {
+        const { error: logError } = await supabase
+          .from('call_logs')
+          .insert([{ 
+            lead_id: leadId, 
+            caller_id: callerId, 
+            response, 
+            notes,
+            duration,
+            action_taken,
+            follow_up_date,
+            follow_up_time,
+            follow_up_datetime,
+            call_type,
+            synced_from_device,
+            device_call_id,
+            needs_notes,
+            start_time: start_time || null,
+            end_time: end_time || null,
+            device_id: device_id || null,
+            recording_url: recording_url || null,
+            recording_duration: recording_duration || 0,
+            recording_timestamp: recording_timestamp || null
+          }]);
+        if (logError) throw logError;
+      } catch (insertErr) {
+        console.warn('Full logCall insert failed, attempting fallback insertion with base columns:', insertErr);
+        const { error: fallbackError } = await supabase
+          .from('call_logs')
+          .insert([{
+            lead_id: leadId,
+            caller_id: callerId,
+            response,
+            notes
+          }]);
+        if (fallbackError) {
+          console.error('Fallback logCall insert also failed:', fallbackError);
+          throw fallbackError;
+        }
+      }
 
       const { data, error: updateError } = await supabase
         .from('leads')
@@ -822,9 +840,18 @@ const DB = {
     // 2. Fetch already synced call ids
     let existingIds = new Set();
     if (this.isCloud()) {
-      const { data, error } = await supabase.from('call_logs').select('device_call_id').not('device_call_id', 'is', null);
-      if (error) throw error;
-      data.forEach(c => existingIds.add(c.device_call_id));
+      try {
+        const { data, error } = await supabase.from('call_logs').select('device_call_id').not('device_call_id', 'is', null);
+        if (error) {
+          console.warn('Supabase fetch existing call ids error (likely schema drift):', error);
+        } else if (data) {
+          data.forEach(c => {
+            if (c.device_call_id) existingIds.add(c.device_call_id);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch existing device call ids from Supabase:', err);
+      }
     } else {
       const db = loadLocalDb();
       const logs = db.call_logs || [];
@@ -898,25 +925,33 @@ const DB = {
   },
 
   async getPendingCallLogs(userId, role) {
-    if (this.isCloud()) {
-      let query = supabase.from('call_logs').select('*, leads(*)').eq('needs_notes', true);
-      if (role === 'employee') {
-        query = query.eq('caller_id', userId);
+    try {
+      if (this.isCloud()) {
+        let query = supabase.from('call_logs').select('*, leads(*)').eq('needs_notes', true);
+        if (role === 'employee') {
+          query = query.eq('caller_id', userId);
+        }
+        const { data, error } = await query;
+        if (error) {
+          console.warn('Supabase getPendingCallLogs error (likely schema drift):', error);
+          return [];
+        }
+        return data || [];
+      } else {
+        const db = loadLocalDb();
+        let logs = db.call_logs || [];
+        logs = logs.filter(c => c.needs_notes === true);
+        if (role === 'employee') {
+          logs = logs.filter(c => c.caller_id === userId);
+        }
+        return logs.map(c => {
+          const lead = db.leads.find(l => l.id === c.lead_id);
+          return { ...c, leads: lead || null };
+        });
       }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
-    } else {
-      const db = loadLocalDb();
-      let logs = db.call_logs || [];
-      logs = logs.filter(c => c.needs_notes === true);
-      if (role === 'employee') {
-        logs = logs.filter(c => c.caller_id === userId);
-      }
-      return logs.map(c => {
-        const lead = db.leads.find(l => l.id === c.lead_id);
-        return { ...c, leads: lead || null };
-      });
+    } catch (err) {
+      console.error('getPendingCallLogs fallback error:', err);
+      return [];
     }
   },
 
@@ -944,24 +979,36 @@ const DB = {
     };
 
     if (this.isCloud()) {
-      // Update call log
-      const { data, error: updateError } = await supabase
-        .from('call_logs')
-        .update(updateFields)
-        .eq('id', callId)
-        .select()
-        .single();
-      if (updateError) throw updateError;
+      try {
+        // Update call log
+        const { data, error: updateError } = await supabase
+          .from('call_logs')
+          .update(updateFields)
+          .eq('id', callId)
+          .select()
+          .single();
+        if (updateError) throw updateError;
 
-      // Update lead
-      await supabase
-        .from('leads')
-        .update({
-          follow_up_date: (actionTaken !== 'None' && followUpDate) ? followUpDate : undefined
-        })
-        .eq('id', callLog.lead_id);
+        // Update lead
+        await supabase
+          .from('leads')
+          .update({
+            follow_up_date: (actionTaken !== 'None' && followUpDate) ? followUpDate : undefined
+          })
+          .eq('id', callLog.lead_id);
 
-      return data;
+        return data;
+      } catch (e) {
+        console.warn('Fallback completeCallNotes: updating only notes column due to schema difference', e);
+        const { data: baseData, error: baseUpdateError } = await supabase
+          .from('call_logs')
+          .update({ notes: notes || '' })
+          .eq('id', callId)
+          .select()
+          .single();
+        if (baseUpdateError) throw baseUpdateError;
+        return baseData;
+      }
     } else {
       const db = loadLocalDb();
       const idx = db.call_logs.findIndex(c => c.id === callId);
@@ -2825,7 +2872,8 @@ const DB = {
       reminder_time: reminderData.reminder_time || null,
       notes: reminderData.notes || '',
       is_read: reminderData.is_read || false,
-      assigned_employee_id: reminderData.assigned_employee_id || null
+      assigned_employee_id: reminderData.assigned_employee_id || null,
+      priority: reminderData.priority || 'Medium'
     };
 
     if (this.isCloud()) {
@@ -3752,6 +3800,107 @@ const DB = {
       db.whatsapp_messages.push(newMsg);
       saveLocalDb(db);
       return newMsg;
+    }
+  },
+
+  async logWhatsAppActivity(leadId, employeeId, actionType = 'WhatsApp Opened') {
+    const formatted = {
+      lead_id: leadId,
+      employee_id: employeeId || null,
+      action_type: actionType,
+      timestamp: new Date().toISOString()
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_activities')
+        .insert([formatted])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_activities) db.whatsapp_activities = [];
+      const record = {
+        id: generateUuid(),
+        created_at: new Date().toISOString(),
+        ...formatted
+      };
+      db.whatsapp_activities.push(record);
+      saveLocalDb(db);
+      return record;
+    }
+  },
+
+  async getWhatsAppActivities(leadId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_activities')
+        .select('*, employee:users!employee_id(*)')
+        .eq('lead_id', leadId)
+        .order('timestamp', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_activities) db.whatsapp_activities = [];
+      const list = db.whatsapp_activities.filter(a => a.lead_id === leadId);
+      return list.map(a => {
+        const emp = db.users.find(u => u.id === a.employee_id);
+        return { ...a, employee: emp || null };
+      }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+  },
+
+  async saveWhatsAppNotes(leadId, employeeId, notesData) {
+    const formatted = {
+      lead_id: leadId,
+      employee_id: employeeId || null,
+      discussion_summary: notesData.discussion_summary || '',
+      customer_interest: notesData.customer_interest || '',
+      budget_discussion: notesData.budget_discussion || '',
+      objections: notesData.objections || '',
+      next_action: notesData.next_action || '',
+      created_at: new Date().toISOString()
+    };
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_notes')
+        .insert([formatted])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_notes) db.whatsapp_notes = [];
+      const record = {
+        id: generateUuid(),
+        ...formatted
+      };
+      db.whatsapp_notes.push(record);
+      saveLocalDb(db);
+      return record;
+    }
+  },
+
+  async getWhatsAppNotes(leadId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('whatsapp_notes')
+        .select('*, employee:users!employee_id(*)')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      if (!db.whatsapp_notes) db.whatsapp_notes = [];
+      const list = db.whatsapp_notes.filter(n => n.lead_id === leadId);
+      return list.map(n => {
+        const emp = db.users.find(u => u.id === n.employee_id);
+        return { ...n, employee: emp || null };
+      }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
   },
 

@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
 import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, Award as Trophy, Eye, LayoutGrid, DollarSign, PhoneCall, MessageSquare, Percent, Landmark, Activity } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import RecentActivities from './RecentActivities';
 
-export default function Dashboard({ leads = [], employees = [], onSelectLead, onDrillDown, onOpenLeadDrawer }) {
+export default function Dashboard({ leads = [], employees = [], lastUpdated, onSelectLead, onDrillDown, onOpenLeadDrawer }) {
   const [stats, setStats] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isLazyLoading, setIsLazyLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeFollowUpTab, setActiveFollowUpTab] = useState('today'); // 'today', 'missed', 'upcoming'
 
@@ -102,6 +103,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
     const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(messageText)}`;
     
     try {
+      await api.logWhatsAppActivity({ leadId: activeWhatsAppLead.id, actionType: 'WhatsApp Opened' });
       await api.logWhatsAppClick(activeWhatsAppLead.id, activeWhatsAppPhone, messageText);
     } catch (err) {
       console.warn('Failed to log WhatsApp click activity:', err);
@@ -140,9 +142,11 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
       alert('Call notes saved successfully!');
       setCallNotesModalOpen(false);
       setSelectedCallForNotes(null);
-      fetchPendingCalls();
-      fetchDashboardStats();
-      fetchRemindersList();
+      await Promise.all([
+        fetchPendingCalls(),
+        fetchDashboardStats(),
+        fetchRemindersList()
+      ]);
     } catch (err) {
       alert(`Failed to save notes: ${err.message}`);
     } finally {
@@ -150,22 +154,62 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
     }
   };
 
+  const lastFetchRef = useRef(0);
+
   useEffect(() => {
-    fetchDashboardStats();
-    fetchRemindersList();
-    fetchPendingCalls();
-  }, [leads, employees]); // Refresh when core data changes
+    const now = Date.now();
+    if (now - lastFetchRef.current < 3000) {
+      console.log('Skipping duplicate stats fetch (debounced)');
+      return;
+    }
+    lastFetchRef.current = now;
+
+    loadInitialDashboardData();
+  }, [lastUpdated]); // Depend on primitive lastUpdated
+
+  const loadInitialDashboardData = async () => {
+    setLoading(true);
+    try {
+      // Fetch basic stats, reminders, and pending calls in parallel for faster startup
+      const [basicData, remindersData, pendingCallsData] = await Promise.all([
+        api.getAdvancedDashboardStats({ basic: true }),
+        api.getReminders(),
+        api.getPendingMobileCalls()
+      ]);
+
+      setStats(basicData);
+      setReminders(remindersData || []);
+      setPendingCalls(pendingCallsData || []);
+      setLoading(false); // Unblock KPI cards render immediately
+
+      // Fetch full stats in the background (lazy load remaining widgets)
+      setIsLazyLoading(true);
+      const fullData = await api.getAdvancedDashboardStats();
+      setStats(fullData);
+    } catch (e) {
+      console.error('Failed to load initial dashboard data:', e);
+      setError('Failed to fetch real-time dashboard statistics.');
+    } finally {
+      setLoading(false);
+      setIsLazyLoading(false);
+    }
+  };
 
   const fetchDashboardStats = async () => {
     setLoading(true);
     try {
-      const data = await api.getAdvancedDashboardStats();
-      setStats(data);
+      const basicData = await api.getAdvancedDashboardStats({ basic: true });
+      setStats(basicData);
+      setLoading(false);
+
+      setIsLazyLoading(true);
+      const fullData = await api.getAdvancedDashboardStats();
+      setStats(fullData);
     } catch (e) {
       console.error('Failed to load dashboard stats:', e);
-      setError('Failed to fetch real-time dashboard statistics. Showing client-side estimation.');
     } finally {
       setLoading(false);
+      setIsLazyLoading(false);
     }
   };
 
@@ -301,7 +345,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
               Sales Conversion Funnel
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {stats && stats.funnel ? (
+              {!isLazyLoading && stats && stats.funnel ? (
                 (() => {
                   const funnelStages = [
                     { key: 'new', label: 'New Inquiries', count: stats.funnel.new, color: '#6366f1', description: 'Fresh incoming leads', filter: { status: 'New' } },
@@ -631,32 +675,38 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                 <BarChart2 size={18} style={{ color: 'var(--primary)' }} />
                 Booking & Revenue Summary
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', flex: 1, alignContent: 'center' }}>
-                <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Today's Bookings</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
-                    {stats?.summary?.todayBookingsCount || 0}
+              {isLazyLoading || !stats || stats.basic ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Loading booking & collection analytics...
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', flex: 1, alignContent: 'center' }}>
+                  <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Today's Bookings</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
+                      {stats?.summary?.todayBookingsCount || 0}
+                    </div>
+                  </div>
+                  <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Monthly Bookings</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
+                      {stats?.summary?.monthlyBookingsCount || 0}
+                    </div>
+                  </div>
+                  <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Collection Received</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#22c55e', marginTop: '4px' }}>
+                      ₹{(stats?.summary?.collectionReceived || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pending Collection</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '4px' }}>
+                      ₹{(stats?.summary?.pendingCollection || 0).toLocaleString()}
+                    </div>
                   </div>
                 </div>
-                <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Monthly Bookings</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-main)', marginTop: '4px' }}>
-                    {stats?.summary?.monthlyBookingsCount || 0}
-                  </div>
-                </div>
-                <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Collection Received</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#22c55e', marginTop: '4px' }}>
-                    ₹{(stats?.summary?.collectionReceived || 0).toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ background: 'var(--bg-input)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pending Collection</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '4px' }}>
-                    ₹{(stats?.summary?.pendingCollection || 0).toLocaleString()}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Widget 5: Lead Aging Analysis */}
@@ -665,47 +715,53 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                 <Compass size={18} style={{ color: 'var(--primary)' }} />
                 Lead Aging Analysis
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, justifyContent: 'center' }}>
-                {(() => {
-                  const buckets = [
-                    { label: 'Active (<7 Days)', count: stats?.leadAging?.active || 0, color: '#22c55e', daysStart: 7, daysEnd: 0 },
-                    { label: 'Stagnant (7-15 Days)', count: stats?.leadAging?.stagnant || 0, color: '#eab308', daysStart: 15, daysEnd: 7 },
-                    { label: 'Cold (15-30 Days)', count: stats?.leadAging?.cold || 0, color: '#f97316', daysStart: 30, daysEnd: 15 },
-                    { label: 'Critical (30+ Days)', count: stats?.leadAging?.critical || 0, color: '#ef4444', daysStart: 9999, daysEnd: 30 }
-                  ];
-                  const getPastDateStr = (days) => {
-                    if (days === 9999) return '';
-                    const d = new Date();
-                    d.setDate(d.getDate() - days);
-                    return d.toISOString().split('T')[0];
-                  };
-                  
-                  const totalAgingLeads = buckets.reduce((sum, b) => sum + b.count, 0) || 1;
+              {isLazyLoading || !stats || stats.basic ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Analyzing lead aging...
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, justifyContent: 'center' }}>
+                  {(() => {
+                    const buckets = [
+                      { label: 'Active (<7 Days)', count: stats?.leadAging?.active || 0, color: '#22c55e', daysStart: 7, daysEnd: 0 },
+                      { label: 'Stagnant (7-15 Days)', count: stats?.leadAging?.stagnant || 0, color: '#eab308', daysStart: 15, daysEnd: 7 },
+                      { label: 'Cold (15-30 Days)', count: stats?.leadAging?.cold || 0, color: '#f97316', daysStart: 30, daysEnd: 15 },
+                      { label: 'Critical (30+ Days)', count: stats?.leadAging?.critical || 0, color: '#ef4444', daysStart: 9999, daysEnd: 30 }
+                    ];
+                    const getPastDateStr = (days) => {
+                      if (days === 9999) return '';
+                      const d = new Date();
+                      d.setDate(d.getDate() - days);
+                      return d.toISOString().split('T')[0];
+                    };
+                    
+                    const totalAgingLeads = buckets.reduce((sum, b) => sum + b.count, 0) || 1;
 
-                  return buckets.map(b => {
-                    const pct = Math.round((b.count / totalAgingLeads) * 100);
-                    const start = getPastDateStr(b.daysStart);
-                    const end = getPastDateStr(b.daysEnd);
+                    return buckets.map(b => {
+                      const pct = Math.round((b.count / totalAgingLeads) * 100);
+                      const start = getPastDateStr(b.daysStart);
+                      const end = getPastDateStr(b.daysEnd);
 
-                    return (
-                      <div 
-                        key={b.label}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => onDrillDown && onDrillDown('Lead Aging', { created_start: start, created_end: end })}
-                        title={`View ${b.count} leads`}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{b.label}</span>
-                          <span style={{ color: b.color, fontWeight: 'bold' }}>{b.count} ({pct}%)</span>
+                      return (
+                        <div 
+                          key={b.label}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => onDrillDown && onDrillDown('Lead Aging', { created_start: start, created_end: end })}
+                          title={`View ${b.count} leads`}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{b.label}</span>
+                            <span style={{ color: b.color, fontWeight: 'bold' }}>{b.count} ({pct}%)</span>
+                          </div>
+                          <div style={{ background: 'var(--bg-input)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, background: b.color, height: '100%', borderRadius: '4px' }}></div>
+                          </div>
                         </div>
-                        <div style={{ background: 'var(--bg-input)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, background: b.color, height: '100%', borderRadius: '4px' }}></div>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
             </div>
 
             {/* Widget 6: Follow-up Compliance */}
@@ -714,72 +770,78 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
                 <CheckCircle size={18} style={{ color: 'var(--color-success)' }} />
                 Follow-up Compliance
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                
-                {/* Big Circular Compliance Indicator */}
-                <div style={{ 
-                  position: 'relative', 
-                  width: '100px', 
-                  height: '100px', 
-                  borderRadius: '50%', 
-                  background: `conic-gradient(var(--color-success) ${stats?.compliance?.rate || 100}%, var(--bg-input) 0)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <div style={{ 
-                    width: '84px', 
-                    height: '84px', 
-                    borderRadius: '50%', 
-                    background: 'var(--bg-card)', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
-                  }}>
-                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                      {stats?.compliance?.rate || 100}%
-                    </span>
-                    <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Compliance
-                    </span>
-                  </div>
+              {isLazyLoading || !stats || stats.basic ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Calculating compliance score...
                 </div>
-
-                {/* Metrics list */}
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-around', fontSize: '12px' }}>
-                  <div 
-                    style={{ textAlign: 'center', cursor: 'pointer' }}
-                    onClick={() => onDrillDown && onDrillDown('Completed Follow-ups', {})}
-                  >
-                    <div style={{ color: 'var(--color-success)', fontWeight: 'bold', fontSize: '14px' }}>
-                      {stats?.compliance?.completed || 0}
-                    </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Completed</div>
-                  </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                   
-                  <div 
-                    style={{ textAlign: 'center', cursor: 'pointer' }}
-                    onClick={() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      onDrillDown && onDrillDown('Missed Follow-ups', { followup_end: today });
-                    }}
-                  >
-                    <div style={{ color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '14px' }}>
-                      {stats?.compliance?.missed || 0}
+                  {/* Big Circular Compliance Indicator */}
+                  <div style={{ 
+                    position: 'relative', 
+                    width: '100px', 
+                    height: '100px', 
+                    borderRadius: '50%', 
+                    background: `conic-gradient(var(--color-success) ${stats?.compliance?.rate || 100}%, var(--bg-input) 0)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{ 
+                      width: '84px', 
+                      height: '84px', 
+                      borderRadius: '50%', 
+                      background: 'var(--bg-card)', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      alignItems: 'center', 
+                      justifyContent: 'center' 
+                    }}>
+                      <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                        {stats?.compliance?.rate || 100}%
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Compliance
+                      </span>
                     </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Missed</div>
                   </div>
 
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ color: 'var(--color-info)', fontWeight: 'bold', fontSize: '14px' }}>
-                      {stats?.compliance?.pending || 0}
+                  {/* Metrics list */}
+                  <div style={{ width: '100%', display: 'flex', justifyContent: 'space-around', fontSize: '12px' }}>
+                    <div 
+                      style={{ textAlign: 'center', cursor: 'pointer' }}
+                      onClick={() => onDrillDown && onDrillDown('Completed Follow-ups', {})}
+                    >
+                      <div style={{ color: 'var(--color-success)', fontWeight: 'bold', fontSize: '14px' }}>
+                        {stats?.compliance?.completed || 0}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Completed</div>
                     </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Pending</div>
+                    
+                    <div 
+                      style={{ textAlign: 'center', cursor: 'pointer' }}
+                      onClick={() => {
+                        const today = new Date().toISOString().split('T')[0];
+                        onDrillDown && onDrillDown('Missed Follow-ups', { followup_end: today });
+                      }}
+                    >
+                      <div style={{ color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '14px' }}>
+                        {stats?.compliance?.missed || 0}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Missed</div>
+                    </div>
+
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: 'var(--color-info)', fontWeight: 'bold', fontSize: '14px' }}>
+                        {stats?.compliance?.pending || 0}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Pending</div>
+                    </div>
                   </div>
+
                 </div>
-
-              </div>
+              )}
             </div>
 
           </div>
@@ -795,11 +857,11 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
             </div>
 
             <div className="table-container">
-              {loading ? (
+              {isLazyLoading || loading || !stats || stats.basic ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
                   Calculating conversion rates and rankings...
                 </div>
-              ) : !stats || stats.employeePerformance.length === 0 ? (
+              ) : !stats.employeePerformance || stats.employeePerformance.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
                   No employee data registered in system.
                 </div>

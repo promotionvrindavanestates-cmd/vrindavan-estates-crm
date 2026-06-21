@@ -41,7 +41,7 @@ export default function LeadTable({
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(20);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [employeeFilterHeading, setEmployeeFilterHeading] = useState('');
 
@@ -286,6 +286,7 @@ export default function LeadTable({
     const url = `https://wa.me/${waPhone}?text=${encodeURIComponent(messageText)}`;
     
     try {
+      await api.logWhatsAppActivity({ leadId: activeWhatsAppLead.id, actionType: 'WhatsApp Opened' });
       await api.logWhatsAppClick(activeWhatsAppLead.id, activeWhatsAppPhone, messageText);
     } catch (err) {
       console.warn('Failed to log WhatsApp campaign click:', err);

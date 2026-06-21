@@ -12,7 +12,7 @@ import ProjectMaster from './components/ProjectMaster';
 import InventoryMgmt from './components/InventoryMgmt';
 import BookingsRegistry from './components/BookingsRegistry';
 import WhatsAppCampaigns from './components/WhatsAppCampaigns';
-import ReportsAnalytics from './components/ReportsAnalytics';
+const ReportsAnalytics = React.lazy(() => import('./components/ReportsAnalytics'));
 import LeadDetailsModal from './components/LeadDetailsModal';
 import RemindersModal from './components/RemindersModal';
 import LeadDetailDrawer from './components/LeadDetailDrawer';
@@ -20,7 +20,7 @@ import LeadPipeline from './components/LeadPipeline';
 import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
-import CollectionDashboard from './components/CollectionDashboard';
+const CollectionDashboard = React.lazy(() => import('./components/CollectionDashboard'));
 import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
@@ -74,6 +74,9 @@ export default function App() {
   
   // 15-minute advance reminder check state
   const [activeAlertReminder, setActiveAlertReminder] = useState(null);
+
+  // Keep track of when data was last updated for dashboard reloading
+  const [lastUpdated, setLastUpdated] = useState(Date.now());
 
   // Check login on startup
   useEffect(() => {
@@ -173,7 +176,7 @@ export default function App() {
     };
 
     pollAlerts();
-    const timerId = setInterval(pollAlerts, 20000);
+    const timerId = setInterval(pollAlerts, 60000);
     return () => clearInterval(timerId);
   }, [currentUser]);
 
@@ -263,7 +266,7 @@ export default function App() {
     }
 
     checkUpcomingReminders();
-    const interval = setInterval(checkUpcomingReminders, 30000);
+    const interval = setInterval(checkUpcomingReminders, 60000);
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -376,13 +379,25 @@ export default function App() {
     if (!user) return;
     setDataLoading(true);
     try {
-      // Limit to 100 on startup to prevent crashing on large datasets
-      const leadsData = await api.getLeads({ limit: 100, page: 1 });
+      const promises = [
+        api.getLeads({ limit: 20, page: 1 }),
+        api.getReminderWidgets()
+      ];
+      if (user.role === 'admin') {
+        promises.push(api.getEmployees());
+      }
+
+      const results = await Promise.all(promises);
+      const leadsData = results[0];
+      const widgets = results[1];
+      const employeesData = user.role === 'admin' ? results[2] : null;
+
       setLeads(leadsData.leads || leadsData);
-      
-      // Fetch active follow-ups count from widgets API
-      const widgets = await api.getReminderWidgets();
       setRemindersCount(widgets.today || 0);
+
+      if (user.role === 'admin' && employeesData) {
+        setEmployees(employeesData);
+      }
 
       if (window.Capacitor) {
         try {
@@ -392,15 +407,11 @@ export default function App() {
           console.error('Failed to schedule notifications:', e);
         }
       }
-
-      if (user.role === 'admin') {
-        const employeesData = await api.getEmployees();
-        setEmployees(employeesData);
-      }
     } catch (err) {
       console.error('Failed to load CRM data:', err);
     } finally {
       setDataLoading(false);
+      setLastUpdated(Date.now());
     }
   };
 
@@ -709,7 +720,7 @@ export default function App() {
         </div>
 
         {/* Main Tab Views Switcher */}
-        {dataLoading ? (
+        {dataLoading && activeTab !== 'dashboard' ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
             Refreshing database data...
           </div>
@@ -719,6 +730,7 @@ export default function App() {
               <Dashboard 
                 leads={leads} 
                 employees={employees} 
+                lastUpdated={lastUpdated}
                 onSelectLead={handleSelectLeadFromDashboard} 
                 onDrillDown={handleDrillDown}
                 onOpenLeadDrawer={handleOpenLeadDrawer}
@@ -782,7 +794,9 @@ export default function App() {
             )}
 
             {activeTab === 'collections' && (
-              <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />
+              <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Collections...</div>}>
+                <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />
+              </React.Suspense>
             )}
 
             {activeTab === 'whatsapp' && (
@@ -790,7 +804,9 @@ export default function App() {
             )}
 
             {activeTab === 'reports' && (
-              <ReportsAnalytics currentUser={currentUser} onDrillDown={handleDrillDown} />
+              <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Reports...</div>}>
+                <ReportsAnalytics currentUser={currentUser} onDrillDown={handleDrillDown} />
+              </React.Suspense>
             )}
 
             {activeTab === 'employees' && currentUser.role === 'admin' && (

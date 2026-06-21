@@ -544,6 +544,170 @@ app.post('/api/whatsapp/messages/simulate', authenticateToken, async (req, res) 
   }
 });
 
+app.post('/api/whatsapp/activity', authenticateToken, async (req, res) => {
+  const { leadId, actionType } = req.body;
+  if (!leadId) {
+    return res.status(400).json({ error: 'leadId is required' });
+  }
+  try {
+    const activity = await DB.logWhatsAppActivity(leadId, req.user.id, actionType || 'WhatsApp Opened');
+    
+    // Auto-create timeline event via audit log
+    await DB.logAudit(
+      leadId,
+      'WhatsApp Clicked',
+      `WhatsApp link clicked by employee. Action: ${actionType || 'WhatsApp Opened'}`,
+      req.user.id,
+      req.user.full_name
+    );
+
+    res.json(activity);
+  } catch (e) {
+    console.error('Log WhatsApp activity error:', e);
+    res.status(500).json({ error: 'Failed to log WhatsApp activity' });
+  }
+});
+
+app.get('/api/whatsapp/activities/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getWhatsAppActivities(req.params.leadId);
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch WhatsApp activities' });
+  }
+});
+
+app.post('/api/whatsapp/notes', authenticateToken, async (req, res) => {
+  const { leadId, discussionSummary, customerInterest, budgetDiscussion, objections, nextAction } = req.body;
+  if (!leadId) {
+    return res.status(400).json({ error: 'leadId is required' });
+  }
+  try {
+    const notesData = {
+      discussion_summary: discussionSummary,
+      customer_interest: customerInterest,
+      budget_discussion: budgetDiscussion,
+      objections: objections,
+      next_action: nextAction
+    };
+    const notes = await DB.saveWhatsAppNotes(leadId, req.user.id, notesData);
+    
+    // Log audit trail
+    await DB.logAudit(
+      leadId,
+      'WhatsApp Notes Added',
+      `WhatsApp notes added: Summary: ${discussionSummary || 'N/A'}. Interest: ${customerInterest || 'N/A'}. Budget: ${budgetDiscussion || 'N/A'}. Objections: ${objections || 'N/A'}. Next: ${nextAction || 'N/A'}`,
+      req.user.id,
+      req.user.full_name
+    );
+
+    res.json(notes);
+  } catch (e) {
+    console.error('Save WhatsApp notes error:', e);
+    res.status(500).json({ error: 'Failed to save WhatsApp notes' });
+  }
+});
+
+app.get('/api/whatsapp/notes/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getWhatsAppNotes(req.params.leadId);
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch WhatsApp notes' });
+  }
+});
+
+app.post('/api/whatsapp/follow-up', authenticateToken, async (req, res) => {
+  const { leadId, title, reminder_date, reminder_time, notes, priority } = req.body;
+  if (!leadId || !title || !reminder_date) {
+    return res.status(400).json({ error: 'leadId, title, and reminder_date are required' });
+  }
+  try {
+    const reminder = await DB.createReminder({
+      lead_id: leadId,
+      title,
+      type: 'Follow-up',
+      reminder_date,
+      reminder_time,
+      notes,
+      priority: priority || 'Medium',
+      is_read: false,
+      assigned_employee_id: req.user.id
+    });
+    
+    // Log audit trail
+    await DB.logAudit(
+      leadId,
+      'WhatsApp Follow-up Scheduled',
+      `WhatsApp follow-up scheduled for ${reminder_date} at ${reminder_time || '09:00:00'} (Priority: ${priority || 'Medium'}). Notes: ${notes || ''}`,
+      req.user.id,
+      req.user.full_name
+    );
+
+    res.json(reminder);
+  } catch (e) {
+    console.error('Create WhatsApp follow-up error:', e);
+    res.status(500).json({ error: 'Failed to create WhatsApp follow-up reminder' });
+  }
+});
+
+app.get('/api/whatsapp/communication-history/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const leadId = req.params.leadId;
+    const [messages, activities, notes] = await Promise.all([
+      DB.getWhatsAppMessages(leadId),
+      DB.getWhatsAppActivities(leadId),
+      DB.getWhatsAppNotes(leadId)
+    ]);
+    
+    // Compile history
+    const history = [];
+    messages.forEach(m => {
+      history.push({
+        id: m.id,
+        type: 'message',
+        direction: m.direction,
+        text: m.message_text,
+        media_url: m.media_url,
+        template_name: m.template_name,
+        timestamp: m.sent_at || m.created_at
+      });
+    });
+    
+    activities.forEach(a => {
+      history.push({
+        id: a.id,
+        type: 'activity',
+        action_type: a.action_type,
+        timestamp: a.timestamp || a.created_at,
+        user: a.employee ? a.employee.full_name : 'Executive'
+      });
+    });
+    
+    notes.forEach(n => {
+      history.push({
+        id: n.id,
+        type: 'notes',
+        discussion_summary: n.discussion_summary,
+        customer_interest: n.customer_interest,
+        budget_discussion: n.budget_discussion,
+        objections: n.objections,
+        next_action: n.next_action,
+        timestamp: n.created_at,
+        user: n.employee ? n.employee.full_name : 'Executive'
+      });
+    });
+    
+    // Sort chronologically ascending for chat interface display
+    history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    res.json(history);
+  } catch (e) {
+    console.error('Fetch WhatsApp communication history error:', e);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp communication history' });
+  }
+});
+
 // --- SALES INTELLIGENCE DASHBOARD ---
 
 app.get('/api/dashboard/sales-intelligence', authenticateToken, async (req, res) => {
@@ -1555,6 +1719,25 @@ app.get('/api/bookings', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/bookings/lead/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getBookingsForLead(req.params.leadId);
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch bookings for lead' });
+  }
+});
+
+app.get('/api/payments/lead/:leadId', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getPayments();
+    const filtered = list.filter(p => p.bookings && p.bookings.lead_id === req.params.leadId);
+    res.json(filtered);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch payments for lead' });
+  }
+});
+
 app.post('/api/bookings', authenticateToken, async (req, res) => {
   try {
     const result = await DB.createBooking(req.body, req.user.id);
@@ -2111,7 +2294,7 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
     if (!lead) return res.status(404).json({ error: 'Lead not found or access denied' });
 
     // Fetch timeline activities in parallel
-    const [audits, calls, transfers, visits, bookings, whatsappLogs, whatsappChats, reminders, payments] = await Promise.all([
+    const [audits, calls, transfers, visits, bookings, whatsappLogs, whatsappChats, reminders, payments, whatsappActivities, whatsappNotes] = await Promise.all([
       DB.getAuditTrail(leadId),
       DB.getCallLogs(leadId),
       DB.getTransferHistory(leadId),
@@ -2120,7 +2303,9 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
       DB.getWhatsAppLogsForLead(leadId),
       DB.getWhatsAppMessages(leadId),
       DB.getReminders(req.user.id, req.user.role),
-      DB.getPayments()
+      DB.getPayments(),
+      DB.getWhatsAppActivities(leadId),
+      DB.getWhatsAppNotes(leadId)
     ]);
 
     const timeline = [];
@@ -2232,6 +2417,30 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
       });
     });
 
+    // 7a. WhatsApp Activity Logs
+    whatsappActivities.forEach(a => {
+      timeline.push({
+        id: a.id,
+        type: 'whatsapp-activity',
+        title: a.action_type,
+        description: 'WhatsApp redirection clicked by executive.',
+        date: a.timestamp || a.created_at,
+        user: a.employee ? a.employee.full_name : 'Executive'
+      });
+    });
+
+    // 7b. WhatsApp Notes
+    whatsappNotes.forEach(n => {
+      timeline.push({
+        id: n.id,
+        type: 'whatsapp-notes',
+        title: 'WhatsApp Notes Saved',
+        description: `Discussion Summary: ${n.discussion_summary || 'N/A'}\nCustomer Interest: ${n.customer_interest || 'N/A'}\nBudget Discussion: ${n.budget_discussion || 'N/A'}\nObjections: ${n.objections || 'N/A'}\nNext Action: ${n.next_action || 'N/A'}`,
+        date: n.created_at,
+        user: n.employee ? n.employee.full_name : 'Executive'
+      });
+    });
+
     // 8. Reminders (Follow-ups)
     reminders.filter(r => r.lead_id === leadId).forEach(r => {
       timeline.push({
@@ -2270,6 +2479,7 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
 
 app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
   try {
+    const isBasic = req.query.basic === 'true';
     const leads = await DB.getLeads({}, req.user.id, req.user.role);
     const bookings = await DB.getBookings();
     const siteVisits = await DB.getSiteVisits();
@@ -2318,6 +2528,32 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
     callsToday = todayCalls.length;
     connectedCallsToday = todayCalls.filter(c => !notConnectedResponses.includes(c.response)).length;
     missedCallsToday = todayCalls.filter(c => c.response === 'Not Picked' || c.call_type === 'Missed' || c.response === 'Not Connected').length;
+
+    if (isBasic) {
+      return res.json({
+        summary: {
+          totalLeads,
+          newLeads,
+          hotLeads,
+          warmLeads,
+          coldLeads,
+          negotiationLeads,
+          bookedLeads,
+          totalVisits,
+          completedVisits,
+          totalBookedCount,
+          revenueEarned,
+          callsToday,
+          connectedCallsToday,
+          missedCallsToday,
+          todayBookingsCount: 0,
+          monthlyBookingsCount: 0,
+          collectionReceived: 0,
+          pendingCollection: 0
+        },
+        basic: true
+      });
+    }
 
     // Booking & Revenue summary calculations
     const payments = await DB.getPayments();
