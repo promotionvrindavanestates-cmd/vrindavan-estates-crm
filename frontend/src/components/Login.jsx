@@ -44,9 +44,11 @@ export default function Login({ onLoginSuccess }) {
       
       <div class="login-card">
         <div class="login-header">
-          <div class="login-logo">🕉️</div>
+          <div class="login-logo">
+            <img src="/favicon-192x192.png" alt="VE Logo" class="login-logo-img" />
+          </div>
           <h2>VRINDAVAN ESTATES</h2>
-          <p class="login-welcome">Real Estate CRM Portal</p>
+          <p class="login-welcome">VRINDAVAN ESTATES CRM</p>
         </div>
 
         {error && (

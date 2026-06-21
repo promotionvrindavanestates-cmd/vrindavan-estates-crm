@@ -128,9 +128,12 @@ h1 {
   gap: 12px;
 }
 
-.brand-logo {
-  font-size: 32px;
-  filter: drop-shadow(0 0 8px var(--primary));
+.brand-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.5));
 }
 
 .brand-name {
@@ -724,9 +727,32 @@ tr:hover td {
 }
 
 .login-logo {
-  font-size: 48px;
-  margin-bottom: 12px;
-  filter: drop-shadow(0 0 10px var(--primary));
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.login-logo-img {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  border-radius: 28px;
+  filter: drop-shadow(0 0 15px rgba(212, 175, 55, 0.45));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.login-logo-img:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 25px rgba(212, 175, 55, 0.75));
+}
+
+@media (max-width: 480px) {
+  .login-logo-img {
+    width: 110px;
+    height: 110px;
+    border-radius: 22px;
+  }
 }
 
 .login-welcome {

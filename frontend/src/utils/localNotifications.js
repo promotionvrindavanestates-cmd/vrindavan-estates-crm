@@ -40,7 +40,7 @@ export const scheduleFollowUpNotification = async (lead) => {
     await LocalNotifications.schedule({
       notifications: [
         {
-          title: '🕉️ Follow-Up Reminder',
+          title: '🔔 Follow-Up Reminder',
           body: `Contact ${lead.name} for ${lead.project || 'Vrindavan Estates'}\nPhone: ${lead.phone1}`,
           id: numericId,
           schedule: { at: followUpDate },

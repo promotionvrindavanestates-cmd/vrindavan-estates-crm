@@ -144,7 +144,7 @@ export default function App() {
           if (!alertedIds.includes(r.id)) {
             alertedIds.push(r.id);
             updatedAlerted = true;
-            const title = '🕉️ Due Follow-Up Reminder';
+            const title = '🔔 Due Follow-Up Reminder';
             const body = `${r.title} (${r.type}) is due now.`;
             showPushNotification(title, body, { reminderId: r.id });
             setActiveToast({ title, body, lead: r.leads });
@@ -229,7 +229,7 @@ export default function App() {
               notifiedList.push(r.id);
               updatedNotified = true;
 
-              const title = '🕉️ Upcoming Follow-Up';
+              const title = '🔔 Upcoming Follow-Up';
               const body = `Follow-up for ${r.leads ? r.leads.name : 'Lead'} is scheduled in ${Math.round(diffMins)} minutes (${r.reminder_time}).`;
 
               // Trigger standard browser notification
@@ -582,11 +582,8 @@ export default function App() {
         {/* Brand Header & User Info */}
         <div class="top-navbar">
           <div class="brand-section">
-            <span class="brand-logo">🕉️</span>
-            <div>
-              <h1 class="brand-name">Vrindavan Estates</h1>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>PREMIUM CRM PORTAL</div>
-            </div>
+            <img src="/favicon-192x192.png" alt="VE Logo" class="brand-logo-img" />
+            <h1 class="brand-name">Vrindavan Estates</h1>
           </div>
           
           <div class="user-controls">
