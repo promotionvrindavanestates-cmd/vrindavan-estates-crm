@@ -350,5 +350,13 @@ export const api = {
     request(`/api/activities/recent${limit ? `?limit=${limit}` : ''}`),
 
   getEmployeePerformance: (id) =>
-    request(`/api/employees/${id}/performance`)
+    request(`/api/employees/${id}/performance`),
+
+  getDuplicateLeads: () => request('/api/leads/duplicates'),
+
+  mergeLeads: (targetLeadId, duplicateLeadIds) => 
+    request('/api/leads/merge', {
+      method: 'POST',
+      body: JSON.stringify({ targetLeadId, duplicateLeadIds })
+    })
 };

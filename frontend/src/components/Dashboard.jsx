@@ -400,10 +400,132 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
             </div>
           </div>
         </div>
+        {/* Widget 5: Lead Aging Analysis */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
+            <Compass size={18} style={{ color: 'var(--primary)' }} />
+            Lead Aging Analysis
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, justifyContent: 'center' }}>
+            {(() => {
+              const buckets = [
+                { label: 'Active (<7 Days)', count: stats?.leadAging?.active || 0, color: '#22c55e', daysStart: 7, daysEnd: 0 },
+                { label: 'Stagnant (7-15 Days)', count: stats?.leadAging?.stagnant || 0, color: '#eab308', daysStart: 15, daysEnd: 7 },
+                { label: 'Cold (15-30 Days)', count: stats?.leadAging?.cold || 0, color: '#f97316', daysStart: 30, daysEnd: 15 },
+                { label: 'Critical (30+ Days)', count: stats?.leadAging?.critical || 0, color: '#ef4444', daysStart: 9999, daysEnd: 30 }
+              ];
+              const getPastDateStr = (days) => {
+                if (days === 9999) return '';
+                const d = new Date();
+                d.setDate(d.getDate() - days);
+                return d.toISOString().split('T')[0];
+              };
+              
+              const totalAgingLeads = buckets.reduce((sum, b) => sum + b.count, 0) || 1;
+
+              return buckets.map(b => {
+                const pct = Math.round((b.count / totalAgingLeads) * 100);
+                const start = getPastDateStr(b.daysStart);
+                const end = getPastDateStr(b.daysEnd);
+
+                return (
+                  <div 
+                    key={b.label}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => onDrillDown && onDrillDown('Lead Aging', { created_start: start, created_end: end })}
+                    title={`View ${b.count} leads`}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{b.label}</span>
+                      <span style={{ color: b.color, fontWeight: 'bold' }}>{b.count} ({pct}%)</span>
+                    </div>
+                    <div style={{ background: 'var(--bg-input)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, background: b.color, height: '100%', borderRadius: '4px' }}></div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+
+        {/* Widget 6: Follow-up Compliance */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
+            <CheckCircle size={18} style={{ color: 'var(--color-success)' }} />
+            Follow-up Compliance
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            
+            {/* Big Circular Compliance Indicator */}
+            <div style={{ 
+              position: 'relative', 
+              width: '100px', 
+              height: '100px', 
+              borderRadius: '50%', 
+              background: `conic-gradient(var(--color-success) ${stats?.compliance?.rate || 100}%, var(--bg-input) 0)`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <div style={{ 
+                width: '84px', 
+                height: '84px', 
+                borderRadius: '50%', 
+                background: 'var(--bg-card)', 
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                  {stats?.compliance?.rate || 100}%
+                </span>
+                <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Compliance
+                </span>
+              </div>
+            </div>
+
+            {/* Metrics list */}
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-around', fontSize: '12px' }}>
+              <div 
+                style={{ textAlign: 'center', cursor: 'pointer' }}
+                onClick={() => onDrillDown && onDrillDown('Completed Follow-ups', {})}
+              >
+                <div style={{ color: 'var(--color-success)', fontWeight: 'bold', fontSize: '14px' }}>
+                  {stats?.compliance?.completed || 0}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Completed</div>
+              </div>
+              
+              <div 
+                style={{ textAlign: 'center', cursor: 'pointer' }}
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  onDrillDown && onDrillDown('Missed Follow-ups', { followup_end: today });
+                }}
+              >
+                <div style={{ color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '14px' }}>
+                  {stats?.compliance?.missed || 0}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Missed</div>
+              </div>
+
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: 'var(--color-info)', fontWeight: 'bold', fontSize: '14px' }}>
+                  {stats?.compliance?.pending || 0}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Pending</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
 
       </div>
 
-      {/* Widget 5: Employee Performance Snapshot */}
+      {/* Widget 7: Employee Performance Snapshot */}
       <div className="table-panel" style={{ margin: 0 }}>
         <div className="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

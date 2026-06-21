@@ -91,10 +91,14 @@ export default function LeadTable({
       const targetStatus = initialFilters.status || '';
       const targetCallsToday = initialFilters.calls_today || '';
       const targetSiteVisitCompleted = initialFilters.site_visit_completed || '';
+      const targetCreatedStart = initialFilters.created_start || '';
+      const targetCreatedEnd = initialFilters.created_end || '';
 
       setSelectedStatus(targetStatus);
       setCallsToday(targetCallsToday);
       setSiteVisitCompleted(targetSiteVisitCompleted);
+      setCreatedStart(targetCreatedStart);
+      setCreatedEnd(targetCreatedEnd);
 
       if (initialFilters.assigned_employee_id) {
         setSelectedEmployee(initialFilters.assigned_employee_id);
@@ -109,6 +113,8 @@ export default function LeadTable({
           suffix = ' - Site Visits';
         }
         setEmployeeFilterHeading(`Showing Leads Assigned To: ${name}${suffix} (${count} Leads)`);
+      } else if (initialFilters.created_start || initialFilters.created_end) {
+        setEmployeeFilterHeading(`Showing Leads Created: ${initialFilters.created_start || 'Start'} to ${initialFilters.created_end || 'End'}`);
       } else {
         setEmployeeFilterHeading('');
       }

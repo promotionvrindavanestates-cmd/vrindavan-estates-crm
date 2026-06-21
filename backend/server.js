@@ -2009,6 +2009,32 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
     const collectionReceived = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.amount_received) || 0), 0);
     const pendingCollection = filteredPayments.reduce((sum, p) => sum + (parseFloat(p.balance) || 0), 0);
 
+    // Lead Aging calculation
+    const now = new Date();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const aging = {
+      active: 0,     // <7 days
+      stagnant: 0,   // 7-15 days
+      cold: 0,       // 15-30 days
+      critical: 0    // 30+ days
+    };
+    leads.forEach(l => {
+      const created = new Date(l.created_at || now);
+      const diffDays = Math.floor((now - created) / oneDay);
+      if (diffDays < 7) aging.active++;
+      else if (diffDays < 15) aging.stagnant++;
+      else if (diffDays < 30) aging.cold++;
+      else aging.critical++;
+    });
+
+    // Follow-up Compliance calculation
+    const allReminders = await DB.getReminders(req.user.id, req.user.role);
+    const completedRemindersCount = allReminders.filter(r => r.is_read).length;
+    const missedRemindersCount = allReminders.filter(r => !r.is_read && r.reminder_date < todayStr).length;
+    const pendingRemindersCount = allReminders.filter(r => !r.is_read && r.reminder_date >= todayStr).length;
+    const totalRemindersCount = allReminders.length;
+    const complianceRate = totalRemindersCount > 0 ? Math.round((completedRemindersCount / totalRemindersCount) * 100) : 100;
+
     // Lead Source Distribution
     const sourceMap = { Facebook: 0, Instagram: 0, Google: 0, Website: 0, WhatsApp: 0, 'Walk-In': 0, Referral: 0, MagicBricks: 0, '99acres': 0, Housing: 0 };
     leads.forEach(l => {
@@ -2075,11 +2101,43 @@ app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
       },
       sourceDistribution: sourceMap,
       employeePerformance,
-      reminders: remindersWidget
+      reminders: remindersWidget,
+      leadAging: aging,
+      compliance: {
+        completed: completedRemindersCount,
+        missed: missedRemindersCount,
+        pending: pendingRemindersCount,
+        total: totalRemindersCount,
+        rate: complianceRate
+      }
     });
   } catch (e) {
     console.error('Analytics dashboard error:', e);
     res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
+app.get('/api/leads/duplicates', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const list = await DB.getDuplicateLeads();
+    res.json(list);
+  } catch (e) {
+    console.error('Failed to fetch duplicate leads:', e);
+    res.status(500).json({ error: 'Failed to fetch duplicate leads' });
+  }
+});
+
+app.post('/api/leads/merge', authenticateToken, requireAdmin, async (req, res) => {
+  const { targetLeadId, duplicateLeadIds } = req.body;
+  if (!targetLeadId || !duplicateLeadIds || !Array.isArray(duplicateLeadIds) || duplicateLeadIds.length === 0) {
+    return res.status(400).json({ error: 'Missing targetLeadId or duplicateLeadIds' });
+  }
+  try {
+    const result = await DB.mergeLeads(targetLeadId, duplicateLeadIds, req.user.id, req.user.full_name);
+    res.json({ success: true, lead: result });
+  } catch (e) {
+    console.error('Lead merge failed:', e);
+    res.status(500).json({ error: `Lead merge failed: ${e.message}` });
   }
 });
 

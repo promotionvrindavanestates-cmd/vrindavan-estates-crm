@@ -17,7 +17,8 @@ import LeadDetailsModal from './components/LeadDetailsModal';
 import RemindersModal from './components/RemindersModal';
 import LeadDetailDrawer from './components/LeadDetailDrawer';
 import LeadPipeline from './components/LeadPipeline';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello } from 'lucide-react';
+import DuplicateManager from './components/DuplicateManager';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello, Copy } from 'lucide-react';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -479,6 +480,14 @@ export default function App() {
           )}
           {currentUser.role === 'admin' && (
             <div 
+              class={`nav-tab ${activeTab === 'duplicates' ? 'active' : ''}`}
+              onClick={() => setActiveTab('duplicates')}
+            >
+              <Copy size={15} /> Merge Duplicates
+            </div>
+          )}
+          {currentUser.role === 'admin' && (
+            <div 
               class={`nav-tab ${activeTab === 'backup' ? 'active' : ''}`}
               onClick={() => setActiveTab('backup')}
             >
@@ -572,6 +581,10 @@ export default function App() {
                 onRefreshLeads={fetchCRMData} 
                 currentUser={currentUser}
               />
+            )}
+
+            {activeTab === 'duplicates' && currentUser.role === 'admin' && (
+              <DuplicateManager employees={employees} />
             )}
           </>
         )}

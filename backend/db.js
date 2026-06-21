@@ -2507,6 +2507,178 @@ const DB = {
         missedReminders
       };
     }
+  },
+
+  async getDuplicateLeads() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, name, phone1, email, assigned_employee_id, created_at');
+      if (error) throw error;
+      return this._processDuplicates(data);
+    } else {
+      const db = loadLocalDb();
+      return this._processDuplicates(db.leads || []);
+    }
+  },
+
+  _processDuplicates(leads) {
+    const phoneMap = {};
+    const emailMap = {};
+    const duplicates = [];
+
+    leads.forEach(l => {
+      if (l.phone1) {
+        const cleanPhone = String(l.phone1).trim();
+        if (cleanPhone) {
+          if (!phoneMap[cleanPhone]) phoneMap[cleanPhone] = [];
+          phoneMap[cleanPhone].push(l);
+        }
+      }
+      if (l.email) {
+        const cleanEmail = String(l.email).trim().toLowerCase();
+        if (cleanEmail) {
+          if (!emailMap[cleanEmail]) emailMap[cleanEmail] = [];
+          emailMap[cleanEmail].push(l);
+        }
+      }
+    });
+
+    const processedIds = new Set();
+
+    Object.keys(phoneMap).forEach(phone => {
+      const group = phoneMap[phone];
+      if (group.length > 1) {
+        const unseen = group.filter(l => !processedIds.has(l.id));
+        if (unseen.length > 1) {
+          duplicates.push({
+            type: 'phone',
+            value: phone,
+            leads: group
+          });
+          group.forEach(l => processedIds.add(l.id));
+        }
+      }
+    });
+
+    Object.keys(emailMap).forEach(email => {
+      const group = emailMap[email];
+      if (group.length > 1) {
+        const unseen = group.filter(l => !processedIds.has(l.id));
+        if (unseen.length > 1) {
+          duplicates.push({
+            type: 'email',
+            value: email,
+            leads: group
+          });
+          group.forEach(l => processedIds.add(l.id));
+        }
+      }
+    });
+
+    return duplicates;
+  },
+
+  async mergeLeads(targetId, duplicateIds, userId, userName) {
+    let targetLead = null;
+    let dupLeads = [];
+
+    if (this.isCloud()) {
+      const { data: target, error: tErr } = await supabase.from('leads').select('*').eq('id', targetId).single();
+      if (tErr) throw tErr;
+      targetLead = target;
+
+      const { data: dups, error: dErr } = await supabase.from('leads').select('*').in('id', duplicateIds);
+      if (dErr) throw dErr;
+      dupLeads = dups;
+
+      const mergedFields = {};
+      const fieldsToCheck = ['phone2', 'email', 'project', 'budget', 'city', 'lead_source', 'notes'];
+      fieldsToCheck.forEach(f => {
+        if (!targetLead[f]) {
+          const val = dupLeads.find(d => d[f])?.[f];
+          if (val) {
+            mergedFields[f] = val;
+            targetLead[f] = val;
+          }
+        }
+      });
+
+      if (Object.keys(mergedFields).length > 0) {
+        const { error: uErr } = await supabase.from('leads').update(mergedFields).eq('id', targetId);
+        if (uErr) throw uErr;
+      }
+
+      await supabase.from('call_logs').update({ lead_id: targetId }).in('lead_id', duplicateIds);
+      await supabase.from('site_visits').update({ lead_id: targetId }).in('lead_id', duplicateIds);
+      await supabase.from('reminders').update({ lead_id: targetId }).in('lead_id', duplicateIds);
+      await supabase.from('bookings').update({ lead_id: targetId }).in('lead_id', duplicateIds);
+      
+      const { error: delErr } = await supabase.from('leads').delete().in('id', duplicateIds);
+      if (delErr) throw delErr;
+
+      await this.createAuditLog(targetId, 'Merge Leads', `Merged duplicate lead IDs [${duplicateIds.join(', ')}] into this lead`, userId, userName, 'Web Portal');
+    } else {
+      const db = loadLocalDb();
+      const targetIdx = db.leads.findIndex(l => l.id === targetId);
+      if (targetIdx === -1) throw new Error('Target lead not found');
+      targetLead = db.leads[targetIdx];
+
+      duplicateIds.forEach(dupId => {
+        const dup = db.leads.find(l => l.id === dupId);
+        if (dup) {
+          dupLeads.push(dup);
+        }
+      });
+
+      const fieldsToCheck = ['phone2', 'email', 'project', 'budget', 'city', 'lead_source', 'notes'];
+      fieldsToCheck.forEach(f => {
+        if (!targetLead[f]) {
+          const val = dupLeads.find(d => d[f])?.[f];
+          if (val) {
+            targetLead[f] = val;
+          }
+        }
+      });
+
+      if (db.call_logs) {
+        db.call_logs.forEach(c => {
+          if (duplicateIds.includes(c.lead_id)) c.lead_id = targetId;
+        });
+      }
+      if (db.site_visits) {
+        db.site_visits.forEach(v => {
+          if (duplicateIds.includes(v.lead_id)) v.lead_id = targetId;
+        });
+      }
+      if (db.reminders) {
+        db.reminders.forEach(r => {
+          if (duplicateIds.includes(r.lead_id)) r.lead_id = targetId;
+        });
+      }
+      if (db.bookings) {
+        db.bookings.forEach(b => {
+          if (duplicateIds.includes(b.lead_id)) b.lead_id = targetId;
+        });
+      }
+
+      db.leads = db.leads.filter(l => !duplicateIds.includes(l.id));
+
+      if (!db.audit_trails) db.audit_trails = [];
+      db.audit_trails.push({
+        id: generateUuid(),
+        lead_id: targetId,
+        action: 'Merge Leads',
+        details: `Merged duplicate lead IDs [${duplicateIds.join(', ')}] into this lead`,
+        user_id: userId,
+        user_name: userName,
+        device: 'Web Portal',
+        created_at: new Date().toISOString()
+      });
+
+      saveLocalDb(db);
+    }
+    return targetLead;
   }
 };
 
