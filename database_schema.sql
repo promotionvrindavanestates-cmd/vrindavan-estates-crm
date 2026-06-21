@@ -361,3 +361,32 @@ CREATE INDEX IF NOT EXISTS idx_reminders_date_read ON reminders (reminder_date, 
 CREATE INDEX IF NOT EXISTS idx_import_history_user ON import_history (created_by);
 CREATE INDEX IF NOT EXISTS idx_leads_phone_whatsapp ON leads (phone_whatsapp);
 
+-- -------------------------------------------------------------------------
+-- 8. PHASE 5 MIGRATIONS (SALES PIPELINE & FINANCIAL CONTROLS)
+-- -------------------------------------------------------------------------
+
+-- Alter Inventory status check constraints & add block timer
+ALTER TABLE inventory DROP CONSTRAINT IF EXISTS inventory_status_check;
+ALTER TABLE inventory ADD CONSTRAINT inventory_status_check CHECK (status IN ('Available', 'Blocked', 'Token', 'Booked', 'Registry Pending', 'Registered'));
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS blocked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- Create Booking Milestones table for Payment Plans
+CREATE TABLE IF NOT EXISTS booking_milestones (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    booking_id UUID REFERENCES bookings(id) ON DELETE CASCADE,
+    milestone_name VARCHAR(255) NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    due_date DATE NOT NULL,
+    amount_paid NUMERIC(12, 2) DEFAULT 0.00,
+    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Paid', 'Overdue')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexing for fast dashboard reminders and calculations
+CREATE INDEX IF NOT EXISTS idx_booking_milestones_booking ON booking_milestones(booking_id);
+CREATE INDEX IF NOT EXISTS idx_booking_milestones_status_due ON booking_milestones(status, due_date);
+
+-- Disable RLS on booking_milestones
+ALTER TABLE booking_milestones DISABLE ROW LEVEL SECURITY;
+
+

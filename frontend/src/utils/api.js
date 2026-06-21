@@ -353,10 +353,45 @@ export const api = {
     request(`/api/employees/${id}/performance`),
 
   getDuplicateLeads: () => request('/api/leads/duplicates'),
-
+  
   mergeLeads: (targetLeadId, duplicateLeadIds) => 
     request('/api/leads/merge', {
       method: 'POST',
       body: JSON.stringify({ targetLeadId, duplicateLeadIds })
-    })
+    }),
+
+  blockInventoryUnit: (id, durationHours) =>
+    request(`/api/inventory/${id}/block`, {
+      method: 'POST',
+      body: JSON.stringify({ duration_hours: durationHours })
+    }),
+
+  unblockInventoryUnit: (id) =>
+    request(`/api/inventory/${id}/unblock`, {
+      method: 'POST'
+    }),
+
+  getBookingMilestones: (bookingId) =>
+    request(`/api/bookings/${bookingId}/milestones`),
+
+  createBookingMilestone: (bookingId, milestoneData) =>
+    request(`/api/bookings/${bookingId}/milestones`, {
+      method: 'POST',
+      body: JSON.stringify(milestoneData)
+    }),
+
+  updateBookingMilestone: (milestoneId, milestoneData) =>
+    request(`/api/bookings/milestones/${milestoneId}`, {
+      method: 'PUT',
+      body: JSON.stringify(milestoneData)
+    }),
+
+  deleteBookingMilestone: (milestoneId) =>
+    request(`/api/bookings/milestones/${milestoneId}`, {
+      method: 'DELETE'
+    }),
+
+  getCollectionAnalytics: () => request('/api/collections/analytics'),
+  
+  getCollectionReminders: () => request('/api/collections/reminders')
 };

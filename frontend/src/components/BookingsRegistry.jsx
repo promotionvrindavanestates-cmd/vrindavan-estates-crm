@@ -21,6 +21,7 @@ export default function BookingsRegistry({ currentUser }) {
   const [totalCost, setTotalCost] = useState('');
   const [dueDays, setDueDays] = useState('30');
   const [bookingDate, setBookingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentPlanType, setPaymentPlanType] = useState('default');
 
   // Installment log modal state
   const [loggingPayment, setLoggingPayment] = useState(null); // holds payment record
@@ -32,6 +33,16 @@ export default function BookingsRegistry({ currentUser }) {
   const [expandedPaymentId, setExpandedPaymentId] = useState(null);
   const [installments, setInstallments] = useState([]);
   const [installmentsLoading, setInstallmentsLoading] = useState(false);
+
+  // Milestones and Payment Plan states
+  const [milestones, setMilestones] = useState([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+  const [isAddingMilestone, setIsAddingMilestone] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState(null);
+  const [selectedBookingForMilestone, setSelectedBookingForMilestone] = useState(null);
+  const [milestoneName, setMilestoneName] = useState('');
+  const [milestoneAmount, setMilestoneAmount] = useState('');
+  const [milestoneDueDate, setMilestoneDueDate] = useState('');
 
   useEffect(() => {
     fetchInitialData();
@@ -95,7 +106,8 @@ export default function BookingsRegistry({ currentUser }) {
       booking_amount: bookingAmount ? parseFloat(bookingAmount) : 0,
       total_cost: parseFloat(totalCost),
       due_days: parseInt(dueDays),
-      booking_date: bookingDate
+      booking_date: bookingDate,
+      payment_plan_type: paymentPlanType
     };
 
     try {
@@ -170,13 +182,84 @@ export default function BookingsRegistry({ currentUser }) {
     }
   };
 
-  const toggleExpandPayment = (paymentId) => {
+  const fetchMilestonesHistory = async (bookingId) => {
+    setMilestonesLoading(true);
+    try {
+      const data = await api.getBookingMilestones(bookingId);
+      setMilestones(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setMilestonesLoading(false);
+    }
+  };
+
+  const toggleExpandPayment = (paymentId, bookingId) => {
     if (expandedPaymentId === paymentId) {
       setExpandedPaymentId(null);
       setInstallments([]);
+      setMilestones([]);
     } else {
       setExpandedPaymentId(paymentId);
       fetchInstallmentsHistory(paymentId);
+      if (bookingId) {
+        fetchMilestonesHistory(bookingId);
+      }
+    }
+  };
+
+  const handleCreateMilestone = async (bookingId) => {
+    if (!milestoneName || !milestoneAmount || !milestoneDueDate) {
+      return alert('All milestone fields are required.');
+    }
+    try {
+      await api.createBookingMilestone(bookingId, {
+        milestone_name: milestoneName,
+        amount: parseFloat(milestoneAmount),
+        due_date: milestoneDueDate
+      });
+      alert('Milestone added successfully!');
+      setIsAddingMilestone(false);
+      setMilestoneName('');
+      setMilestoneAmount('');
+      setMilestoneDueDate('');
+      fetchMilestonesHistory(bookingId);
+      fetchInitialData();
+    } catch (err) {
+      alert(`Add failed: ${err.message}`);
+    }
+  };
+
+  const handleUpdateMilestone = async (bookingId, milestoneId) => {
+    if (!milestoneName || !milestoneAmount || !milestoneDueDate) {
+      return alert('All milestone fields are required.');
+    }
+    try {
+      await api.updateBookingMilestone(milestoneId, {
+        milestone_name: milestoneName,
+        amount: parseFloat(milestoneAmount),
+        due_date: milestoneDueDate
+      });
+      alert('Milestone updated successfully!');
+      setEditingMilestone(null);
+      setMilestoneName('');
+      setMilestoneAmount('');
+      setMilestoneDueDate('');
+      fetchMilestonesHistory(bookingId);
+      fetchInitialData();
+    } catch (err) {
+      alert(`Update failed: ${err.message}`);
+    }
+  };
+
+  const handleDeleteMilestone = async (bookingId, milestoneId) => {
+    if (!window.confirm('Are you sure you want to delete this milestone?')) return;
+    try {
+      await api.deleteBookingMilestone(milestoneId);
+      fetchMilestonesHistory(bookingId);
+      fetchInitialData();
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
     }
   };
 
@@ -267,6 +350,15 @@ export default function BookingsRegistry({ currentUser }) {
               <div class="form-group">
                 <label>Due Days for Balance Payment</label>
                 <input type="number" class="form-control" value={dueDays} onChange={e => setDueDays(e.target.value)} placeholder="default 30 days" />
+              </div>
+              <div class="form-group">
+                <label>Payment Plan Type</label>
+                <select class="form-control" value={paymentPlanType} onChange={e => setPaymentPlanType(e.target.value)}>
+                  <option value="default">Default Schedule (10:15:75)</option>
+                  <option value="20:20:20:20:20">Flexible 20:20:20:20:20</option>
+                  <option value="40:30:30">Standard 40:30:30 Plan</option>
+                  <option value="custom">Custom Schedule (Configure details later)</option>
+                </select>
               </div>
             </div>
 
@@ -392,8 +484,8 @@ export default function BookingsRegistry({ currentUser }) {
                               <td>
                                 <button 
                                   style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
-                                  onClick={() => toggleExpandPayment(p.id)}
-                                  title="View payments installments history"
+                                  onClick={() => toggleExpandPayment(p.id, p.booking_id)}
+                                  title="View payments milestones & installments history"
                                 >
                                   {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                 </button>
@@ -439,34 +531,119 @@ export default function BookingsRegistry({ currentUser }) {
                             {isExpanded && (
                               <tr>
                                 <td colSpan="8" style={{ background: 'rgba(255,255,255,0.01)', padding: '15px' }}>
-                                  <div style={{ borderLeft: '3px solid var(--primary)', paddingLeft: '15px' }}>
-                                    <h4 style={{ marginBottom: '10px', color: 'var(--text-main)', fontSize: '13px' }}>Installments Receipt History:</h4>
-                                    {installmentsLoading ? (
-                                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Loading history details...</div>
-                                    ) : installments.length === 0 ? (
-                                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No payment installments logged yet (Initial booking amount logged only).</div>
-                                    ) : (
-                                      <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', marginTop: '5px' }}>
-                                        <thead>
-                                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
-                                            <th style={{ textAlign: 'left', padding: '6px' }}>Date</th>
-                                            <th style={{ textAlign: 'left', padding: '6px' }}>Mode</th>
-                                            <th style={{ textAlign: 'left', padding: '6px' }}>Amount (₹)</th>
-                                            <th style={{ textAlign: 'left', padding: '6px' }}>Remarks</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {installments.map(ins => (
-                                            <tr key={ins.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                              <td style={{ padding: '6px' }}>{new Date(ins.payment_date).toLocaleDateString()}</td>
-                                              <td style={{ padding: '6px' }}>{ins.payment_mode}</td>
-                                              <td style={{ padding: '6px', fontWeight: 600, color: 'var(--text-main)' }}>₹{parseFloat(ins.amount_paid).toLocaleString('en-IN')}</td>
-                                              <td style={{ padding: '6px', color: 'var(--text-muted)' }}>{ins.remarks || '-'}</td>
+                                  <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                    
+                                    {/* Column 1: Milestones Schedule */}
+                                    <div style={{ flex: '1 1 48%', borderLeft: '3px solid var(--primary)', paddingLeft: '15px', minWidth: '300px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <h4 style={{ color: 'var(--text-main)', fontSize: '13px', margin: 0 }}>Milestones Schedule (Payment Plan):</h4>
+                                        <button 
+                                          onClick={() => {
+                                            setSelectedBookingForMilestone(p.booking_id);
+                                            setIsAddingMilestone(true);
+                                          }}
+                                          class="btn btn-secondary" 
+                                          style={{ padding: '2px 8px', fontSize: '11px', color: 'var(--primary)' }}
+                                        >
+                                          + Add Milestone
+                                        </button>
+                                      </div>
+
+                                      {milestonesLoading ? (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Loading milestones...</div>
+                                      ) : milestones.length === 0 ? (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No milestones created for this booking.</div>
+                                      ) : (
+                                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', marginTop: '5px' }}>
+                                          <thead>
+                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Milestone</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Due Date</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Amount</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Paid</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Status</th>
+                                              <th style={{ textAlign: 'center', padding: '6px' }}>Actions</th>
                                             </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    )}
+                                          </thead>
+                                          <tbody>
+                                            {milestones.map(m => (
+                                              <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                                <td style={{ padding: '6px' }}>{m.milestone_name}</td>
+                                                <td style={{ padding: '6px' }}>{m.due_date}</td>
+                                                <td style={{ padding: '6px', fontWeight: 600 }}>₹{m.amount.toLocaleString('en-IN')}</td>
+                                                <td style={{ padding: '6px', color: '#22c55e' }}>₹{m.amount_paid.toLocaleString('en-IN')}</td>
+                                                <td style={{ padding: '6px' }}>
+                                                  <span style={{ 
+                                                    fontSize: '9px', 
+                                                    padding: '1px 5px', 
+                                                    borderRadius: '4px',
+                                                    background: m.status === 'Paid' ? 'rgba(34,197,94,0.1)' : (m.status === 'Overdue' ? 'rgba(239,68,68,0.1)' : 'rgba(234,179,8,0.1)'),
+                                                    color: m.status === 'Paid' ? '#22c55e' : (m.status === 'Overdue' ? '#ef4444' : '#eab308')
+                                                  }}>
+                                                    {m.status}
+                                                  </span>
+                                                </td>
+                                                <td style={{ padding: '6px', textAlign: 'center' }}>
+                                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                                    <button 
+                                                      onClick={() => {
+                                                        setEditingMilestone(m);
+                                                        setMilestoneName(m.milestone_name);
+                                                        setMilestoneAmount(m.amount);
+                                                        setMilestoneDueDate(m.due_date);
+                                                      }}
+                                                      style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0 }}
+                                                    >
+                                                      Edit
+                                                    </button>
+                                                    {currentUser.role === 'admin' && (
+                                                      <button 
+                                                        onClick={() => handleDeleteMilestone(p.booking_id, m.id)}
+                                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
+                                                      >
+                                                        Delete
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </div>
+
+                                    {/* Column 2: Logged Installments */}
+                                    <div style={{ flex: '1 1 48%', borderLeft: '3px solid #10b981', paddingLeft: '15px', minWidth: '300px' }}>
+                                      <h4 style={{ marginBottom: '10px', color: 'var(--text-main)', fontSize: '13px' }}>Installments Receipt History:</h4>
+                                      {installmentsLoading ? (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Loading history details...</div>
+                                      ) : installments.length === 0 ? (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No payment installments logged yet (Initial booking amount logged only).</div>
+                                      ) : (
+                                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', marginTop: '5px' }}>
+                                          <thead>
+                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Date</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Mode</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Amount (₹)</th>
+                                              <th style={{ textAlign: 'left', padding: '6px' }}>Remarks</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {installments.map(ins => (
+                                              <tr key={ins.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                                <td style={{ padding: '6px' }}>{new Date(ins.payment_date).toLocaleDateString()}</td>
+                                                <td style={{ padding: '6px' }}>{ins.payment_mode}</td>
+                                                <td style={{ padding: '6px', fontWeight: 600, color: 'var(--text-main)' }}>₹{parseFloat(ins.amount_paid).toLocaleString('en-IN')}</td>
+                                                <td style={{ padding: '6px', color: 'var(--text-muted)' }}>{ins.remarks || '-'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </div>
+                                    
                                   </div>
                                 </td>
                               </tr>
@@ -539,6 +716,109 @@ export default function BookingsRegistry({ currentUser }) {
                 <button type="button" class="btn btn-secondary" style={{ flex: 1 }} onClick={() => setLoggingPayment(null)}>Cancel</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Add Milestone Modal */}
+      {isAddingMilestone && (
+        <div class="modal-overlay">
+          <div class="modal-content" style={{ maxWidth: '400px' }}>
+            <div class="modal-header">
+              <h3>➕ Add Payment Milestone</h3>
+              <button class="modal-close" onClick={() => setIsAddingMilestone(false)}>×</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <div class="form-group">
+                <label>Milestone Name *</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  required
+                  value={milestoneName}
+                  onChange={e => setMilestoneName(e.target.value)}
+                  placeholder="e.g. Structure Cast, Brickwork Complete"
+                />
+              </div>
+
+              <div class="form-group" style={{ marginTop: '15px' }}>
+                <label>Milestone Amount (₹) *</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  required
+                  value={milestoneAmount}
+                  onChange={e => setMilestoneAmount(e.target.value)}
+                  placeholder="e.g. 200000"
+                />
+              </div>
+
+              <div class="form-group" style={{ marginTop: '15px' }}>
+                <label>Due Date *</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  required
+                  value={milestoneDueDate}
+                  onChange={e => setMilestoneDueDate(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
+                <button onClick={() => handleCreateMilestone(selectedBookingForMilestone)} class="btn btn-primary" style={{ flex: 1 }}>Add Milestone</button>
+                <button type="button" class="btn btn-secondary" style={{ flex: 1 }} onClick={() => setIsAddingMilestone(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Milestone Modal */}
+      {editingMilestone && (
+        <div class="modal-overlay">
+          <div class="modal-content" style={{ maxWidth: '400px' }}>
+            <div class="modal-header">
+              <h3>✏️ Edit Payment Milestone</h3>
+              <button class="modal-close" onClick={() => setEditingMilestone(null)}>×</button>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <div class="form-group">
+                <label>Milestone Name *</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  required
+                  value={milestoneName}
+                  onChange={e => setMilestoneName(e.target.value)}
+                />
+              </div>
+
+              <div class="form-group" style={{ marginTop: '15px' }}>
+                <label>Milestone Amount (₹) *</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  required
+                  value={milestoneAmount}
+                  onChange={e => setMilestoneAmount(e.target.value)}
+                />
+              </div>
+
+              <div class="form-group" style={{ marginTop: '15px' }}>
+                <label>Due Date *</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  required
+                  value={milestoneDueDate}
+                  onChange={e => setMilestoneDueDate(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
+                <button onClick={() => handleUpdateMilestone(editingMilestone.booking_id, editingMilestone.id)} class="btn btn-primary" style={{ flex: 1 }}>Save Changes</button>
+                <button type="button" class="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditingMilestone(null)}>Cancel</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

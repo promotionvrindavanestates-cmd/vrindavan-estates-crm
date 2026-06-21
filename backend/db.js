@@ -112,6 +112,7 @@ function loadLocalDb() {
     if (!data.whatsapp_campaign_logs) data.whatsapp_campaign_logs = [];
     if (!data.distribution_rules) data.distribution_rules = [];
     if (!data.site_visits) data.site_visits = [];
+    if (!data.booking_milestones) data.booking_milestones = [];
     data.users.forEach(u => {
       if (!u.status) u.status = 'active';
       if (!u.token_version) u.token_version = 1;
@@ -1406,6 +1407,22 @@ const DB = {
   // --- PHASE 2: INVENTORY ---
   async getInventory(projectId = null) {
     if (this.isCloud()) {
+      // First check and release expired blocks
+      const nowStr = new Date().toISOString();
+      const { data: expiredList } = await supabase
+        .from('inventory')
+        .select('id')
+        .eq('status', 'Blocked')
+        .lt('blocked_until', nowStr);
+      
+      if (expiredList && expiredList.length > 0) {
+        const expiredIds = expiredList.map(item => item.id);
+        await supabase
+          .from('inventory')
+          .update({ status: 'Available', blocked_until: null })
+          .in('id', expiredIds);
+      }
+
       let query = supabase.from('inventory').select('*, projects(*)');
       if (projectId) {
         query = query.eq('project_id', projectId);
@@ -1415,6 +1432,19 @@ const DB = {
       return data;
     } else {
       const db = loadLocalDb();
+      let updated = false;
+      const now = new Date();
+      db.inventory.forEach(item => {
+        if (item.status === 'Blocked' && item.blocked_until && new Date(item.blocked_until) < now) {
+          item.status = 'Available';
+          item.blocked_until = null;
+          updated = true;
+        }
+      });
+      if (updated) {
+        saveLocalDb(db);
+      }
+
       let list = db.inventory;
       if (projectId) {
         list = list.filter(i => i.project_id === projectId);
@@ -1447,7 +1477,8 @@ const DB = {
       status: invData.status || 'Available',
       property_type: invData.property_type || 'Flat',
       price: invData.price ? parseFloat(invData.price) : 0.00,
-      details: invData.details || {}
+      details: invData.details || {},
+      blocked_until: invData.blocked_until || null
     };
     if (this.isCloud()) {
       const { data, error } = await supabase.from('inventory').insert([formatted]).select().single();
@@ -1471,6 +1502,8 @@ const DB = {
       price: invData.price ? parseFloat(invData.price) : 0.00,
       details: invData.details
     };
+    if (invData.blocked_until !== undefined) formatted.blocked_until = invData.blocked_until;
+    
     if (this.isCloud()) {
       const { data, error } = await supabase.from('inventory').update(formatted).eq('id', id).select().single();
       if (error) throw error;
@@ -1489,7 +1522,7 @@ const DB = {
 
   async updateInventoryStatus(id, status) {
     if (this.isCloud()) {
-      const { data, error } = await supabase.from('inventory').update({ status }).eq('id', id).select().single();
+      const { data, error } = await supabase.from('inventory').update({ status, blocked_until: null }).eq('id', id).select().single();
       if (error) throw error;
       return data;
     } else {
@@ -1497,6 +1530,57 @@ const DB = {
       const idx = db.inventory.findIndex(i => i.id === id);
       if (idx !== -1) {
         db.inventory[idx].status = status;
+        db.inventory[idx].blocked_until = null;
+        saveLocalDb(db);
+        return db.inventory[idx];
+      }
+      throw new Error('Inventory unit not found');
+    }
+  },
+
+  async blockInventoryUnit(id, durationHours) {
+    const blockedUntil = new Date();
+    blockedUntil.setHours(blockedUntil.getHours() + parseFloat(durationHours));
+    const blockedUntilStr = blockedUntil.toISOString();
+
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .update({ status: 'Blocked', blocked_until: blockedUntilStr })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.inventory.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        db.inventory[idx].status = 'Blocked';
+        db.inventory[idx].blocked_until = blockedUntilStr;
+        saveLocalDb(db);
+        return db.inventory[idx];
+      }
+      throw new Error('Inventory unit not found');
+    }
+  },
+
+  async unblockInventoryUnit(id) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('inventory')
+        .update({ status: 'Available', blocked_until: null })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.inventory.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        db.inventory[idx].status = 'Available';
+        db.inventory[idx].blocked_until = null;
         saveLocalDb(db);
         return db.inventory[idx];
       }
@@ -1516,6 +1600,7 @@ const DB = {
       return true;
     }
   },
+
 
   // --- PHASE 2: BOOKINGS ---
   async getBookings() {
@@ -1554,8 +1639,89 @@ const DB = {
       booking_amount: bookingData.booking_amount ? parseFloat(bookingData.booking_amount) : 0.00,
       booking_date: bookingData.booking_date || new Date().toISOString().split('T')[0],
       executive_id: bookingData.executive_id || createdByUserId,
-      status: bookingData.status || 'Token Received'
+      status: bookingData.status || 'Token Booking'
     };
+
+    const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
+    const initialReceived = formatted.booking_amount + formatted.token_amount;
+    const balance = totalCost - initialReceived;
+    const dueDays = bookingData.due_days ? parseInt(bookingData.due_days) : 30;
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + dueDays);
+
+    // Generate milestones
+    const planType = bookingData.payment_plan_type || 'default';
+    let generatedMilestones = [];
+
+    if (planType === '20:20:20:20:20') {
+      const part = totalCost * 0.20;
+      for (let i = 1; i <= 5; i++) {
+        const d = new Date(formatted.booking_date);
+        d.setDate(d.getDate() + (i - 1) * 30);
+        generatedMilestones.push({
+          milestone_name: `Installment ${i} (20%)`,
+          amount: part,
+          due_date: d.toISOString().split('T')[0]
+        });
+      }
+    } else if (planType === '40:30:30') {
+      const parts = [totalCost * 0.40, totalCost * 0.30, totalCost * 0.30];
+      const offsets = [0, 45, 90];
+      parts.forEach((p, idx) => {
+        const d = new Date(formatted.booking_date);
+        d.setDate(d.getDate() + offsets[idx]);
+        generatedMilestones.push({
+          milestone_name: idx === 0 ? 'Booking Confirmation (40%)' : `Installment ${idx} (30%)`,
+          amount: p,
+          due_date: d.toISOString().split('T')[0]
+        });
+      });
+    } else if (planType === 'custom' && bookingData.custom_milestones && bookingData.custom_milestones.length > 0) {
+      generatedMilestones = bookingData.custom_milestones.map(m => ({
+        milestone_name: m.milestone_name,
+        amount: parseFloat(m.amount),
+        due_date: m.due_date
+      }));
+    } else {
+      // Default: Token, Confirmation (15 days), Balance (45 days)
+      const tokenM = formatted.token_amount > 0 ? formatted.token_amount : totalCost * 0.10;
+      const confirmM = formatted.booking_amount > 0 ? formatted.booking_amount : totalCost * 0.15;
+      const balanceM = Math.max(0, totalCost - tokenM - confirmM);
+
+      const dToken = new Date(formatted.booking_date);
+      const dConfirm = new Date(formatted.booking_date);
+      dConfirm.setDate(dConfirm.getDate() + 15);
+      const dBalance = new Date(formatted.booking_date);
+      dBalance.setDate(dBalance.getDate() + 45);
+
+      generatedMilestones.push(
+        { milestone_name: 'Token Payment', amount: tokenM, due_date: dToken.toISOString().split('T')[0] },
+        { milestone_name: 'Booking Confirmation', amount: confirmM, due_date: dConfirm.toISOString().split('T')[0] },
+        { milestone_name: 'Balance Payment', amount: balanceM, due_date: dBalance.toISOString().split('T')[0] }
+      );
+    }
+
+    // Allocate upfront amount to generated milestones
+    let remainingUpfront = initialReceived;
+    generatedMilestones.forEach(m => {
+      m.amount_paid = 0;
+      m.status = 'Pending';
+      if (remainingUpfront > 0) {
+        const payToThis = Math.min(remainingUpfront, m.amount);
+        m.amount_paid = payToThis;
+        if (m.amount_paid >= m.amount) {
+          m.status = 'Paid';
+        } else {
+          m.status = 'Partial';
+        }
+        remainingUpfront -= payToThis;
+      } else {
+        const nowStr = new Date().toISOString().split('T')[0];
+        if (m.due_date < nowStr) {
+          m.status = 'Overdue';
+        }
+      }
+    });
 
     if (this.isCloud()) {
       // 1. Create Booking
@@ -1563,13 +1729,6 @@ const DB = {
       if (bErr) throw bErr;
 
       // 2. Initialize Payment Tracking
-      const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
-      const initialReceived = formatted.booking_amount + formatted.token_amount;
-      const balance = totalCost - initialReceived;
-      const dueDays = bookingData.due_days ? parseInt(bookingData.due_days) : 30;
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + dueDays);
-
       const payFormatted = {
         booking_id: booking.id,
         total_cost: totalCost,
@@ -1582,12 +1741,23 @@ const DB = {
       const { data: payment, error: pErr } = await supabase.from('payments').insert([payFormatted]).select().single();
       if (pErr) throw pErr;
 
-      // 3. Mark inventory status as Booked
-      if (formatted.inventory_id) {
-        await supabase.from('inventory').update({ status: 'Booked' }).eq('id', formatted.inventory_id);
+      // 3. Insert Milestones
+      if (generatedMilestones.length > 0) {
+        const milestonePayloads = generatedMilestones.map(m => ({
+          booking_id: booking.id,
+          ...m
+        }));
+        await supabase.from('booking_milestones').insert(milestonePayloads);
       }
 
-      // 4. Update lead status to Booked
+      // 4. Mark inventory status based on booking status
+      if (formatted.inventory_id) {
+        let invStatus = 'Token';
+        if (formatted.status === 'Booking Confirmed') invStatus = 'Booked';
+        await supabase.from('inventory').update({ status: invStatus, blocked_until: null }).eq('id', formatted.inventory_id);
+      }
+
+      // 5. Update lead status
       await supabase.from('leads').update({
         status: 'Booked',
         booking_token_amount: formatted.token_amount,
@@ -1601,13 +1771,6 @@ const DB = {
       const newBooking = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
       db.bookings.push(newBooking);
 
-      const totalCost = bookingData.total_cost ? parseFloat(bookingData.total_cost) : 0.00;
-      const initialReceived = formatted.booking_amount + formatted.token_amount;
-      const balance = totalCost - initialReceived;
-      const dueDays = bookingData.due_days ? parseInt(bookingData.due_days) : 30;
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + dueDays);
-
       const newPayment = {
         id: generateUuid(),
         booking_id: newBooking.id,
@@ -1620,9 +1783,25 @@ const DB = {
       };
       db.payments.push(newPayment);
 
+      // Insert Milestones
+      if (!db.booking_milestones) db.booking_milestones = [];
+      generatedMilestones.forEach(m => {
+        db.booking_milestones.push({
+          id: generateUuid(),
+          booking_id: newBooking.id,
+          created_at: new Date().toISOString(),
+          ...m
+        });
+      });
+
       if (formatted.inventory_id) {
         const invIdx = db.inventory.findIndex(i => i.id === formatted.inventory_id);
-        if (invIdx !== -1) db.inventory[invIdx].status = 'Booked';
+        if (invIdx !== -1) {
+          let invStatus = 'Token';
+          if (formatted.status === 'Booking Confirmed') invStatus = 'Booked';
+          db.inventory[invIdx].status = invStatus;
+          db.inventory[invIdx].blocked_until = null;
+        }
       }
 
       const leadIdx = db.leads.findIndex(l => l.id === formatted.lead_id);
@@ -1643,13 +1822,28 @@ const DB = {
       const { data: booking, error: bErr } = await supabase.from('bookings').update({ status }).eq('id', id).select().single();
       if (bErr) throw bErr;
 
-      // Handle Cancelled booking inventory release
-      if (status === 'Cancelled' && booking.inventory_id) {
-        await supabase.from('inventory').update({ status: 'Available' }).eq('id', booking.inventory_id);
-        await supabase.from('leads').update({ status: 'Lost', booking_status: 'Cancelled' }).eq('id', booking.lead_id);
-      } else if (status === 'Registered' && booking.lead_id) {
-        // Keep status as Booked, lead is converted completely
-        await supabase.from('leads').update({ booking_status: 'Confirmed' }).eq('id', booking.lead_id);
+      // Sync inventory status based on booking status
+      if (booking.inventory_id) {
+        let invStatus = 'Available';
+        if (status === 'Token Booking') invStatus = 'Token';
+        else if (status === 'Booking Confirmed') invStatus = 'Booked';
+        else if (status === 'Agreement Pending') invStatus = 'Booked';
+        else if (status === 'Registry Pending') invStatus = 'Registry Pending';
+        else if (status === 'Registry Complete') invStatus = 'Registered';
+        else if (status === 'Cancelled') invStatus = 'Available';
+
+        await supabase.from('inventory').update({ status: invStatus, blocked_until: null }).eq('id', booking.inventory_id);
+      }
+
+      // Sync lead status
+      if (booking.lead_id) {
+        let leadStatus = 'Booked';
+        let bStatus = 'Confirmed';
+        if (status === 'Cancelled') {
+          leadStatus = 'Lost';
+          bStatus = 'Cancelled';
+        }
+        await supabase.from('leads').update({ status: leadStatus, booking_status: bStatus }).eq('id', booking.lead_id);
       }
 
       return booking;
@@ -1660,22 +1854,34 @@ const DB = {
         db.bookings[idx].status = status;
         const booking = db.bookings[idx];
 
-        if (status === 'Cancelled') {
-          if (booking.inventory_id) {
-            const invIdx = db.inventory.findIndex(i => i.id === booking.inventory_id);
-            if (invIdx !== -1) db.inventory[invIdx].status = 'Available';
-          }
-          const leadIdx = db.leads.findIndex(l => l.id === booking.lead_id);
-          if (leadIdx !== -1) {
-            db.leads[leadIdx].status = 'Lost';
-            db.leads[leadIdx].booking_status = 'Cancelled';
-          }
-        } else if (status === 'Registered') {
-          const leadIdx = db.leads.findIndex(l => l.id === booking.lead_id);
-          if (leadIdx !== -1) {
-            db.leads[leadIdx].booking_status = 'Confirmed';
+        let invStatus = 'Available';
+        if (status === 'Token Booking') invStatus = 'Token';
+        else if (status === 'Booking Confirmed') invStatus = 'Booked';
+        else if (status === 'Agreement Pending') invStatus = 'Booked';
+        else if (status === 'Registry Pending') invStatus = 'Registry Pending';
+        else if (status === 'Registry Complete') invStatus = 'Registered';
+        else if (status === 'Cancelled') invStatus = 'Available';
+
+        if (booking.inventory_id) {
+          const invIdx = db.inventory.findIndex(i => i.id === booking.inventory_id);
+          if (invIdx !== -1) {
+            db.inventory[invIdx].status = invStatus;
+            db.inventory[invIdx].blocked_until = null;
           }
         }
+
+        const leadIdx = db.leads.findIndex(l => l.id === booking.lead_id);
+        if (leadIdx !== -1) {
+          let leadStatus = 'Booked';
+          let bStatus = 'Confirmed';
+          if (status === 'Cancelled') {
+            leadStatus = 'Lost';
+            bStatus = 'Cancelled';
+          }
+          db.leads[leadIdx].status = leadStatus;
+          db.leads[leadIdx].booking_status = bStatus;
+        }
+
         saveLocalDb(db);
         return booking;
       }
@@ -1764,6 +1970,33 @@ const DB = {
         .single();
       if (upErr) throw upErr;
 
+      // 4. Distribute installment amount to milestones chronologically
+      const { data: milestones, error: mFetchErr } = await supabase
+        .from('booking_milestones')
+        .select('*')
+        .eq('booking_id', pay.booking_id)
+        .order('due_date', { ascending: true });
+      
+      if (!mFetchErr && milestones && milestones.length > 0) {
+        let remainingPaid = parseFloat(amountPaid);
+        for (const m of milestones) {
+          if (remainingPaid <= 0) break;
+          const leftToPay = m.amount - m.amount_paid;
+          if (leftToPay > 0) {
+            const payToThis = Math.min(remainingPaid, leftToPay);
+            const newMPaid = m.amount_paid + payToThis;
+            const newMStatus = newMPaid >= m.amount ? 'Paid' : 'Partial';
+            
+            await supabase
+              .from('booking_milestones')
+              .update({ amount_paid: newMPaid, status: newMStatus })
+              .eq('id', m.id);
+              
+            remainingPaid -= payToThis;
+          }
+        }
+      }
+
       return { installment, payment: updatedPay };
     } else {
       const db = loadLocalDb();
@@ -1781,6 +2014,28 @@ const DB = {
       db.payments[payIdx].amount_received = newReceived;
       db.payments[payIdx].balance = newBalance;
       db.payments[payIdx].status = newStatus;
+
+      // Distribute to milestones chronologically
+      if (!db.booking_milestones) db.booking_milestones = [];
+      const milestones = db.booking_milestones
+        .filter(m => m.booking_id === pay.booking_id)
+        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+      
+      let remainingPaid = parseFloat(amountPaid);
+      milestones.forEach(m => {
+        if (remainingPaid <= 0) return;
+        const leftToPay = m.amount - m.amount_paid;
+        if (leftToPay > 0) {
+          const payToThis = Math.min(remainingPaid, leftToPay);
+          m.amount_paid += payToThis;
+          if (m.amount_paid >= m.amount) {
+            m.status = 'Paid';
+          } else {
+            m.status = 'Partial';
+          }
+          remainingPaid -= payToThis;
+        }
+      });
 
       saveLocalDb(db);
       return { installment: newInstallment, payment: db.payments[payIdx] };
@@ -2679,6 +2934,235 @@ const DB = {
       saveLocalDb(db);
     }
     return targetLead;
+  },
+
+  // --- PHASE 5: BOOKING MILESTONES & COLLECTIONS ---
+  async getBookingMilestones(bookingId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('booking_milestones')
+        .select('*')
+        .eq('booking_id', bookingId)
+        .order('due_date', { ascending: true });
+      if (error) throw error;
+      
+      // Update overdue status dynamically on read
+      const nowStr = new Date().toISOString().split('T')[0];
+      const updated = data.map(m => {
+        if (m.status === 'Pending' && m.due_date < nowStr) {
+          m.status = 'Overdue';
+        }
+        return m;
+      });
+      return updated;
+    } else {
+      const db = loadLocalDb();
+      const nowStr = new Date().toISOString().split('T')[0];
+      const list = (db.booking_milestones || []).filter(m => m.booking_id === bookingId);
+      list.forEach(m => {
+        if (m.status === 'Pending' && m.due_date < nowStr) {
+          m.status = 'Overdue';
+        }
+      });
+      return list.sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    }
+  },
+
+  async createBookingMilestone(milestoneData) {
+    const formatted = {
+      booking_id: milestoneData.booking_id,
+      milestone_name: milestoneData.milestone_name,
+      amount: parseFloat(milestoneData.amount),
+      due_date: milestoneData.due_date,
+      amount_paid: parseFloat(milestoneData.amount_paid || 0),
+      status: milestoneData.status || 'Pending'
+    };
+    if (formatted.amount_paid >= formatted.amount) {
+      formatted.status = 'Paid';
+    } else {
+      const nowStr = new Date().toISOString().split('T')[0];
+      if (formatted.due_date < nowStr) {
+        formatted.status = 'Overdue';
+      }
+    }
+
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('booking_milestones')
+        .insert([formatted])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      if (!db.booking_milestones) db.booking_milestones = [];
+      const newMilestone = { id: generateUuid(), created_at: new Date().toISOString(), ...formatted };
+      db.booking_milestones.push(newMilestone);
+      saveLocalDb(db);
+      return newMilestone;
+    }
+  },
+
+  async updateBookingMilestone(id, milestoneData) {
+    const formatted = {};
+    if (milestoneData.milestone_name !== undefined) formatted.milestone_name = milestoneData.milestone_name;
+    if (milestoneData.amount !== undefined) formatted.amount = parseFloat(milestoneData.amount);
+    if (milestoneData.due_date !== undefined) formatted.due_date = milestoneData.due_date;
+    if (milestoneData.amount_paid !== undefined) formatted.amount_paid = parseFloat(milestoneData.amount_paid);
+    if (milestoneData.status !== undefined) formatted.status = milestoneData.status;
+
+    if (formatted.amount !== undefined || formatted.amount_paid !== undefined) {
+      const amt = formatted.amount !== undefined ? formatted.amount : milestoneData.amount;
+      const paid = formatted.amount_paid !== undefined ? formatted.amount_paid : milestoneData.amount_paid;
+      if (paid >= amt) {
+        formatted.status = 'Paid';
+      } else {
+        const dDate = formatted.due_date !== undefined ? formatted.due_date : milestoneData.due_date;
+        const nowStr = new Date().toISOString().split('T')[0];
+        if (dDate && dDate < nowStr) {
+          formatted.status = 'Overdue';
+        } else {
+          formatted.status = 'Pending';
+        }
+      }
+    }
+
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('booking_milestones')
+        .update(formatted)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const db = loadLocalDb();
+      const idx = db.booking_milestones.findIndex(m => m.id === id);
+      if (idx !== -1) {
+        db.booking_milestones[idx] = { ...db.booking_milestones[idx], ...formatted };
+        saveLocalDb(db);
+        return db.booking_milestones[idx];
+      }
+      throw new Error('Milestone not found');
+    }
+  },
+
+  async deleteBookingMilestone(id) {
+    if (this.isCloud()) {
+      const { error } = await supabase
+        .from('booking_milestones')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const db = loadLocalDb();
+      db.booking_milestones = (db.booking_milestones || []).filter(m => m.id !== id);
+      saveLocalDb(db);
+      return true;
+    }
+  },
+
+  async getCollectionAnalytics() {
+    let bookings = [];
+    let payments = [];
+    let milestones = [];
+
+    if (this.isCloud()) {
+      const { data: b } = await supabase.from('bookings').select('*');
+      bookings = b || [];
+      const { data: p } = await supabase.from('payments').select('*');
+      payments = p || [];
+      const { data: m } = await supabase.from('booking_milestones').select('*');
+      milestones = m || [];
+    } else {
+      const db = loadLocalDb();
+      bookings = db.bookings || [];
+      payments = db.payments || [];
+      milestones = db.booking_milestones || [];
+    }
+
+    const totalCollection = payments.reduce((sum, p) => sum + (p.total_cost || 0), 0);
+    const receivedCollection = payments.reduce((sum, p) => sum + (p.amount_received || 0), 0);
+    const pendingCollection = totalCollection - receivedCollection;
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    const curMonthStr = nowStr.substring(0, 7); // YYYY-MM
+    
+    // Milestones due this month
+    const dueThisMonth = milestones
+      .filter(m => m.due_date && m.due_date.substring(0, 7) === curMonthStr)
+      .reduce((sum, m) => sum + (m.amount || 0), 0);
+
+    // Overdue amount
+    const overdueAmount = milestones
+      .filter(m => m.due_date < nowStr && m.status !== 'Paid')
+      .reduce((sum, m) => sum + ((m.amount || 0) - (m.amount_paid || 0)), 0);
+
+    let installments = [];
+    if (this.isCloud()) {
+      const { data } = await supabase.from('payment_installments').select('*');
+      installments = data || [];
+    } else {
+      const db = loadLocalDb();
+      installments = db.payment_installments || [];
+    }
+
+    const modeBreakdown = { UPI: 0, Cash: 0, Cheque: 0, 'NEFT/RTGS': 0, Other: 0 };
+    installments.forEach(inst => {
+      const mode = inst.payment_mode || 'Other';
+      if (modeBreakdown[mode] !== undefined) {
+        modeBreakdown[mode] += inst.amount_paid || 0;
+      } else {
+        modeBreakdown.Other += inst.amount_paid || 0;
+      }
+    });
+
+    return {
+      totalCollection,
+      receivedCollection,
+      pendingCollection,
+      dueThisMonth,
+      overdueAmount,
+      modeBreakdown
+    };
+  },
+
+  async getCollectionReminders() {
+    let milestones = [];
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('booking_milestones')
+        .select('*, bookings(*, leads(*), projects(*), inventory(*))')
+        .neq('status', 'Paid')
+        .order('due_date', { ascending: true });
+      if (error) throw error;
+      milestones = data || [];
+    } else {
+      const db = loadLocalDb();
+      milestones = (db.booking_milestones || []).filter(m => m.status !== 'Paid').map(m => {
+        const booking = db.bookings.find(b => b.id === m.booking_id);
+        let bkWithJoins = null;
+        if (booking) {
+          const lead = db.leads.find(l => l.id === booking.lead_id);
+          const proj = db.projects.find(pr => pr.id === booking.project_id);
+          const inv = db.inventory.find(i => i.id === booking.inventory_id);
+          bkWithJoins = { ...booking, leads: lead || null, projects: proj || null, inventory: inv || null };
+        }
+        return { ...m, bookings: bkWithJoins };
+      });
+    }
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    const upcoming = milestones.filter(m => m.due_date >= nowStr);
+    const overdue = milestones.filter(m => m.due_date < nowStr);
+
+    return {
+      upcoming,
+      overdue
+    };
   }
 };
 

@@ -1340,6 +1340,25 @@ app.delete('/api/inventory/:id', authenticateToken, requireAdmin, async (req, re
   }
 });
 
+app.post('/api/inventory/:id/block', authenticateToken, async (req, res) => {
+  try {
+    const duration = req.body.duration_hours || 24;
+    const item = await DB.blockInventoryUnit(req.params.id, duration);
+    res.json(item);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to block inventory unit' });
+  }
+});
+
+app.post('/api/inventory/:id/unblock', authenticateToken, async (req, res) => {
+  try {
+    const item = await DB.unblockInventoryUnit(req.params.id);
+    res.json(item);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to unblock inventory unit' });
+  }
+});
+
 // --- PHASE 2: BOOKINGS ---
 
 app.get('/api/bookings', authenticateToken, async (req, res) => {
@@ -1431,6 +1450,63 @@ app.get('/api/payments/:id/installments', authenticateToken, async (req, res) =>
     res.json(list);
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch installments' });
+  }
+});
+
+// --- PHASE 5: BOOKING MILESTONES & COLLECTIONS ---
+
+app.get('/api/bookings/:id/milestones', authenticateToken, async (req, res) => {
+  try {
+    const list = await DB.getBookingMilestones(req.params.id);
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch milestones' });
+  }
+});
+
+app.post('/api/bookings/:id/milestones', authenticateToken, async (req, res) => {
+  try {
+    const data = { ...req.body, booking_id: req.params.id };
+    const milestone = await DB.createBookingMilestone(data);
+    res.status(201).json(milestone);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to create milestone' });
+  }
+});
+
+app.put('/api/bookings/milestones/:milestoneId', authenticateToken, async (req, res) => {
+  try {
+    const milestone = await DB.updateBookingMilestone(req.params.milestoneId, req.body);
+    res.json(milestone);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update milestone' });
+  }
+});
+
+app.delete('/api/bookings/milestones/:milestoneId', authenticateToken, async (req, res) => {
+  try {
+    await DB.deleteBookingMilestone(req.params.milestoneId);
+    res.json({ message: 'Milestone deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete milestone' });
+  }
+});
+
+app.get('/api/collections/analytics', authenticateToken, async (req, res) => {
+  try {
+    const analytics = await DB.getCollectionAnalytics();
+    res.json(analytics);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch collection analytics' });
+  }
+});
+
+app.get('/api/collections/reminders', authenticateToken, async (req, res) => {
+  try {
+    const reminders = await DB.getCollectionReminders();
+    res.json(reminders);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch collection reminders' });
   }
 });
 

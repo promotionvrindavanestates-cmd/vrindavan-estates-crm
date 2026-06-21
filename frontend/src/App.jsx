@@ -18,7 +18,10 @@ import RemindersModal from './components/RemindersModal';
 import LeadDetailDrawer from './components/LeadDetailDrawer';
 import LeadPipeline from './components/LeadPipeline';
 import DuplicateManager from './components/DuplicateManager';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello, Copy } from 'lucide-react';
+import InventoryPipeline from './components/InventoryPipeline';
+import BookingPipeline from './components/BookingPipeline';
+import CollectionDashboard from './components/CollectionDashboard';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, MessageSquare, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent } from 'lucide-react';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -453,10 +456,28 @@ export default function App() {
             <LayoutGrid size={15} /> Inventory
           </div>
           <div 
+            class={`nav-tab ${activeTab === 'inventory-pipeline' ? 'active' : ''}`}
+            onClick={() => setActiveTab('inventory-pipeline')}
+          >
+            <Trello size={15} /> Inventory Pipeline
+          </div>
+          <div 
             class={`nav-tab ${activeTab === 'bookings' ? 'active' : ''}`}
             onClick={() => setActiveTab('bookings')}
           >
             <Receipt size={15} /> Bookings
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'booking-pipeline' ? 'active' : ''}`}
+            onClick={() => setActiveTab('booking-pipeline')}
+          >
+            <Trello size={15} /> Booking Pipeline
+          </div>
+          <div 
+            class={`nav-tab ${activeTab === 'collections' ? 'active' : ''}`}
+            onClick={() => setActiveTab('collections')}
+          >
+            <BadgeCent size={15} /> Collections
           </div>
           <div 
             class={`nav-tab ${activeTab === 'whatsapp' ? 'active' : ''}`}
@@ -557,8 +578,20 @@ export default function App() {
               <InventoryMgmt currentUser={currentUser} />
             )}
 
+            {activeTab === 'inventory-pipeline' && (
+              <InventoryPipeline currentUser={currentUser} />
+            )}
+
             {activeTab === 'bookings' && (
               <BookingsRegistry currentUser={currentUser} />
+            )}
+
+            {activeTab === 'booking-pipeline' && (
+              <BookingPipeline currentUser={currentUser} />
+            )}
+
+            {activeTab === 'collections' && (
+              <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />
             )}
 
             {activeTab === 'whatsapp' && (
