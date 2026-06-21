@@ -352,25 +352,50 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
 // --- CALL LOGS ---
 
 app.post('/api/leads/:id/call-log', authenticateToken, async (req, res) => {
-  const { response, notes } = req.body;
+  const { response, notes, duration, action_taken, follow_up_date, follow_up_time, follow_up_datetime, create_reminder } = req.body;
   if (!response) {
     return res.status(400).json({ error: 'Call response selection is required' });
   }
 
   try {
-    const updatedLead = await DB.logCall(req.params.id, req.user.id, response, notes);
+    const updatedLead = await DB.logCall(
+      req.params.id, 
+      req.user.id, 
+      response, 
+      notes, 
+      duration ? parseInt(duration) : 0,
+      action_taken || null,
+      follow_up_date || null,
+      follow_up_time || null,
+      follow_up_datetime || null
+    );
     
     // Log audit trail
     await DB.logAudit(
       req.params.id,
       'Notes Added',
-      `Logged call response: "${response}". Remarks: ${notes}`,
+      `Logged call response: "${response}". Remarks: ${notes}` + (action_taken ? `. Action: ${action_taken}` : ''),
       req.user.id,
       req.user.full_name
     );
 
+    // If follow-up date and create_reminder is set, automatically create a reminder
+    if (create_reminder && follow_up_date) {
+      await DB.createReminder({
+        lead_id: req.params.id,
+        title: `Follow-up: ${action_taken || response}`,
+        type: 'Follow-up',
+        reminder_date: follow_up_date,
+        reminder_time: follow_up_time || '09:00:00',
+        notes: notes || '',
+        is_read: false,
+        assigned_employee_id: req.user.id
+      });
+    }
+
     res.json({ message: 'Call logged successfully', lead: updatedLead });
   } catch (error) {
+    console.error('Call logging server error:', error);
     res.status(500).json({ error: 'Failed to record call log' });
   }
 });
@@ -1968,10 +1993,15 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
       timeline.push({
         id: c.id,
         type: 'call',
-        title: `Call Response: ${c.response}`,
+        title: `Call Outcome: ${c.response}`,
         description: c.notes || 'No remarks logged.',
         date: c.call_date,
-        user: c.caller ? c.caller.full_name : 'Executive'
+        user: c.caller ? c.caller.full_name : 'Executive',
+        duration: c.duration || 0,
+        action_taken: c.action_taken || null,
+        follow_up_date: c.follow_up_date || null,
+        follow_up_time: c.follow_up_time || null,
+        follow_up_datetime: c.follow_up_datetime || null
       });
     });
 

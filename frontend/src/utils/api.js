@@ -113,10 +113,10 @@ export const api = {
     }),
 
   // Call Logs
-  logCall: (leadId, response, notes) =>
+  logCall: (leadId, response, notes, extra = {}) =>
     request(`/api/leads/${leadId}/call-log`, {
       method: 'POST',
-      body: JSON.stringify({ response, notes }),
+      body: JSON.stringify({ response, notes, ...extra }),
     }),
 
   getCallLogs: (leadId) => request(`/api/leads/${leadId}/call-logs`),

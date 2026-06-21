@@ -702,18 +702,29 @@ const DB = {
   },
 
   // --- CALL LOGGING ---
-  async logCall(leadId, callerId, response, notes) {
+  async logCall(leadId, callerId, response, notes, duration = 0, action_taken = null, follow_up_date = null, follow_up_time = null, follow_up_datetime = null) {
     if (this.isCloud()) {
       const { error: logError } = await supabase
         .from('call_logs')
-        .insert([{ lead_id: leadId, caller_id: callerId, response, notes }]);
+        .insert([{ 
+          lead_id: leadId, 
+          caller_id: callerId, 
+          response, 
+          notes,
+          duration,
+          action_taken,
+          follow_up_date,
+          follow_up_time,
+          follow_up_datetime
+        }]);
       if (logError) throw logError;
 
       const { data, error: updateError } = await supabase
         .from('leads')
         .update({
           last_call_date: new Date().toISOString(),
-          last_response: response
+          last_response: response,
+          follow_up_date: follow_up_date || undefined
         })
         .eq('id', leadId)
         .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)')
@@ -728,6 +739,11 @@ const DB = {
         caller_id: callerId,
         response,
         notes,
+        duration,
+        action_taken,
+        follow_up_date,
+        follow_up_time,
+        follow_up_datetime,
         call_date: new Date().toISOString()
       };
       db.call_logs.push(newLog);
@@ -736,6 +752,9 @@ const DB = {
       if (idx !== -1) {
         db.leads[idx].last_call_date = newLog.call_date;
         db.leads[idx].last_response = response;
+        if (follow_up_date) {
+          db.leads[idx].follow_up_date = follow_up_date;
+        }
       }
       saveLocalDb(db);
       return db.leads[idx];

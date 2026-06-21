@@ -9,6 +9,7 @@ import {
 import { FaWhatsapp } from 'react-icons/fa';
 
 const CALL_RESPONSES = ['Connected', 'Not Picked', 'Busy', 'Interested', 'Site Visit', 'Follow Up', 'Not Interested', 'Booked'];
+const ACTIONS = ['None', 'Callback Scheduled', 'Site Visit Scheduled', 'Meeting Arranged', 'Information Sent', 'Others'];
 
 export default function LeadDetailDrawer({ 
   isOpen, 
@@ -33,6 +34,12 @@ export default function LeadDetailDrawer({
   const [callResponse, setCallResponse] = useState('Connected');
   const [callSaving, setCallSaving] = useState(false);
   const [callHistoryLoading, setCallHistoryLoading] = useState(false);
+  const [callActionTaken, setCallActionTaken] = useState('None');
+  const [callFollowUpDate, setCallFollowUpDate] = useState('');
+  const [callFollowUpTime, setCallFollowUpTime] = useState('');
+  const [callCreateReminder, setCallCreateReminder] = useState(true);
+  const [callSendWhatsAppReminder, setCallSendWhatsAppReminder] = useState(true);
+  const [callDuration, setCallDuration] = useState('');
   
   // GPS SITE VISIT check-in / check-out
   const [siteVisits, setSiteVisits] = useState([]);
@@ -238,9 +245,38 @@ export default function LeadDetailDrawer({
 
     setCallSaving(true);
     try {
-      await api.logCall(lead.id, callResponse, callNotes);
+      const hasFollowUp = callActionTaken !== 'None';
+      const extra = {
+        duration: callDuration ? parseInt(callDuration) : 0,
+        action_taken: hasFollowUp ? callActionTaken : null,
+        follow_up_date: hasFollowUp ? callFollowUpDate : null,
+        follow_up_time: hasFollowUp ? callFollowUpTime : null,
+        follow_up_datetime: hasFollowUp && callFollowUpDate ? new Date(`${callFollowUpDate}T${callFollowUpTime || '09:00'}:00`).toISOString() : null,
+        create_reminder: hasFollowUp ? callCreateReminder : false
+      };
+
+      await api.logCall(lead.id, callResponse, callNotes, extra);
       setCallNotes('');
       setCallResponse('Connected');
+      setCallActionTaken('None');
+      setCallFollowUpDate('');
+      setCallFollowUpTime('');
+      setCallDuration('');
+
+      // WhatsApp launch check
+      if (hasFollowUp && callSendWhatsAppReminder) {
+        const dateStr = callFollowUpDate ? new Date(callFollowUpDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'soon';
+        const timeStr = callFollowUpTime || 'scheduled time';
+        const phone = lead.phone1 || '';
+        if (phone) {
+          const cleanPhone = phone.replace(/[^0-9]/g, '');
+          const prefix = cleanPhone.length === 10 ? '91' : '';
+          const message = `Hello ${lead.name || 'Client'},\n\nThank you for speaking with me today. As discussed, I have scheduled our next follow-up call/meeting on *${dateStr}* at *${timeStr}*.\n\nRegards,\nIndiana Vrindavan Estates Team`;
+          const url = `https://wa.me/${prefix}${cleanPhone}?text=${encodeURIComponent(message)}`;
+          window.open(url, '_blank');
+        }
+      }
+
       fetchLeadDetails();
       if (onRefreshData) onRefreshData();
     } catch (err) {
@@ -670,6 +706,16 @@ export default function LeadDetailDrawer({
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{new Date(ev.date).toLocaleDateString()}</span>
                         </div>
                         <div style={{ color: 'var(--text-main)', fontSize: '11px' }}>{ev.description}</div>
+                        {ev.type === 'call' && ev.duration > 0 && (
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            ⏱ Duration: {Math.floor(ev.duration / 60)}m {ev.duration % 60}s
+                          </div>
+                        )}
+                        {ev.type === 'call' && ev.action_taken && (
+                          <div style={{ fontSize: '10px', color: 'var(--primary)', marginTop: '2px' }}>
+                            🗓 Next Action: {ev.action_taken} {ev.follow_up_date ? `on ${ev.follow_up_date}` : ''}
+                          </div>
+                        )}
                         <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
                           By: {ev.user} {ev.device ? `(${ev.device})` : ''}
                         </div>
@@ -683,24 +729,75 @@ export default function LeadDetailDrawer({
             {/* Tab content 2: Calls log & history */}
             {activeTab === 'calls' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Form to log call */}
                 <form onSubmit={handleLogCallSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-main)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', width: '120px' }}>Call Status</label>
-                    <select className="form-control" value={callResponse} onChange={e => setCallResponse(e.target.value)} style={{ padding: '6px 12px', fontSize: '12px' }}>
-                      {CALL_RESPONSES.map(r => <option key={r} value={r}>{r}</option>)}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Call Status</label>
+                      <select className="form-control" value={callResponse} onChange={e => setCallResponse(e.target.value)} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        {CALL_RESPONSES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Duration (sec)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={callDuration} 
+                        onChange={e => setCallDuration(e.target.value)} 
+                        placeholder="e.g. 45"
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Notes / Remarks</label>
+                    <textarea 
+                      className="form-control"
+                      rows="2"
+                      value={callNotes}
+                      onChange={e => setCallNotes(e.target.value)}
+                      placeholder="Enter call notes..."
+                      style={{ fontSize: '12px' }}
+                      required
+                    ></textarea>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Action Taken</label>
+                    <select className="form-control" value={callActionTaken} onChange={e => setCallActionTaken(e.target.value)} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                      {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
-                  <textarea 
-                    className="form-control"
-                    rows="3"
-                    value={callNotes}
-                    onChange={e => setCallNotes(e.target.value)}
-                    placeholder="Enter call notes... What was client response?"
-                    style={{ fontSize: '12px' }}
-                    required
-                  ></textarea>
-                  <button type="submit" className="btn btn-primary" style={{ padding: '6px', fontSize: '11px' }} disabled={callSaving}>
+
+                  {callActionTaken !== 'None' && (
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Date</label>
+                          <input type="date" className="form-control" value={callFollowUpDate} onChange={e => setCallFollowUpDate(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px' }} required />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Time</label>
+                          <input type="time" className="form-control" value={callFollowUpTime} onChange={e => setCallFollowUpTime(e.target.value)} style={{ padding: '4px 8px', fontSize: '11px' }} required />
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 'normal', margin: 0 }}>
+                          <input type="checkbox" checked={callCreateReminder} onChange={e => setCallCreateReminder(e.target.checked)} />
+                          Create automatic reminder
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer', fontWeight: 'normal', margin: 0 }}>
+                          <input type="checkbox" checked={callSendWhatsAppReminder} onChange={e => setCallSendWhatsAppReminder(e.target.checked)} />
+                          Prompt WhatsApp message
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  <button type="submit" className="btn btn-primary" style={{ padding: '8px', fontSize: '11px', marginTop: '4px' }} disabled={callSaving}>
                     {callSaving ? 'Saving...' : 'Save Call Log'}
                   </button>
                 </form>
@@ -720,7 +817,17 @@ export default function LeadDetailDrawer({
                             <span className="badge badge-info" style={{ fontSize: '8px', padding: '1px 5px' }}>{log.response}</span>
                             <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{new Date(log.call_date).toLocaleString()}</span>
                           </div>
-                          <p style={{ margin: 0, color: 'var(--text-main)' }}>{log.notes}</p>
+                          <p style={{ margin: '0 0 4px 0', color: 'var(--text-main)' }}>{log.notes}</p>
+                          {log.duration > 0 && (
+                            <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginBottom: '2px' }}>
+                              ⏱ Duration: {Math.floor(log.duration / 60)}m {log.duration % 60}s
+                            </div>
+                          )}
+                          {log.action_taken && (
+                            <div style={{ fontSize: '9.5px', color: 'var(--primary)', marginBottom: '2px' }}>
+                              Action: {log.action_taken} {log.follow_up_date ? `on ${log.follow_up_date}` : ''}
+                            </div>
+                          )}
                           <div style={{ fontSize: '9px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '4px' }}>
                             Caller: {log.caller ? log.caller.full_name : 'Executive'}
                           </div>

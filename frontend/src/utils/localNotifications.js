@@ -72,3 +72,88 @@ export const scheduleAllFollowUps = async (leads = []) => {
     await scheduleFollowUpNotification(lead);
   }
 };
+
+export const scheduleReminderNotification = async (reminder, leadName) => {
+  if (!window.Capacitor) return;
+
+  try {
+    const hasPermission = await LocalNotifications.checkPermissions();
+    if (hasPermission.display !== 'granted') {
+      const request = await LocalNotifications.requestPermissions();
+      if (request.display !== 'granted') {
+        console.warn('Notifications permission denied');
+        return;
+      }
+    }
+
+    if (!reminder.reminder_date) return;
+
+    // Parse reminder date and time (reminder_time is HH:MM or HH:MM AM/PM)
+    const timeStr = reminder.reminder_time || '09:00';
+    let [hours, minutes] = timeStr.split(':');
+    let isPM = false;
+    if (timeStr.toLowerCase().includes('pm')) {
+      isPM = true;
+    }
+    hours = parseInt(hours);
+    minutes = parseInt(minutes);
+    if (isPM && hours < 12) hours += 12;
+    if (!isPM && hours === 12) hours = 0;
+
+    const reminderDateTime = new Date(`${reminder.reminder_date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+    
+    // Scheduled trigger is 15 minutes before follow-up
+    const triggerTime = new Date(reminderDateTime.getTime() - 15 * 60 * 1000);
+
+    // If trigger time has already passed, don't schedule
+    if (triggerTime.getTime() < Date.now()) {
+      return; 
+    }
+
+    // Generate numeric 32-bit ID
+    const numericId = Math.abs(
+      reminder.id.split('-').reduce((acc, part) => acc + parseInt(part, 16) || 0, 0)
+    ) % 1000000;
+
+    // Cancel existing
+    try {
+      await LocalNotifications.cancel({
+        notifications: [{ id: numericId }]
+      });
+    } catch (e) {}
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          title: '⏰ Upcoming Follow-Up Alert',
+          body: `Follow-up with ${leadName || 'Customer'} is scheduled in 15 minutes at ${reminder.reminder_time}.`,
+          id: numericId,
+          schedule: { at: triggerTime },
+          sound: null,
+          extra: { leadId: reminder.lead_id }
+        }
+      ]
+    });
+    console.log(`Scheduled Capacitor alert for reminder ${reminder.id} at ${triggerTime}`);
+  } catch (error) {
+    console.error('Capacitor reminder notification schedule failed:', error);
+  }
+};
+
+export const scheduleAllReminders = async (reminders = [], leads = []) => {
+  if (!window.Capacitor || reminders.length === 0) return;
+
+  const leadMap = {};
+  leads.forEach(l => {
+    leadMap[l.id] = l.name;
+  });
+
+  const nowStr = new Date().toISOString().split('T')[0];
+  const upcomingReminders = reminders.filter(r => !r.is_read && r.reminder_date >= nowStr);
+
+  console.log(`Scheduling ${upcomingReminders.length} upcoming Capacitor reminders...`);
+  for (const rem of upcomingReminders) {
+    const name = rem.leads?.name || leadMap[rem.lead_id] || 'Customer';
+    await scheduleReminderNotification(rem, name);
+  }
+};

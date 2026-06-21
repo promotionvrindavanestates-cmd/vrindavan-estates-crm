@@ -21,7 +21,7 @@ import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
 import CollectionDashboard from './components/CollectionDashboard';
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent } from 'lucide-react';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
@@ -71,6 +71,9 @@ export default function App() {
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [remindersCount, setRemindersCount] = useState(0);
   const [activeToast, setActiveToast] = useState(null);
+  
+  // 15-minute advance reminder check state
+  const [activeAlertReminder, setActiveAlertReminder] = useState(null);
 
   // Check login on startup
   useEffect(() => {
@@ -181,6 +184,113 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [activeToast]);
+
+  // 15-minute advance reminder check poller
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const checkUpcomingReminders = async () => {
+      try {
+        const remindersList = await api.getReminders();
+        const todayStr = new Date().toISOString().split('T')[0];
+        const now = Date.now();
+
+        const notifiedList = JSON.parse(sessionStorage.getItem('notified_15min_reminders') || '[]');
+        let updatedNotified = false;
+
+        for (const r of remindersList) {
+          if (r.is_read) continue;
+          if (r.reminder_date !== todayStr) continue;
+
+          // Parse reminder time
+          let reminderTimeStr = r.reminder_time || '09:00:00';
+          let reminderDateTime = null;
+
+          // Handle typical formats like HH:MM:SS or HH:MM
+          const timeParts = reminderTimeStr.split(':');
+          if (timeParts.length >= 2) {
+            const hours = parseInt(timeParts[0]);
+            const minutes = parseInt(timeParts[1]);
+            const seconds = timeParts[2] ? parseInt(timeParts[2]) : 0;
+            reminderDateTime = new Date();
+            reminderDateTime.setHours(hours, minutes, seconds, 0);
+          }
+
+          if (!reminderDateTime) continue;
+
+          const diffMins = (reminderDateTime.getTime() - now) / 60000;
+
+          // If reminder is scheduled within the next 15 minutes (or currently due/overdue within 5 minutes)
+          if (diffMins >= -5 && diffMins <= 15) {
+            if (!notifiedList.includes(r.id)) {
+              notifiedList.push(r.id);
+              updatedNotified = true;
+
+              const title = '🕉️ Upcoming Follow-Up';
+              const body = `Follow-up for ${r.leads ? r.leads.name : 'Lead'} is scheduled in ${Math.round(diffMins)} minutes (${r.reminder_time}).`;
+
+              // Trigger standard browser notification
+              if (Notification.permission === 'granted') {
+                new Notification(title, { body });
+              }
+
+              // Trigger Capacitor notification if available
+              if (window.Capacitor) {
+                try {
+                  showPushNotification(title, body, { reminderId: r.id });
+                } catch (err) {
+                  console.warn('Capacitor notification error:', err);
+                }
+              }
+
+              // Display interactive bottom-right popup
+              setActiveAlertReminder(r);
+            }
+          }
+        }
+
+        if (updatedNotified) {
+          sessionStorage.setItem('notified_15min_reminders', JSON.stringify(notifiedList));
+        }
+      } catch (error) {
+        console.error('Error checking upcoming reminders:', error);
+      }
+    };
+
+    // Request Notification Permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    checkUpcomingReminders();
+    const interval = setInterval(checkUpcomingReminders, 30000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  const handlePopupCall = () => {
+    if (activeAlertReminder && activeAlertReminder.leads) {
+      setSelectedLeadForCall(activeAlertReminder.leads);
+      setCallLogModalOpen(true);
+    }
+    setActiveAlertReminder(null);
+  };
+
+  const handlePopupWhatsApp = () => {
+    if (activeAlertReminder && activeAlertReminder.leads) {
+      const lead = activeAlertReminder.leads;
+      const phone = lead.phone1 || '';
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const prefix = cleanPhone.length === 10 ? '91' : '';
+      const message = `Hello ${lead.name || 'Client'},\n\nThis is a friendly reminder for our scheduled follow-up call at ${activeAlertReminder.reminder_time || ''}.\n\nRegards,\nIndiana Vrindavan Estates Team`;
+      const url = `https://wa.me/${prefix}${cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    }
+    setActiveAlertReminder(null);
+  };
+
+  const handlePopupDismiss = () => {
+    setActiveAlertReminder(null);
+  };
 
   const fetchCRMData = async (user = currentUser) => {
     if (!user) return;
@@ -666,6 +776,105 @@ export default function App() {
           employees={employees}
           onRefreshData={fetchCRMData}
         />
+
+        {/* Bottom-right Glassmorphic Follow-Up Popup Alert */}
+        {activeAlertReminder && (
+          <div 
+            style={{
+              position: 'fixed',
+              bottom: '24px',
+              right: '24px',
+              zIndex: 1000,
+              width: '350px',
+              background: 'rgba(30, 41, 59, 0.85)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 12px 40px 0 rgba(0, 0, 0, 0.5)',
+              animation: 'slideIn 0.3s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BellRing size={20} style={{ color: '#10B981' }} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#F8FAFC' }}>Upcoming Follow-Up</h4>
+                <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '500' }}>Scheduled at {activeAlertReminder.reminder_time}</span>
+              </div>
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#F1F5F9' }}>
+                {activeAlertReminder.leads ? activeAlertReminder.leads.name : 'Unknown Lead'}
+              </p>
+              <p style={{ margin: 0, fontSize: '12px', color: '#94A3B8', wordBreak: 'break-word' }}>
+                {activeAlertReminder.notes || activeAlertReminder.title}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                onClick={handlePopupCall}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: 'var(--primary)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <PhoneCall size={14} /> Call
+              </button>
+              <button 
+                onClick={handlePopupWhatsApp}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: '#25D366',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <FaWhatsapp size={15} /> WhatsApp
+              </button>
+              <button 
+                onClick={handlePopupDismiss}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#E2E8F0',
+                  border: 'none',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
 
 

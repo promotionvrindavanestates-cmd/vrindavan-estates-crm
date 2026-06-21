@@ -9,6 +9,7 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeFollowUpTab, setActiveFollowUpTab] = useState('today'); // 'today', 'missed', 'upcoming'
 
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [activeWhatsAppLead, setActiveWhatsAppLead] = useState(null);
@@ -247,39 +248,111 @@ export default function Dashboard({ leads = [], employees = [], onSelectLead, on
       {/* Operations & Analytics Section (Replacing Heatmaps) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         
-        {/* Widget 1: My Follow-Ups Due Today */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: 'var(--text-main)', fontSize: '15px' }}>
-            <Calendar size={18} style={{ color: 'var(--color-info)' }} />
-            My Follow-Ups Due Today
-          </h3>
-          <div style={{ overflowY: 'auto', flex: 1, maxHeight: '300px' }}>
+        {/* Widget 1: Unified Follow-Ups Controller */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '380px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)', fontSize: '14px', margin: 0 }}>
+              <Calendar size={16} style={{ color: 'var(--color-info)' }} />
+              Follow-Up Control Center
+            </h3>
+            
+            {/* Tab Selectors */}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-main)', padding: '2px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <button 
+                type="button"
+                onClick={() => setActiveFollowUpTab('today')}
+                style={{
+                  background: activeFollowUpTab === 'today' ? 'var(--primary)' : 'transparent',
+                  color: activeFollowUpTab === 'today' ? '#000' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Today ({activeReminders.filter(r => r.reminder_date === todayStr && r.leads).length})
+              </button>
+              <button 
+                type="button"
+                onClick={() => setActiveFollowUpTab('missed')}
+                style={{
+                  background: activeFollowUpTab === 'missed' ? '#ef4444' : 'transparent',
+                  color: activeFollowUpTab === 'missed' ? '#fff' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Missed ({activeReminders.filter(r => r.reminder_date < todayStr && r.leads).length})
+              </button>
+              <button 
+                type="button"
+                onClick={() => setActiveFollowUpTab('upcoming')}
+                style={{
+                  background: activeFollowUpTab === 'upcoming' ? '#06b6d4' : 'transparent',
+                  color: activeFollowUpTab === 'upcoming' ? '#fff' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Upcoming ({activeReminders.filter(r => r.reminder_date > todayStr && r.leads).length})
+              </button>
+            </div>
+          </div>
+
+          <div style={{ overflowY: 'auto', flex: 1, maxHeight: '280px' }}>
             <table style={{ width: '100%', fontSize: '12px' }}>
               <thead>
                 <tr>
                   <th>Lead Name</th>
                   <th>Mobile</th>
-                  <th>Time</th>
+                  <th>{activeFollowUpTab === 'today' ? 'Time' : 'Date'}</th>
                   <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {(() => {
-                  const todayRemindersList = activeReminders.filter(r => r.reminder_date === todayStr && r.leads);
-                  if (todayRemindersList.length === 0) {
+                  let filtered = [];
+                  if (activeFollowUpTab === 'today') {
+                    filtered = activeReminders.filter(r => r.reminder_date === todayStr && r.leads);
+                  } else if (activeFollowUpTab === 'missed') {
+                    filtered = activeReminders.filter(r => r.reminder_date < todayStr && r.leads);
+                  } else {
+                    filtered = activeReminders.filter(r => r.reminder_date > todayStr && r.leads);
+                  }
+
+                  if (filtered.length === 0) {
                     return (
                       <tr>
                         <td colSpan="4" style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                          No follow-ups due today.
+                          No {activeFollowUpTab} follow-ups scheduled.
                         </td>
                       </tr>
                     );
                   }
-                  return todayRemindersList.map(r => (
+                  
+                  return filtered.map(r => (
                     <tr key={r.id}>
                       <td style={{ fontWeight: '600' }}>{r.leads.name}</td>
                       <td>{r.leads.phone1}</td>
-                      <td>{r.reminder_time || 'N/A'}</td>
+                      <td>
+                        {activeFollowUpTab === 'today' 
+                          ? (r.reminder_time || 'N/A') 
+                          : `${new Date(r.reminder_date).toLocaleDateString('en-CA', {month: 'short', day: 'numeric'})} ${r.reminder_time || ''}`
+                        }
+                      </td>
                       <td style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         <button 
                           className="call-action-btn" 
