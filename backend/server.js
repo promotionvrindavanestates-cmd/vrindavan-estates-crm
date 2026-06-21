@@ -1223,8 +1223,8 @@ DB.updateLead = async function(id, leadData, userId, userRole) {
 
 // Wrap DB.logCall to update last_activity_date
 const originalLogCall = DB.logCall;
-DB.logCall = async function(leadId, callerId, response, notes) {
-  const result = await originalLogCall.call(DB, leadId, callerId, response, notes);
+DB.logCall = async function(leadId, callerId, response, notes, ...args) {
+  const result = await originalLogCall.call(DB, leadId, callerId, response, notes, ...args);
   if (DB.isCloud()) {
     const { supabase } = require('./db');
     await supabase.from('leads').update({ last_activity_date: new Date().toISOString() }).eq('id', leadId);

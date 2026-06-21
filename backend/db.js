@@ -1080,6 +1080,9 @@ const DB = {
         booked: leads.filter(l => l.status === 'Booked').length
       };
 
+      const interestedLeads = leads.filter(l => ['Interested', 'Warm', 'Hot'].includes(l.status)).length;
+      const followUpsTotal = followUpsCompleted + followUpsPending;
+      const followupCompliancePct = followUpsTotal > 0 ? Math.round((followUpsCompleted / followUpsTotal) * 100) : 100;
       const conversionRate = leadsCount > 0 ? Math.round((totalBookings / leadsCount) * 100) : 0;
 
       return {
@@ -1096,6 +1099,8 @@ const DB = {
           notConnectedCalls,
           followUpsPending,
           followUpsCompleted,
+          interestedLeads,
+          followupCompliancePct,
           visitsScheduled,
           visitsCompleted,
           visitsCancelled,
@@ -1235,6 +1240,9 @@ const DB = {
         booked: empLeads.filter(l => l.status === 'Booked').length
       };
 
+      const interestedLeads = empLeads.filter(l => ['Interested', 'Warm', 'Hot'].includes(l.status)).length;
+      const followUpsTotal = followUpsCompleted + followUpsPending;
+      const followupCompliancePct = followUpsTotal > 0 ? Math.round((followUpsCompleted / followUpsTotal) * 100) : 100;
       const conversionRate = leadsCount > 0 ? Math.round((totalBookings / leadsCount) * 100) : 0;
 
       return {
@@ -1259,6 +1267,8 @@ const DB = {
           notConnectedCalls,
           followUpsPending,
           followUpsCompleted,
+          interestedLeads,
+          followupCompliancePct,
           visitsScheduled,
           visitsCompleted,
           visitsCancelled,
@@ -3392,7 +3402,7 @@ const DB = {
       users = u || [];
       const { data: l } = await supabase.from('leads').select('id, assigned_employee_id, status');
       leads = l || [];
-      const { data: c } = await supabase.from('call_logs').select('caller_id');
+      const { data: c } = await supabase.from('call_logs').select('caller_id, response');
       callLogs = c || [];
       const { data: r } = await supabase.from('reminders').select('assigned_employee_id, is_read');
       reminders = r || [];
@@ -3422,12 +3432,19 @@ const DB = {
       const empLeads = leads.filter(l => l.assigned_employee_id === u.id);
       const empLeadsCount = empLeads.length;
       
-      const empCalls = callLogs.filter(c => c.caller_id === u.id).length;
+      const empCallsLogs = callLogs.filter(c => c.caller_id === u.id);
+      const empCalls = empCallsLogs.length;
+
+      const notConnectedResponses = ['Not Picked', 'Busy', 'Failed', 'Not Connected'];
+      const connectedCalls = empCallsLogs.filter(c => !notConnectedResponses.includes(c.response)).length;
+
+      const interestedLeads = empLeads.filter(l => ['Interested', 'Warm', 'Hot'].includes(l.status)).length;
       
       const empReminders = reminders.filter(r => r.assigned_employee_id === u.id);
       const followUps = empReminders.length;
       const followUpsCompleted = empReminders.filter(r => r.is_read).length;
       const followUpsPending = followUps - followUpsCompleted;
+      const followupCompliancePct = followUps > 0 ? Math.round((followUpsCompleted / followUps) * 100) : 100;
 
       const empVisits = siteVisits.filter(v => {
         const lead = leadMap[v.lead_id];
@@ -3452,9 +3469,12 @@ const DB = {
         commission_percentage: u.commission_percentage !== undefined ? parseFloat(u.commission_percentage) : 1.50,
         leads_count: empLeadsCount,
         calls: empCalls,
+        connected_calls: connectedCalls,
+        interested_leads: interestedLeads,
         follow_ups: followUps,
         follow_ups_completed: followUpsCompleted,
         follow_ups_pending: followUpsPending,
+        followup_compliance_pct: followupCompliancePct,
         site_visits: empVisits,
         bookings: bookingsCount,
         collections,

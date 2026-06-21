@@ -120,8 +120,10 @@ export default function EmployeePerformanceReports({ onDrillDown }) {
                 <tr>
                   <th>Executive Name</th>
                   <th style={{ textAlign: 'center' }}>Leads Owned</th>
+                  <th style={{ textAlign: 'center' }}>Interested Leads</th>
                   <th style={{ textAlign: 'center' }}>Calls Made</th>
-                  <th style={{ textAlign: 'center' }}>Follow-ups (Done/Total)</th>
+                  <th style={{ textAlign: 'center' }}>Connected Calls</th>
+                  <th style={{ textAlign: 'center' }}>Follow-up Compliance</th>
                   <th style={{ textAlign: 'center' }}>Site Visits</th>
                   <th style={{ textAlign: 'center' }}>Bookings Confirmed</th>
                   <th style={{ textAlign: 'center' }}>Collections</th>
@@ -146,6 +148,14 @@ export default function EmployeePerformanceReports({ onDrillDown }) {
                       {emp.leads_count}
                     </td>
 
+                    {/* Interested Leads */}
+                    <td 
+                      style={{ textAlign: 'center', color: '#f59e0b', fontWeight: 600 }}
+                      title="Leads in Interested, Warm, or Hot status"
+                    >
+                      {emp.interested_leads || 0}
+                    </td>
+
                     {/* Calls Made */}
                     <td 
                       style={{ textAlign: 'center', cursor: 'pointer', color: 'var(--text-main)' }}
@@ -158,12 +168,22 @@ export default function EmployeePerformanceReports({ onDrillDown }) {
                       </span>
                     </td>
 
-                    {/* Follow-ups */}
-                    <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                      <span style={{ color: emp.follow_ups_pending > 0 ? '#f59e0b' : '#22c55e', fontWeight: 600 }}>
-                        {emp.follow_ups_completed}
-                      </span>
-                      <span> / {emp.follow_ups}</span>
+                    {/* Connected Calls */}
+                    <td 
+                      style={{ textAlign: 'center', color: '#22c55e', fontWeight: 600 }}
+                      title="Calls not marked Busy or Not Picked"
+                    >
+                      {emp.connected_calls || 0}
+                    </td>
+
+                    {/* Follow-up Compliance */}
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700, color: (emp.followup_compliance_pct || 0) >= 80 ? '#22c55e' : (emp.followup_compliance_pct || 0) >= 50 ? '#f59e0b' : '#ef4444' }}>
+                        {emp.followup_compliance_pct || 0}%
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        ({emp.follow_ups_completed} / {emp.follow_ups})
+                      </div>
                     </td>
 
                     {/* Site Visits */}

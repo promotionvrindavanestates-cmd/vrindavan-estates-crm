@@ -176,20 +176,36 @@ export default function EmployeeDashboardView({ currentUser, onDrillDown, employ
               <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)' }}>{metrics.leadsOwned || 0}</div>
             </div>
 
-            {/* KPI 2: Today's Follow-ups */}
+            {/* KPI 2: Interested Leads */}
             <div 
-              className="card clickable-card" 
-              onClick={() => handleKpiClick('followups')}
-              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', cursor: 'pointer' }}
+              className="card" 
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Today's Follow-ups</span>
-                <PhoneCall size={16} style={{ color: '#06b6d4' }} />
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Interested Leads</span>
+                <Users size={16} style={{ color: '#f59e0b' }} />
               </div>
-              <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)' }}>{metrics.callsToday || 0}</div>
+              <div style={{ fontSize: '28px', fontWeight: 700, color: '#f59e0b' }}>{metrics.interestedLeads || 0}</div>
             </div>
 
-            {/* KPI 3: Site Visits */}
+            {/* KPI 3: Call Performance */}
+            <div 
+              className="card" 
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Call Performance</span>
+                <PhoneCall size={16} style={{ color: '#06b6d4' }} />
+              </div>
+              <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)' }}>
+                {metrics.connectedCalls || 0}
+                <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500, marginLeft: '6px' }}>
+                  / {metrics.callsMade || 0} conn.
+                </span>
+              </div>
+            </div>
+
+            {/* KPI 4: Site Visits */}
             <div 
               className="card clickable-card" 
               onClick={() => handleKpiClick('visits')}
@@ -202,7 +218,7 @@ export default function EmployeeDashboardView({ currentUser, onDrillDown, employ
               <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)' }}>{metrics.visitsCompleted || 0}</div>
             </div>
 
-            {/* KPI 4: Bookings */}
+            {/* KPI 5: Bookings */}
             <div 
               className="card clickable-card" 
               onClick={() => handleKpiClick('bookings')}
@@ -215,7 +231,7 @@ export default function EmployeeDashboardView({ currentUser, onDrillDown, employ
               <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--primary)' }}>{metrics.totalBookings || 0}</div>
             </div>
 
-            {/* KPI 5: Collections */}
+            {/* KPI 6: Collections */}
             <div 
               className="card clickable-card" 
               onClick={() => handleKpiClick('collections')}
@@ -230,7 +246,7 @@ export default function EmployeeDashboardView({ currentUser, onDrillDown, employ
               </div>
             </div>
 
-            {/* KPI 6: Missed Follow-ups */}
+            {/* KPI 7: Missed Follow-ups */}
             <div 
               className="card clickable-card" 
               onClick={() => handleKpiClick('missed')}
@@ -241,6 +257,20 @@ export default function EmployeeDashboardView({ currentUser, onDrillDown, employ
                 <AlertTriangle size={16} style={{ color: '#ef4444' }} />
               </div>
               <div style={{ fontSize: '28px', fontWeight: 700, color: '#ef4444' }}>{metrics.followUpsPending || 0}</div>
+            </div>
+
+            {/* KPI 8: Follow-up Compliance */}
+            <div 
+              className="card" 
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Follow-up Compliance</span>
+                <RefreshCw size={16} style={{ color: '#22c55e' }} />
+              </div>
+              <div style={{ fontSize: '28px', fontWeight: 700, color: (metrics.followupCompliancePct || 0) >= 80 ? '#22c55e' : (metrics.followupCompliancePct || 0) >= 50 ? '#f59e0b' : '#ef4444' }}>
+                {metrics.followupCompliancePct || 0}%
+              </div>
             </div>
 
           </div>
