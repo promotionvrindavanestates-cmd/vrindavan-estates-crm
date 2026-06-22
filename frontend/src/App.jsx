@@ -429,7 +429,7 @@ export default function App() {
     setCurrentUser(null);
     setLeads([]);
     setEmployees([]);
-    setActiveTab('dashboard');
+    setActiveTab('command-center');
   };
 
   // Lead CRUD Operations

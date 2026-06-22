@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Phone, Clock, MessageSquare, Plus, CheckCircle, Calendar, RefreshCw, BarChart2, Award, Users, AlertTriangle, TrendingUp, Compass, Search, Filter, ArrowRight, User, MapPin, DollarSign, Award as Trophy } from 'lucide-react';
+import { Phone, Clock, MessageSquare, Plus, CheckCircle, Calendar, RefreshCw, BarChart2, Award, Users, AlertTriangle, TrendingUp, Compass, Search, Filter, ArrowRight, User, MapPin, DollarSign, Award as Trophy, FolderOpen, MoreVertical } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
 export default function CommandCenter({ leads = [], employees = [], currentUser, onOpenLeadDrawer, onRefreshData }) {
@@ -1021,24 +1021,24 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
         {/* Quick Actions Panel */}
         {!task.is_completed && (
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleCallAction(task)}>
-              📞 Call
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleCallAction(task)} title="Call Client">
+              <Phone size={16} />
             </button>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleWhatsAppAction(task)}>
-              <FaWhatsapp size={12} style={{ color: '#25D366' }} /> WhatsApp
+            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleWhatsAppAction(task)} title="WhatsApp Client">
+              <FaWhatsapp size={16} style={{ color: '#25D366' }} />
             </button>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => onOpenLeadDrawer(task.lead_id)}>
-              📂 Open Lead
+            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => onOpenLeadDrawer(task.lead_id)} title="Open Lead Drawer">
+              <FolderOpen size={16} style={{ color: 'var(--primary)' }} />
             </button>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleAddNoteAction(task)}>
-              📝 Add Note
+            <button className="btn btn-primary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', color: 'var(--color-success)' }} onClick={() => handleCompleteAction(task)} title="Complete Task">
+              <CheckCircle size={16} />
             </button>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleRescheduleAction(task)}>
-              ⏰ Reschedule
+            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleRescheduleAction(task)} title="Reschedule Task">
+              <Calendar size={16} />
             </button>
-            <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', color: 'var(--color-success)' }} onClick={() => handleCompleteAction(task)}>
-              ✅ Complete
+            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleAddNoteAction(task)} title="Add Note / More Actions">
+              <MoreVertical size={16} />
             </button>
           </div>
         )}
