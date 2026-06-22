@@ -1,25 +1,25 @@
 /* Vrindavan Estates CRM Premium Dark CSS Design System */
 :root {
-  --bg-main: #060a09; /* Deep, spiritual forest dark charcoal */
-  --bg-card: #0d1413; /* Deep slate teal card */
-  --bg-card-hover: #121c1a;
-  --bg-input: #152220;
+  --bg-main: #05080F; /* Deep, luxury dark navy */
+  --bg-card: rgba(10, 18, 36, 0.45); /* Dark navy transparent glass card */
+  --bg-card-hover: rgba(15, 27, 54, 0.6);
+  --bg-input: #0e172a;
   
-  --primary: #dfb15b; /* Rich Vrindavan Gold */
-  --primary-hover: #cda250;
-  --primary-glow: rgba(223, 177, 91, 0.15);
+  --primary: #D4AF37; /* Rich Vrindavan Gold */
+  --primary-hover: #c5a02e;
+  --primary-glow: rgba(212, 175, 55, 0.15);
   
-  --text-main: #f0f4f3;
-  --text-muted: #8b9d9a;
-  --border-color: #1a2a27;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-color: rgba(212, 175, 55, 0.15);
   
   /* Status Colors */
   --color-hot: #ff5e5e;
   --color-hot-bg: rgba(255, 94, 94, 0.1);
   --color-warm: #ffb830;
   --color-warm-bg: rgba(255, 184, 48, 0.1);
-  --color-cold: #3ca0ff;
-  --color-cold-bg: rgba(60, 160, 255, 0.1);
+  --color-cold: #38bdf8;
+  --color-cold-bg: rgba(56, 189, 248, 0.1);
 
   /* Stages & Call Responses */
   --color-success: #10b981;
@@ -33,7 +33,7 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
   --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1191,4 +1191,129 @@ tr:hover td {
     font-size: 22px !important;
   }
 }
+
+/* Mandatory Layout Row Utilities */
+.kpi-row-layout {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .kpi-row-layout {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .kpi-row-layout > div {
+    flex: 0 0 200px !important;
+    scroll-snap-align: start;
+  }
+}
+
+.widget-row-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.2fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 1024px) and (min-width: 768px) {
+  .widget-row-layout {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .widget-row-layout > :last-child {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .widget-row-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.filter-row-layout {
+  position: sticky;
+  top: 75px;
+  z-index: 99;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: var(--radius-md);
+  background: rgba(8, 14, 28, 0.9) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+@media (max-width: 1024px) {
+  .filter-row-layout {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px;
+    position: static !important;
+  }
+}
+
+/* Horizontal Task Card Columns Grid */
+.task-card-grid {
+  display: grid;
+  grid-template-columns: 90px 1.5fr 1fr 2fr 1fr 180px;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .task-card-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+}
+
+/* Dark Navy Glass Cards Overrides */
+.glass-card, .navy-glass-card {
+  background: rgba(10, 18, 36, 0.5) !important;
+  backdrop-filter: blur(14px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(180%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.15) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover, .navy-glass-card:hover {
+  background: rgba(15, 27, 54, 0.65) !important;
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  box-shadow: 0 8px 32px 0 rgba(212, 175, 55, 0.08), 0 0 18px rgba(212, 175, 55, 0.25) !important;
+  transform: translateY(-2px);
+}
+
+.glass-card-risk {
+  background: rgba(239, 94, 94, 0.04) !important;
+  backdrop-filter: blur(14px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(180%) !important;
+  border: 1px solid rgba(239, 94, 94, 0.25) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-risk:hover {
+  background: rgba(239, 94, 94, 0.08) !important;
+  border-color: rgba(239, 94, 94, 0.45) !important;
+  box-shadow: 0 8px 32px 0 rgba(239, 94, 94, 0.1), 0 0 18px rgba(239, 94, 94, 0.25) !important;
+  transform: translateY(-2px);
+}
+
 
