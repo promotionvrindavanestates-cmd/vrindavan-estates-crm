@@ -423,207 +423,237 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
   };
 
   return (
-    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: '100vh', background: 'var(--bg-main)', color: 'var(--text-main)' }}>
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: '100vh', background: 'var(--bg-main)', color: 'var(--text-main)', position: 'relative' }}>
       
-      {/* Header section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--primary)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Compass size={28} /> Sales Command Center
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Daybook - Live Pending Activities & Targets
-          </p>
-        </div>
-        
-        <button className="btn btn-primary" onClick={fetchData} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <RefreshCw size={14} /> Sync Daybook
-        </button>
-      </div>
-
-      {/* Counters Summary Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
-        <div 
-          onClick={() => setActiveCounterFilter(activeCounterFilter === 'overdue' ? 'all' : 'overdue')}
-          style={{ 
-            background: 'var(--bg-card)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: activeCounterFilter === 'overdue' ? '2px solid var(--color-hot)' : '1px solid var(--border-color)',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            transition: 'transform 0.2s',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}
-          className="command-counter-card"
-        >
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>🔴 Overdue</span>
-          <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '10px' }}>{counts.overdue}</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveCounterFilter(activeCounterFilter === 'today' ? 'all' : 'today')}
-          style={{ 
-            background: 'var(--bg-card)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: activeCounterFilter === 'today' ? '2px solid var(--color-warm)' : '1px solid var(--border-color)',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}
-          className="command-counter-card"
-        >
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>🟡 Today</span>
-          <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--color-warm)', marginTop: '10px' }}>{counts.today}</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveCounterFilter(activeCounterFilter === 'tomorrow' ? 'all' : 'tomorrow')}
-          style={{ 
-            background: 'var(--bg-card)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: activeCounterFilter === 'tomorrow' ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}
-          className="command-counter-card"
-        >
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>🔵 Tomorrow</span>
-          <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#3b82f6', marginTop: '10px' }}>{counts.tomorrow}</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveCounterFilter(activeCounterFilter === 'week' ? 'all' : 'week')}
-          style={{ 
-            background: 'var(--bg-card)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: activeCounterFilter === 'week' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}
-          className="command-counter-card"
-        >
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>📅 This Week</span>
-          <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--primary)', marginTop: '10px' }}>{counts.week}</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveCounterFilter(activeCounterFilter === 'completed' ? 'all' : 'completed')}
-          style={{ 
-            background: 'var(--bg-card)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: activeCounterFilter === 'completed' ? '2px solid var(--color-success)' : '1px solid var(--border-color)',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}
-          className="command-counter-card"
-        >
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>✅ Completed</span>
-          <span style={{ fontSize: '32px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '10px' }}>{counts.completed}</span>
+      {/* Sticky Header with logo, user profile, and Daybook branding */}
+      <div className="sticky-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '26px', fontWeight: 'bold', color: 'var(--primary)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+              <Compass size={28} className="text-gold" /> 
+              <span className="text-gold-gradient">Sales Command Center</span>
+            </h1>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', margin: 0 }}>
+              Daybook • Vrindavan Estates CRM Premium Dashboard
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+              <User size={14} className="text-gold" />
+              <span>{currentUser?.full_name || 'Sales Officer'}</span>
+              <span style={{ fontSize: '10px', background: 'rgba(223, 177, 91, 0.2)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                {currentUser?.role || 'User'}
+              </span>
+            </div>
+            
+            <button 
+              className="btn" 
+              onClick={fetchData} 
+              disabled={loading}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                background: 'rgba(223, 177, 91, 0.15)',
+                border: '1px solid rgba(223, 177, 91, 0.3)',
+                color: 'var(--primary)',
+                padding: '8px 16px',
+                borderRadius: '10px',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              <RefreshCw size={14} className={loading ? "spin-animation" : ""} /> 
+              {loading ? "Syncing..." : "Sync Daybook"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Grid View */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '20px' }} className="command-grid-layout">
+      {/* Briefing Banner Widget (Morning / Evening dynamically based on time) */}
+      {renderBriefingWidget()}
+
+      {/* KPI Counters Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+        {renderKPICounter('overdue', '🔴 Overdue', counts.overdue, 'var(--color-hot)')}
+        {renderKPICounter('today', '🟡 Today', counts.today, 'var(--color-warm)')}
+        {renderKPICounter('tomorrow', '🔵 Tomorrow', counts.tomorrow, '#3b82f6')}
+        {renderKPICounter('week', '📅 This Week', counts.week, 'var(--primary)')}
+        {renderKPICounter('completed', '✅ Completed', counts.completed, 'var(--color-success)')}
+      </div>
+
+      {/* Main Content Layout Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 1.1fr', gap: '24px' }} className="command-grid-layout">
         
-        {/* Left Column: Tasks Board */}
+        {/* Left Side: Search, Filters & Tasks Group */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Filters and Search Bar */}
-          <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  placeholder="Search client by Name, Mobile, City, Project..." 
-                  style={{ paddingLeft: '36px' }}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Filter size={12} /> Filters:
-              </span>
-
-              <select className="form-control" style={{ width: 'auto', padding: '4px 8px', fontSize: '12px' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                <option value="all">All Tasks</option>
-                <option value="call">Calls</option>
-                <option value="meeting">Meetings</option>
-                <option value="visit">Site Visits</option>
-                <option value="booking">Bookings</option>
-                <option value="collection">Collections</option>
-                <option value="reminder">Reminders</option>
-              </select>
-
-              <select className="form-control" style={{ width: 'auto', padding: '4px 8px', fontSize: '12px' }} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-                <option value="all">All Priorities</option>
-                <option value="hot">🔥 Hot Leads</option>
-                <option value="warm">Warm Leads</option>
-                <option value="cold">Cold Leads</option>
-              </select>
-
-              <select className="form-control" style={{ width: 'auto', padding: '4px 8px', fontSize: '12px' }} value={filterProject} onChange={(e) => setFilterProject(e.target.value)}>
-                <option value="all">All Projects</option>
-                <option value="skf">SKF</option>
-                <option value="vrindavan">Vrindavan</option>
-              </select>
-
-              <select className="form-control" style={{ width: 'auto', padding: '4px 8px', fontSize: '12px' }} value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-                <option value="all">All Sources</option>
-                <option value="WhatsApp">WhatsApp</option>
-                <option value="Facebook">Facebook</option>
-                <option value="Google">Google</option>
-                <option value="Website">Website</option>
-              </select>
-
-              {isAdmin && (
-                <select className="form-control" style={{ width: 'auto', padding: '4px 8px', fontSize: '12px' }} value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)}>
-                  <option value="all">All Employees</option>
-                  {employees.map(e => (
-                    <option key={e.id} value={e.id}>{e.full_name}</option>
-                  ))}
-                </select>
+          {/* Glass Search & Filter Panel */}
+          <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* Search Input */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Search leads by name, mobile, city, project or lead ID..." 
+                style={{ 
+                  paddingLeft: '42px', 
+                  height: '46px', 
+                  borderRadius: '12px',
+                  background: 'rgba(21, 34, 32, 0.6)', 
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  width: '100%',
+                  fontSize: '14px'
+                }}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '14px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  Clear
+                </button>
               )}
             </div>
+
+            {/* Quick Filter Chips Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Quick Filter Chips
+              </div>
+              
+              {/* Task Type Filters */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', marginRight: '4px' }}>Type:</span>
+                {[
+                  { value: 'all', label: 'All Tasks' },
+                  { value: 'call', label: '📞 Calls' },
+                  { value: 'meeting', label: '🤝 Meetings' },
+                  { value: 'visit', label: '🏠 Site Visits' },
+                  { value: 'booking', label: '💰 Bookings' },
+                  { value: 'collection', label: '💵 Collections' },
+                  { value: 'reminder', label: '📋 Reminders' }
+                ].map(item => (
+                  <button 
+                    key={item.value} 
+                    className={`filter-chip ${filterType === item.value ? 'active' : ''}`}
+                    onClick={() => setFilterType(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Priority Filters */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', marginRight: '4px' }}>Priority:</span>
+                {[
+                  { value: 'all', label: 'All Priorities' },
+                  { value: 'hot', label: '🔥 Hot Leads' },
+                  { value: 'warm', label: '🟡 Warm Leads' },
+                  { value: 'cold', label: '⚪ Cold Leads' }
+                ].map(item => (
+                  <button 
+                    key={item.value} 
+                    className={`filter-chip ${filterPriority === item.value ? 'active' : ''}`}
+                    onClick={() => setFilterPriority(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Advanced Dropdown selectors row */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                {/* Project selector */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Project</label>
+                  <select 
+                    className="form-control" 
+                    style={{ background: 'rgba(21, 34, 32, 0.8)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: 'var(--text-main)', width: 'auto' }} 
+                    value={filterProject} 
+                    onChange={(e) => setFilterProject(e.target.value)}
+                  >
+                    <option value="all">All Projects</option>
+                    <option value="skf">SKF</option>
+                    <option value="vrindavan">Vrindavan</option>
+                  </select>
+                </div>
+
+                {/* Source selector */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Lead Source</label>
+                  <select 
+                    className="form-control" 
+                    style={{ background: 'rgba(21, 34, 32, 0.8)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: 'var(--text-main)', width: 'auto' }} 
+                    value={filterSource} 
+                    onChange={(e) => setFilterSource(e.target.value)}
+                  >
+                    <option value="all">All Sources</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="Google">Google</option>
+                    <option value="Website">Website</option>
+                  </select>
+                </div>
+
+                {/* Employee selector (Admin only) */}
+                {isAdmin && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Assigned Employee</label>
+                    <select 
+                      className="form-control" 
+                      style={{ background: 'rgba(21, 34, 32, 0.8)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: 'var(--text-main)', width: 'auto' }} 
+                      value={filterEmployee} 
+                      onChange={(e) => setFilterEmployee(e.target.value)}
+                    >
+                      <option value="all">All Employees</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.id}>{e.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
           </div>
 
           {/* Grouped Tasks Lists */}
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-              Loading task lists...
+            <div className="glass-card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <RefreshCw size={24} className="spin-animation text-gold" />
+              <span>Synchronizing Daybook metrics...</span>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               {/* Overdue Section */}
               {grouped.overdue.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-hot)', borderBottom: '1px solid rgba(239, 68, 68, 0.2)', paddingBottom: '6px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    🔴 Overdue Activities
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-hot)', borderBottom: '2px solid rgba(255, 94, 94, 0.2)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span>🔴 Overdue Activities</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(255, 94, 94, 0.15)', color: 'var(--color-hot)', padding: '2px 8px', borderRadius: '10px' }}>{grouped.overdue.length}</span>
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {grouped.overdue.map(t => renderTaskCard(t))}
                   </div>
                 </div>
@@ -631,11 +661,12 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
               {/* Today Section */}
               {grouped.today.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-warm)', borderBottom: '1px solid rgba(245, 158, 11, 0.2)', paddingBottom: '6px', marginBottom: '12px' }}>
-                    🟡 Today ({formatDateHeader('2026-06-23')})
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-warm)', borderBottom: '2px solid rgba(255, 184, 48, 0.2)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span>🟡 Today Activities</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(255, 184, 48, 0.15)', color: 'var(--color-warm)', padding: '2px 8px', borderRadius: '10px' }}>{grouped.today.length}</span>
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {grouped.today.map(t => renderTaskCard(t))}
                   </div>
                 </div>
@@ -643,11 +674,12 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
               {/* Tomorrow Section */}
               {grouped.tomorrow.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#3b82f6', borderBottom: '1px solid rgba(59, 130, 246, 0.2)', paddingBottom: '6px', marginBottom: '12px' }}>
-                    🔵 Tomorrow ({formatDateHeader('2026-06-24')})
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#3b82f6', borderBottom: '2px solid rgba(59, 130, 246, 0.2)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span>🔵 Tomorrow Activities</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', padding: '2px 8px', borderRadius: '10px' }}>{grouped.tomorrow.length}</span>
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {grouped.tomorrow.map(t => renderTaskCard(t))}
                   </div>
                 </div>
@@ -655,11 +687,12 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
               {/* This Week Section */}
               {grouped.week.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', marginBottom: '12px' }}>
-                    📅 Later This Week
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '2px solid rgba(223, 177, 91, 0.2)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span>📅 Later This Week</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(223, 177, 91, 0.15)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '10px' }}>{grouped.week.length}</span>
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {grouped.week.map(t => renderTaskCard(t))}
                   </div>
                 </div>
@@ -667,19 +700,20 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
               {/* Completed Section */}
               {grouped.completed.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-success)', borderBottom: '1px solid rgba(34, 197, 94, 0.2)', paddingBottom: '6px', marginBottom: '12px' }}>
-                    ✅ Completed Tasks
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-success)', borderBottom: '2px solid rgba(16, 185, 129, 0.2)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span>✅ Completed Activities</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', padding: '2px 8px', borderRadius: '10px' }}>{grouped.completed.length}</span>
                   </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {grouped.completed.map(t => renderTaskCard(t))}
                   </div>
                 </div>
               )}
 
               {filteredTasks.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '40px', background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                  No pending activities found matching filters.
+                <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  No pending activities found matching filters. Try adjusting search query or chips.
                 </div>
               )}
 
@@ -688,128 +722,99 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
         </div>
 
-        {/* Right Column: Widgets / Admin View */}
+        {/* Right Side: Missed risk widget, targets progress widget, admin leaderboard */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Lost Follow-Up Alerts Widget */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.02) 100%)', 
-            padding: '16px', 
-            borderRadius: 'var(--radius-md)', 
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '13px' }}>
-              <AlertTriangle size={16} /> Lost Follow-Up Alerts
+          {/* Missed Follow-Up / Revenue Risk Widget with Pulsing Red Glass */}
+          <div className="glass-card-risk" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '14px', letterSpacing: '0.02em' }}>
+              <AlertTriangle size={18} style={{ filter: 'drop-shadow(0 0 4px var(--color-hot))' }} /> 
+              <span>Revenue Risk Widget</span>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {missedStats.count} Missed Activities
+            
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '12px 14px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Missed Activities:</span>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-hot)' }}>{missedStats.count} Leads</span>
             </div>
-            <div style={{ borderTop: '1px solid rgba(239, 68, 68, 0.1)', paddingTop: '8px', marginTop: '4px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Estimated Revenue Risk</div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '2px' }}>
-                ₹{missedStats.risk} Crore
+            
+            <div style={{ borderTop: '1px solid rgba(239, 68, 68, 0.1)', paddingTop: '12px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>
+                Estimated Revenue Risk
+              </div>
+              <div style={{ fontSize: '26px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '4px', filter: 'drop-shadow(0 0 6px rgba(255, 94, 94, 0.3))' }}>
+                ₹{missedStats.risk} Cr
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                *Calculated as the sum of budgets for all overdue follow-up tasks.
               </div>
             </div>
           </div>
 
           {/* Daily Target Widget */}
           {targets && (
-            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-                🎯 Daily Targets Widget
+            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={16} />
+                <span>Daily Targets Widget</span>
               </div>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {/* Calls */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span>📞 Call Logs</span>
-                    <span>{targets.calls.actual} / {targets.calls.target}</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: 'var(--primary)', width: `${Math.min(100, (targets.calls.actual / targets.calls.target) * 100)}%` }}></div>
-                  </div>
-                </div>
-
-                {/* Meetings */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span>🤝 Meetings</span>
-                    <span>{targets.meetings.actual} / {targets.meetings.target}</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: '#3b82f6', width: `${Math.min(100, (targets.meetings.actual / targets.meetings.target) * 100)}%` }}></div>
-                  </div>
-                </div>
-
-                {/* Visits */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span>🏠 Site Visits</span>
-                    <span>{targets.visits.actual} / {targets.visits.target}</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: '#eab308', width: `${Math.min(100, (targets.visits.actual / targets.visits.target) * 100)}%` }}></div>
-                  </div>
-                </div>
-
-                {/* Bookings */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span>💰 Token Bookings</span>
-                    <span>{targets.bookings.actual} / {targets.bookings.target}</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: 'var(--color-success)', width: `${Math.min(100, (targets.bookings.actual / targets.bookings.target) * 100)}%` }}></div>
-                  </div>
-                </div>
-
-                {/* Collections */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span>💵 Collections</span>
-                    <span>{targets.collections.actual} / {targets.collections.target}</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: '#a855f7', width: `${Math.min(100, (targets.collections.actual / targets.collections.target) * 100)}%` }}></div>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {renderTargetProgress('📞 Call Logs', targets.calls.actual, targets.calls.target, 'var(--primary)')}
+                {renderTargetProgress('🤝 Meetings', targets.meetings.actual, targets.meetings.target, '#3b82f6')}
+                {renderTargetProgress('🏠 Site Visits', targets.visits.actual, targets.visits.target, '#eab308')}
+                {renderTargetProgress('💰 Bookings', targets.bookings.actual, targets.bookings.target, 'var(--color-success)')}
+                {renderTargetProgress('💵 Collections', targets.collections.actual, targets.collections.target, '#a855f7')}
               </div>
             </div>
           )}
 
-          {/* Admin Performance View */}
+          {/* Admin Leaderboard View */}
           {isAdmin && performance.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-                📊 Employee Productivity (Today)
+            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Award size={18} className="text-gold" />
+                <span>Employee Leaderboard</span>
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', fontSize: '11px', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '6px 4px' }}>Employee</th>
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Tasks</th>
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Done</th>
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Visits</th>
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Book</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {performance.map((p, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <td style={{ padding: '8px 4px', fontWeight: 600 }}>{p.name}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>{p.todayTasks}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'center', color: 'var(--color-success)' }}>{p.completed}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>{p.siteVisits}</td>
-                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>{p.bookings}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {performance
+                  .map((p) => {
+                    const pct = p.todayTasks > 0 ? Math.round((p.completed / p.todayTasks) * 100) : 0;
+                    return { ...p, completionPct: pct };
+                  })
+                  .sort((a, b) => b.completionPct - a.completionPct || b.bookings - a.bookings)
+                  .map((p, idx) => {
+                    let rankBadge = '👤';
+                    if (idx === 0) rankBadge = '🥇';
+                    else if (idx === 1) rankBadge = '🥈';
+                    else if (idx === 2) rankBadge = '🥉';
+
+                    return (
+                      <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className="leaderboard-badge">{rankBadge}</span>
+                            <span style={{ fontSize: '13px', fontWeight: 600 }}>{p.name}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 'bold' }}>
+                            {p.completionPct}% Done
+                          </span>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="leaderboard-bar-bg">
+                          <div className="leaderboard-bar-fill" style={{ width: `${p.completionPct}%` }} />
+                        </div>
+                        
+                        {/* Stats counters row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '4px' }}>
+                          <span>Done: <strong>{p.completed}/{p.todayTasks}</strong></span>
+                          <span>Visits: <strong>{p.siteVisits}</strong></span>
+                          <span>Bookings: <strong>{p.bookings}</strong></span>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -818,226 +823,242 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
       </div>
 
-      {/* Outcome Select Modal */}
-      {callOutcomeOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-              Select Call Outcome
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Call completed for <strong>{selectedTaskForCall?.lead?.name}</strong>. Choose status to update:
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {['No Response', 'Busy', 'Interested', 'Follow Up', 'Site Visit', 'Negotiation', 'Booked'].map((o, idx) => (
-                <button 
-                  key={idx} 
-                  className="btn btn-secondary" 
-                  onClick={() => submitCallOutcome(o)}
-                  style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', padding: '10px 14px' }}
-                >
-                  <span>{o}</span>
-                  <ArrowRight size={14} />
-                </button>
-              ))}
-            </div>
-            <button className="btn btn-secondary" onClick={() => { setCallOutcomeOpen(false); setSelectedTaskForCall(null); }} style={{ marginTop: '8px' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Floating Action Button (FAB) for quick sync */}
+      <div className="fab-container" title="Sync Daybook Metrics">
+        <button className="fab-btn" onClick={fetchData} disabled={loading}>
+          <RefreshCw size={22} className={loading ? "spin-animation" : ""} />
+        </button>
+      </div>
 
-      {/* Completion Notes Modal */}
-      {completionNotesOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-              Mark Task Complete
-            </h3>
-            <div className="form-group">
-              <label>Completion Notes</label>
-              <textarea 
-                className="form-control" 
-                rows="4" 
-                placeholder="Enter summary details of the activity completion..."
-                value={completionNotesText}
-                onChange={(e) => setCompletionNotesText(e.target.value)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => { setCompletionNotesOpen(false); setSelectedTaskForComplete(null); setCompletionNotesText(''); }}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={submitCompletion}>
-                Submit & Complete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reschedule Modal */}
-      {rescheduleOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-              Reschedule Task
-            </h3>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => submitReschedule('30m')}>+30 Minutes</button>
-              <button className="btn btn-secondary" onClick={() => submitReschedule('1h')}>+1 Hour</button>
-              <button className="btn btn-secondary" onClick={() => submitReschedule('tomorrow')}>+Tomorrow</button>
-              <button className="btn btn-primary" onClick={() => submitReschedule('custom')}>Save Custom</button>
-            </div>
-
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>Or pick custom date:</div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input 
-                  type="date" 
-                  className="form-control" 
-                  value={customRescheduleDate}
-                  onChange={(e) => setCustomRescheduleDate(e.target.value)}
-                />
-                <input 
-                  type="time" 
-                  className="form-control" 
-                  value={customRescheduleTime}
-                  onChange={(e) => setCustomRescheduleTime(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => { setRescheduleOpen(false); setSelectedTaskForReschedule(null); setCustomRescheduleDate(''); }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Note Modal */}
-      {noteOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-              Add Activity Note
-            </h3>
-            <div className="form-group">
-              <label>Notes</label>
-              <textarea 
-                className="form-control" 
-                rows="4" 
-                placeholder="Type your notes about this lead activity..."
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => { setNoteOpen(false); setSelectedTaskForNote(null); setNoteText(''); }}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={submitNote}>
-                Save Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODALS RENDER SECTION */}
+      {renderModals()}
 
     </div>
   );
+
+  // Helper: dynamic briefing widget based on time
+  function renderBriefingWidget() {
+    const currentHour = new Date().getHours();
+    const isMorning = currentHour < 15; // before 3:00 PM
+
+    // Compute stats for the briefing
+    const todayTasksList = tasks.filter(t => getTaskCategory(t) === 'today');
+    const todayHot = todayTasksList.filter(t => getLeadPriorityText(t.lead) === 'Hot').length;
+    const todayWarm = todayTasksList.filter(t => getLeadPriorityText(t.lead) === 'Warm').length;
+    const completedToday = tasks.filter(t => {
+      if (!t.is_completed || !t.completed_at) return false;
+      const compDate = t.completed_at.split('T')[0];
+      return compDate === '2026-06-23';
+    }).length;
+
+    const remainingTasksCount = tasks.filter(t => !t.is_completed).length;
+
+    if (isMorning) {
+      return (
+        <div className="briefing-banner morning-briefing">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 'bold', color: 'var(--primary)' }}>
+            <span>🌅 Morning Briefing</span>
+            <span style={{ fontSize: '11px', opacity: 0.8 }}>| Focus Board</span>
+          </div>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: '4px 0', background: 'linear-gradient(135deg, #ffffff 60%, var(--primary) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Good morning, {currentUser?.full_name || 'Partner'}!
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-main)', margin: 0, lineHeight: '1.4' }}>
+            You have <strong style={{ color: 'var(--primary)' }}>{todayTasksList.length} activities</strong> scheduled for today. 
+            This includes <strong style={{ color: 'var(--color-hot)' }}>{todayHot} Hot Leads</strong> and <strong style={{ color: 'var(--color-warm)' }}>{todayWarm} Warm Leads</strong> requiring urgent attention. 
+            Focus on calling your Hot leads first to secure site visits.
+          </p>
+        </div>
+      );
+    } else {
+      return (
+        <div className="briefing-banner evening-briefing">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 'bold', color: '#60a5fa' }}>
+            <span>🌙 Evening Summary</span>
+            <span style={{ fontSize: '11px', opacity: 0.8 }}>| Progress Review</span>
+          </div>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: '4px 0', background: 'linear-gradient(135deg, #ffffff 60%, #60a5fa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Good evening, {currentUser?.full_name || 'Partner'}!
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-main)', margin: 0, lineHeight: '1.4' }}>
+            Excellent effort today. You completed <strong style={{ color: 'var(--color-success)' }}>{completedToday} follow-up tasks</strong> today. 
+            There are currently <strong style={{ color: 'var(--primary)' }}>{remainingTasksCount} pending follow-ups</strong> remaining in your overall pipeline. 
+            Review your calendar and prepare tomorrow's list to start strong.
+          </p>
+        </div>
+      );
+    }
+  }
+
+  // Helper: target progress bars
+  function renderTargetProgress(label, actual, target, color) {
+    const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+          <span style={{ color: 'var(--text-main)' }}>{label}</span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            <strong style={{ color: color }}>{actual}</strong> / {target} ({pct}%)
+          </span>
+        </div>
+        <div style={{ height: '6px', background: 'var(--bg-input)', borderRadius: '3px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: color, width: `${pct}%`, borderRadius: '3px', transition: 'width 0.4s ease' }}></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Helper: single KPI counter renderer
+  function renderKPICounter(category, label, count, color) {
+    const isActive = activeCounterFilter === category;
+    return (
+      <div 
+        onClick={() => setActiveCounterFilter(isActive ? 'all' : category)}
+        className="glass-card glass-card-hover"
+        style={{ 
+          padding: '16px', 
+          cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          border: isActive ? `1.5px solid ${color}` : '1px solid rgba(223, 177, 91, 0.12)',
+          boxShadow: isActive ? `0 0 15px rgba(255,255,255,0.05), 0 0 10px ${color}22` : '0 8px 32px 0 rgba(0, 0, 0, 0.35)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</span>
+        <span style={{ fontSize: '32px', fontWeight: 'bold', color: color, marginTop: '8px', filter: `drop-shadow(0 0 6px ${color}44)` }}>{count}</span>
+        {isActive && (
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: color }}></div>
+        )}
+      </div>
+    );
+  }
 
   // Render card helper
   function renderTaskCard(task) {
     const priority = getLeadPriorityText(task.lead);
     const badgeClass = getPriorityBadgeClass(priority);
     const employeeName = employees.find(e => e.id === task.lead?.assigned_employee_id)?.full_name || 'Unassigned';
+    const isHot = priority === 'Hot';
 
     return (
       <div 
         key={task.id} 
+        className="glass-card glass-card-hover"
         style={{ 
-          background: 'var(--bg-card)', 
-          borderLeft: `4px solid ${priority === 'Hot' ? 'var(--color-hot)' : (priority === 'Warm' ? 'var(--color-warm)' : 'var(--border-color)')}`,
-          borderTop: '1px solid var(--border-color)',
-          borderRight: '1px solid var(--border-color)',
-          borderBottom: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)', 
+          borderLeft: `4px solid ${isHot ? 'var(--color-hot)' : (priority === 'Warm' ? 'var(--color-warm)' : 'var(--border-color)')}`,
           padding: '16px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px'
+          gap: '12px',
+          boxShadow: isHot ? '0 8px 32px 0 rgba(255, 94, 94, 0.05)' : '0 8px 32px 0 rgba(0,0,0,0.2)'
         }}
       >
         {/* Top line: Task Title & Type badge */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600 }}>{task.type}</div>
-            <h4 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '2px' }}>{task.title}</h4>
+            <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>{task.type}</span>
+            </div>
+            <h4 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '4px', color: 'var(--text-main)', margin: 0 }}>{task.title}</h4>
           </div>
           
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <span className={`priority-badge ${badgeClass}`}>{priority === 'Hot' ? '🔥 Hot' : (priority === 'Warm' ? '🟡 Warm' : '⚪ Cold')}</span>
-            {task.is_completed && <span style={{ fontSize: '11px', padding: '2px 6px', background: 'rgba(34, 197, 94, 0.1)', color: 'var(--color-success)', borderRadius: '3px', fontWeight: 600 }}>Completed</span>}
+            <span className={`priority-badge ${badgeClass}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {isHot ? '🔥 Hot' : (priority === 'Warm' ? '🟡 Warm' : '⚪ Cold')}
+            </span>
+            {task.is_completed && <span style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', borderRadius: '4px', fontWeight: 600 }}>Completed</span>}
           </div>
         </div>
 
         {/* Client details grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', fontSize: '12px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
           {task.lead && (
             <>
-              <div>👤 <strong>{task.lead.name}</strong></div>
+              <div style={{ color: 'var(--text-main)' }}>👤 <strong>{task.lead.name}</strong></div>
               <div>📞 {task.lead.phone1}</div>
               <div>📍 {task.lead.city || 'N/A'}</div>
-              <div>🏢 {task.lead.project}</div>
-              <div>💰 ₹{task.lead.budget} Lakhs</div>
-              <div>📈 {task.lead.status}</div>
+              <div>🏢 Project: <strong>{task.lead.project}</strong></div>
+              <div>💰 Budget: <strong>₹{task.lead.budget} L</strong></div>
+              <div>📈 Status: <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{task.lead.status}</span></div>
             </>
           )}
-          <div>👤 Owner: {employeeName}</div>
+          <div>👤 Agent: {employeeName}</div>
           <div>📅 Date: {task.date}</div>
           <div>⏰ Time: {task.time}</div>
         </div>
 
         {/* Notes/Instructions */}
         {task.notes && (
-          <div style={{ background: 'var(--bg-input)', padding: '10px', borderRadius: 'var(--radius-sm)', fontSize: '12px', borderLeft: '3px solid var(--border-color)' }}>
-            <strong>Notes:</strong> {task.notes}
+          <div style={{ background: 'rgba(21, 34, 32, 0.6)', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', borderLeft: '3px solid var(--primary)', color: 'var(--text-main)' }}>
+            <strong className="text-gold">Notes:</strong> {task.notes}
           </div>
         )}
 
         {/* Completed Metadata */}
         {task.is_completed && (
-          <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '8px', fontSize: '11px', color: 'var(--color-success)' }}>
+          <div style={{ borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '10px', fontSize: '11px', color: 'var(--color-success)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <div>✔️ Completed at: {new Date(task.completed_at).toLocaleString()}</div>
-            {task.completion_notes && <div style={{ marginTop: '2px' }}>✏️ Notes: {task.completion_notes}</div>}
+            {task.completion_notes && <div style={{ marginTop: '2px' }}>✏️ Completion Notes: {task.completion_notes}</div>}
           </div>
         )}
 
-        {/* Quick Actions Panel */}
+        {/* Quick Actions Panel - Icon-Only Round Actions */}
         {!task.is_completed && (
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleCallAction(task)} title="Call Client">
-              <Phone size={16} />
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button 
+              className="btn btn-secondary btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', border: '1px solid rgba(223, 177, 91, 0.15)', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-main)', cursor: 'pointer' }} 
+              onClick={() => handleCallAction(task)} 
+              title="Call Client"
+            >
+              <Phone size={16} className="text-gold" />
             </button>
-            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleWhatsAppAction(task)} title="WhatsApp Client">
-              <FaWhatsapp size={16} style={{ color: '#25D366' }} />
+            
+            <button 
+              className="btn btn-secondary btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', border: '1px solid rgba(37, 211, 102, 0.2)', background: 'rgba(255, 255, 255, 0.03)', cursor: 'pointer' }} 
+              onClick={() => handleWhatsAppAction(task)} 
+              title="WhatsApp Client"
+            >
+              <FaWhatsapp size={18} style={{ color: '#25D366' }} />
             </button>
-            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => onOpenLeadDrawer(task.lead_id)} title="Open Lead Drawer">
-              <FolderOpen size={16} style={{ color: 'var(--primary)' }} />
+            
+            <button 
+              className="btn btn-secondary btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', border: '1px solid rgba(223, 177, 91, 0.15)', background: 'rgba(255, 255, 255, 0.03)', cursor: 'pointer' }} 
+              onClick={() => onOpenLeadDrawer(task.lead_id)} 
+              title="Open Lead Profile"
+            >
+              <FolderOpen size={16} className="text-gold" />
             </button>
-            <button className="btn btn-primary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', color: 'var(--color-success)' }} onClick={() => handleCompleteAction(task)} title="Complete Task">
+            
+            <button 
+              className="btn btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: 'var(--color-success)', cursor: 'pointer' }} 
+              onClick={() => handleCompleteAction(task)} 
+              title="Mark Complete"
+            >
               <CheckCircle size={16} />
             </button>
-            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleRescheduleAction(task)} title="Reschedule Task">
+            
+            <button 
+              className="btn btn-secondary btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-muted)', cursor: 'pointer' }} 
+              onClick={() => handleRescheduleAction(task)} 
+              title="Reschedule Task"
+            >
               <Calendar size={16} />
             </button>
-            <button className="btn btn-secondary btn-icon-round" style={{ padding: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '36px', height: '36px', border: '1px solid var(--border-color)' }} onClick={() => handleAddNoteAction(task)} title="Add Note / More Actions">
+            
+            <button 
+              className="btn btn-secondary btn-icon-round" 
+              style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '38px', height: '38px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255, 255, 255, 0.03)', color: 'var(--text-muted)', cursor: 'pointer' }} 
+              onClick={() => handleAddNoteAction(task)} 
+              title="Add Log Note"
+            >
               <MoreVertical size={16} />
             </button>
           </div>
@@ -1045,4 +1066,146 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
       </div>
     );
   }
+
+  // Render all modals
+  function renderModals() {
+    return (
+      <>
+        {/* Outcome Select Modal */}
+        {callOutcomeOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', margin: 0 }}>
+                Select Call Outcome
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                Call completed for <strong>{selectedTaskForCall?.lead?.name}</strong>. Choose outcome:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {['No Response', 'Busy', 'Interested', 'Follow Up', 'Site Visit', 'Negotiation', 'Booked'].map((o, idx) => (
+                  <button 
+                    key={idx} 
+                    className="btn btn-secondary" 
+                    onClick={() => submitCallOutcome(o)}
+                    style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)', cursor: 'pointer' }}
+                  >
+                    <span>{o}</span>
+                    <ArrowRight size={14} className="text-gold" />
+                  </button>
+                ))}
+              </div>
+              <button className="btn btn-secondary" onClick={() => { setCallOutcomeOpen(false); setSelectedTaskForCall(null); }} style={{ marginTop: '8px', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Completion Notes Modal */}
+        {completionNotesOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', margin: 0 }}>
+                Mark Task Complete
+              </h3>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Completion Notes</label>
+                <textarea 
+                  className="form-control" 
+                  rows="4" 
+                  placeholder="Summarize details of this completed activity..."
+                  value={completionNotesText}
+                  onChange={(e) => setCompletionNotesText(e.target.value)}
+                  style={{ background: 'rgba(21, 34, 32, 0.6)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => { setCompletionNotesOpen(false); setSelectedTaskForComplete(null); setCompletionNotesText(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={submitCompletion} style={{ padding: '8px 16px', borderRadius: '8px', background: 'var(--primary)', color: '#060a09', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                  Submit & Complete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reschedule Modal */}
+        {rescheduleOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', margin: 0 }}>
+                Reschedule Task
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button className="btn btn-secondary" onClick={() => submitReschedule('30m')} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer' }}>+30 Minutes</button>
+                <button className="btn btn-secondary" onClick={() => submitReschedule('1h')} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer' }}>+1 Hour</button>
+                <button className="btn btn-secondary" onClick={() => submitReschedule('tomorrow')} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer' }}>+Tomorrow</button>
+                <button className="btn btn-primary" onClick={() => submitReschedule('custom')} style={{ padding: '10px', borderRadius: '8px', background: 'var(--primary)', color: '#060a09', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Save Custom</button>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>Or pick custom date:</div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input 
+                    type="date" 
+                    className="form-control" 
+                    value={customRescheduleDate}
+                    onChange={(e) => setCustomRescheduleDate(e.target.value)}
+                    style={{ background: 'rgba(21, 34, 32, 0.6)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', color: 'var(--text-main)', flex: 1 }}
+                  />
+                  <input 
+                    type="time" 
+                    className="form-control" 
+                    value={customRescheduleTime}
+                    onChange={(e) => setCustomRescheduleTime(e.target.value)}
+                    style={{ background: 'rgba(21, 34, 32, 0.6)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', color: 'var(--text-main)', width: '100px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <button className="btn btn-secondary" onClick={() => { setRescheduleOpen(false); setSelectedTaskForReschedule(null); setCustomRescheduleDate(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Note Modal */}
+        {noteOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', margin: 0 }}>
+                Add Activity Note
+              </h3>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Notes</label>
+                <textarea 
+                  className="form-control" 
+                  rows="4" 
+                  placeholder="Type notes to append to this lead's activity history..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  style={{ background: 'rgba(21, 34, 32, 0.6)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-main)' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => { setNoteOpen(false); setSelectedTaskForNote(null); setNoteText(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={submitNote} style={{ padding: '8px 16px', borderRadius: '8px', background: 'var(--primary)', color: '#060a09', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                  Save Note
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 }
+

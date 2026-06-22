@@ -933,3 +933,262 @@ tr:hover td {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-color: var(--primary) !important;
 }
+
+/* Daybook / Sales Command Center Premium Styles */
+@media (max-width: 1024px) {
+  .command-grid-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.btn-icon-round {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-icon-round:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 10px rgba(223, 177, 91, 0.2);
+  border-color: var(--primary) !important;
+}
+
+.command-counter-card {
+  transition: all 0.2s ease;
+}
+
+.command-counter-card:hover {
+  transform: translateY(-3px);
+  background: var(--bg-card-hover) !important;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+.fab-sync-btn {
+  transition: all 0.2s ease;
+}
+
+.fab-sync-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(223, 177, 91, 0.6) !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+/* Premium Glassmorphism Presets */
+.glass-card {
+  background: rgba(13, 20, 19, 0.45) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+  border: 1px solid rgba(223, 177, 91, 0.12) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(18, 28, 26, 0.55) !important;
+  border-color: rgba(223, 177, 91, 0.3) !important;
+  box-shadow: 0 8px 32px 0 rgba(223, 177, 91, 0.05), 0 0 15px rgba(223, 177, 91, 0.15) !important;
+  transform: translateY(-2px);
+}
+
+.glass-card-risk {
+  background: rgba(239, 94, 94, 0.03) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+  border: 1px solid rgba(239, 94, 94, 0.2) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px 0 rgba(239, 94, 94, 0.05) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-risk:hover {
+  background: rgba(239, 94, 94, 0.06) !important;
+  border-color: rgba(239, 94, 94, 0.4) !important;
+  box-shadow: 0 8px 32px 0 rgba(239, 94, 94, 0.1), 0 0 15px rgba(239, 94, 94, 0.2) !important;
+  transform: translateY(-2px);
+}
+
+/* Gold Theme Utilities */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #ffffff 30%, var(--primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.text-gold {
+  color: var(--primary) !important;
+}
+
+.gold-border-glow {
+  border-color: rgba(223, 177, 91, 0.3) !important;
+  box-shadow: 0 0 15px rgba(223, 177, 91, 0.15) !important;
+}
+
+/* Leaderboard Custom Styling */
+.leaderboard-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.leaderboard-bar-bg {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.leaderboard-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, #ffffff 100%);
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Briefing Widgets */
+.briefing-banner {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+.morning-briefing {
+  background: linear-gradient(135deg, rgba(223, 177, 91, 0.12) 0%, rgba(6, 10, 9, 0.3) 100%);
+  border-color: rgba(223, 177, 91, 0.35) !important;
+  box-shadow: 0 8px 32px 0 rgba(223, 177, 91, 0.06) !important;
+}
+
+.evening-briefing {
+  background: linear-gradient(135deg, rgba(60, 160, 255, 0.12) 0%, rgba(6, 10, 9, 0.3) 100%);
+  border-color: rgba(60, 160, 255, 0.35) !important;
+  box-shadow: 0 8px 32px 0 rgba(60, 160, 255, 0.06) !important;
+}
+
+/* Quick Filter Chips */
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: rgba(21, 34, 32, 0.4);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.filter-chip:hover {
+  border-color: rgba(223, 177, 91, 0.4);
+  color: var(--text-main);
+  background: rgba(21, 34, 32, 0.6);
+}
+
+.filter-chip.active {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #060a09 !important;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(223, 177, 91, 0.35) !important;
+}
+
+/* Floating Action Button (FAB) */
+.fab-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 999;
+}
+
+.fab-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary) 0%, #cda250 100%);
+  color: #060a09 !important;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(223, 177, 91, 0.4);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fab-btn:hover {
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 6px 24px rgba(223, 177, 91, 0.6);
+}
+
+.fab-btn:active {
+  transform: scale(0.95);
+}
+
+/* Sticky Header & Spacing Enhancements */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  background: rgba(6, 10, 9, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 10;
+  padding: 16px 24px;
+  margin: -24px -24px 20px -24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Mobile responsive fixes for Android APK */
+@media (max-width: 480px) {
+  .sticky-header {
+    padding: 12px 16px;
+    margin: -24px -24px 16px -24px;
+  }
+  .briefing-banner {
+    padding: 14px;
+  }
+  .filter-chip {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .fab-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .fab-container {
+    bottom: 16px;
+    right: 16px;
+  }
+  h1 {
+    font-size: 22px !important;
+  }
+}
+
