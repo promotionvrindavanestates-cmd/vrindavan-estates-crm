@@ -495,5 +495,12 @@ export const api = {
   createWhatsAppFollowUp: (payload) => request('/api/whatsapp/follow-up', { method: 'POST', body: JSON.stringify(payload) }),
   getWhatsAppCommunicationHistory: (leadId) => request(`/api/whatsapp/communication-history/${leadId}`),
   getBookingsForLead: (leadId) => request(`/api/bookings/lead/${leadId}`),
-  getPaymentsForLead: (leadId) => request(`/api/payments/lead/${leadId}`)
+  getPaymentsForLead: (leadId) => request(`/api/payments/lead/${leadId}`),
+
+  // CommandCenter (Daybook) APIs
+  getCommandCenterTasks: () => request('/api/command-center/tasks'),
+  completeCommandCenterTask: (taskId, notes) => request(`/api/command-center/tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  rescheduleCommandCenterTask: (taskId, newDate, newTime) => request(`/api/command-center/tasks/${taskId}/reschedule`, { method: 'POST', body: JSON.stringify({ newDate, newTime }) }),
+  getDailyTargets: () => request('/api/command-center/targets'),
+  getAdminPerformance: () => request('/api/command-center/performance')
 };

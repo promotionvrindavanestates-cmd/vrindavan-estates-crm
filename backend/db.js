@@ -4147,6 +4147,445 @@ const DB = {
       }
       throw new Error('User not found');
     }
+  },
+
+  // --- SALES COMMAND CENTER (DAYBOOK) ---
+  async getCommandCenterTasks(userId, role) {
+    if (this.isCloud()) {
+      // 1. Fetch reminders
+      let remindersQuery = supabase.from('reminders').select('*, leads(*)');
+      if (role === 'employee' && userId) {
+        remindersQuery = remindersQuery.eq('assigned_employee_id', userId);
+      }
+      const { data: reminders, error: remError } = await remindersQuery;
+      if (remError) throw remError;
+
+      // 2. Fetch leads for virtual tasks
+      let leadsQuery = supabase.from('leads').select('*');
+      if (role === 'employee' && userId) {
+        leadsQuery = leadsQuery.eq('assigned_employee_id', userId);
+      }
+      const { data: leads, error: leadError } = await leadsQuery;
+      if (leadError) throw leadError;
+
+      // 3. Fetch milestones for collections
+      let milestonesQuery = supabase.from('booking_milestones').select('*, bookings(*, leads(*))').neq('status', 'Paid');
+      const { data: milestones, error: milError } = await milestonesQuery;
+      if (milError) throw milError;
+      
+      let filteredMilestones = milestones || [];
+      if (role === 'employee' && userId) {
+        filteredMilestones = milestones.filter(m => m.bookings?.leads?.assigned_employee_id === userId);
+      }
+
+      return this.assembleTasks(reminders || [], leads || [], filteredMilestones);
+    } else {
+      const db = loadLocalDb();
+      let reminders = db.reminders || [];
+      let leads = db.leads || [];
+      let bookings = db.bookings || [];
+      let milestones = db.booking_milestones || [];
+
+      if (role === 'employee' && userId) {
+        reminders = reminders.filter(r => r.assigned_employee_id === userId);
+        leads = leads.filter(l => l.assigned_employee_id === userId);
+      }
+
+      const mappedReminders = reminders.map(r => {
+        const lead = leads.find(l => l.id === r.lead_id);
+        return { ...r, leads: lead || null };
+      });
+
+      let mappedMilestones = milestones.filter(m => m.status !== 'Paid').map(m => {
+        const booking = bookings.find(b => b.id === m.booking_id);
+        let lead = null;
+        if (booking) {
+          lead = leads.find(l => l.id === booking.lead_id);
+        }
+        return {
+          ...m,
+          bookings: booking ? { ...booking, leads: lead || null } : null
+        };
+      });
+
+      if (role === 'employee' && userId) {
+        mappedMilestones = mappedMilestones.filter(m => m.bookings?.leads?.assigned_employee_id === userId);
+      }
+
+      return this.assembleTasks(mappedReminders, leads, mappedMilestones);
+    }
+  },
+
+  assembleTasks(reminders, leads, milestones) {
+    const tasks = [];
+
+    // 1. Add reminders
+    reminders.forEach(r => {
+      let taskType = '📋 Reminder';
+      if (r.type === 'Follow-up' || r.type === 'Callback') taskType = '📞 Follow Up Call';
+      else if (r.type === 'Site Visit') taskType = '🏠 Site Visit';
+      else if (r.type === 'Booking') taskType = '💰 Token Booking';
+      else if (r.type === 'Meeting') taskType = '🤝 Meeting';
+
+      tasks.push({
+        id: r.id,
+        source: 'reminder',
+        lead: r.leads,
+        lead_id: r.lead_id,
+        title: r.title,
+        type: taskType,
+        date: r.reminder_date,
+        time: r.reminder_time || '09:00:00',
+        notes: r.notes || '',
+        priority: r.priority || 'Medium',
+        completed_by: r.completed_by,
+        completed_at: r.completed_at,
+        completion_notes: r.completion_notes,
+        is_completed: !!r.completed_at
+      });
+    });
+
+    // 2. Add virtual follow-up tasks from leads
+    leads.forEach(l => {
+      if (l.follow_up_date) {
+        const exists = reminders.some(r => r.lead_id === l.id && r.reminder_date === l.follow_up_date && (r.type === 'Follow-up' || r.type === 'Callback'));
+        if (!exists) {
+          tasks.push({
+            id: `virtual-call-${l.id}-${l.follow_up_date}`,
+            source: 'lead-followup',
+            lead: l,
+            lead_id: l.id,
+            title: `Follow Up Call`,
+            type: '📞 Follow Up Call',
+            date: l.follow_up_date,
+            time: '10:00:00',
+            notes: 'Auto-generated follow-up from lead next call date.',
+            priority: 'Medium',
+            is_completed: false
+          });
+        }
+      }
+
+      if (l.site_visit_date && l.site_visit_status === 'Scheduled') {
+        const exists = reminders.some(r => r.lead_id === l.id && r.reminder_date === l.site_visit_date && r.type === 'Site Visit');
+        if (!exists) {
+          tasks.push({
+            id: `virtual-visit-${l.id}-${l.site_visit_date}`,
+            source: 'lead-sitevisit',
+            lead: l,
+            lead_id: l.id,
+            title: `Site Visit Tour`,
+            type: '🏠 Site Visit',
+            date: l.site_visit_date,
+            time: '12:00:00',
+            notes: l.site_visit_remarks || 'Scheduled site visit tour.',
+            priority: 'High',
+            is_completed: false
+          });
+        }
+      }
+    });
+
+    // 3. Add collections from milestones
+    milestones.forEach(m => {
+      if (m.bookings && m.bookings.leads) {
+        tasks.push({
+          id: `milestone-${m.id}`,
+          source: 'milestone',
+          lead: m.bookings.leads,
+          lead_id: m.bookings.leads.id,
+          title: `Collect: ${m.milestone_name} (₹${m.amount})`,
+          type: '💵 Collection',
+          date: m.due_date,
+          time: '11:00:00',
+          notes: `Collect payment milestone for Unit ${m.bookings.unit_number}. Amount: ₹${m.amount}.`,
+          priority: 'High',
+          is_completed: false
+        });
+      }
+    });
+
+    return tasks;
+  },
+
+  async completeCommandCenterTask(taskId, userId, notes) {
+    const completedAt = new Date().toISOString();
+    if (taskId.startsWith('virtual-') || taskId.startsWith('milestone-')) {
+      if (taskId.startsWith('milestone-')) {
+        const milestoneId = taskId.replace('milestone-', '');
+        if (this.isCloud()) {
+          const { data: mil } = await supabase.from('booking_milestones').select('amount').eq('id', milestoneId).single();
+          const amt = mil ? mil.amount : 0.00;
+          await supabase.from('booking_milestones').update({
+            status: 'Paid',
+            amount_paid: amt
+          }).eq('id', milestoneId);
+        } else {
+          const db = loadLocalDb();
+          const idx = db.booking_milestones.findIndex(m => m.id === milestoneId);
+          if (idx !== -1) {
+            db.booking_milestones[idx].status = 'Paid';
+            db.booking_milestones[idx].amount_paid = db.booking_milestones[idx].amount;
+            saveLocalDb(db);
+          }
+        }
+        return { success: true };
+      } else {
+        const parts = taskId.split('-');
+        const type = parts[1] === 'call' ? 'Follow-up' : 'Site Visit';
+        const leadId = parts[2];
+        const date = parts[3];
+        const reminderData = {
+          lead_id: leadId,
+          title: type === 'Follow-up' ? 'Follow Up Call' : 'Site Visit Tour',
+          type: type,
+          reminder_date: date,
+          is_read: true,
+          assigned_employee_id: userId,
+          completed_by: userId,
+          completed_at: completedAt,
+          completion_notes: notes
+        };
+        return await this.createReminder(reminderData);
+      }
+    } else {
+      if (this.isCloud()) {
+        const { data, error } = await supabase.from('reminders').update({
+          is_read: true,
+          completed_by: userId,
+          completed_at: completedAt,
+          completion_notes: notes
+        }).eq('id', taskId).select().single();
+        if (error) throw error;
+        return data;
+      } else {
+        const db = loadLocalDb();
+        const idx = db.reminders.findIndex(r => r.id === taskId);
+        if (idx !== -1) {
+          db.reminders[idx].is_read = true;
+          db.reminders[idx].completed_by = userId;
+          db.reminders[idx].completed_at = completedAt;
+          db.reminders[idx].completion_notes = notes;
+          saveLocalDb(db);
+          return db.reminders[idx];
+        }
+        throw new Error('Reminder not found');
+      }
+    }
+  },
+
+  async rescheduleCommandCenterTask(taskId, newDate, newTime) {
+    if (taskId.startsWith('virtual-') || taskId.startsWith('milestone-')) {
+      if (taskId.startsWith('milestone-')) {
+        const milestoneId = taskId.replace('milestone-', '');
+        if (this.isCloud()) {
+          await supabase.from('booking_milestones').update({ due_date: newDate }).eq('id', milestoneId);
+        } else {
+          const db = loadLocalDb();
+          const idx = db.booking_milestones.findIndex(m => m.id === milestoneId);
+          if (idx !== -1) {
+            db.booking_milestones[idx].due_date = newDate;
+            saveLocalDb(db);
+          }
+        }
+        return { success: true };
+      } else {
+        const parts = taskId.split('-');
+        const type = parts[1] === 'call' ? 'Follow-up' : 'Site Visit';
+        const leadId = parts[2];
+        if (this.isCloud()) {
+          const { data: user } = await supabase.from('leads').select('assigned_employee_id').eq('id', leadId).single();
+          const empId = user ? user.assigned_employee_id : null;
+          const { data, error } = await supabase.from('reminders').insert({
+            lead_id: leadId,
+            title: type === 'Follow-up' ? 'Follow Up Call' : 'Site Visit Tour',
+            type: type,
+            reminder_date: newDate,
+            reminder_time: newTime || '10:00:00',
+            assigned_employee_id: empId,
+            is_read: false
+          }).select().single();
+          if (error) throw error;
+          if (type === 'Follow-up') {
+            await supabase.from('leads').update({ follow_up_date: newDate }).eq('id', leadId);
+          } else {
+            await supabase.from('leads').update({ site_visit_date: newDate }).eq('id', leadId);
+          }
+          return data;
+        } else {
+          const db = loadLocalDb();
+          const lead = db.leads.find(l => l.id === leadId);
+          const empId = lead ? lead.assigned_employee_id : null;
+          const newRem = {
+            id: crypto.randomUUID(),
+            lead_id: leadId,
+            title: type === 'Follow-up' ? 'Follow Up Call' : 'Site Visit Tour',
+            type: type,
+            reminder_date: newDate,
+            reminder_time: newTime || '10:00:00',
+            assigned_employee_id: empId,
+            is_read: false,
+            created_at: new Date().toISOString()
+          };
+          db.reminders.push(newRem);
+          if (type === 'Follow-up') {
+            const idx = db.leads.findIndex(l => l.id === leadId);
+            if (idx !== -1) db.leads[idx].follow_up_date = newDate;
+          } else {
+            const idx = db.leads.findIndex(l => l.id === leadId);
+            if (idx !== -1) db.leads[idx].site_visit_date = newDate;
+          }
+          saveLocalDb(db);
+          return newRem;
+        }
+      }
+    } else {
+      if (this.isCloud()) {
+        const { data, error } = await supabase.from('reminders').update({
+          reminder_date: newDate,
+          reminder_time: newTime
+        }).eq('id', taskId).select().single();
+        if (error) throw error;
+        if (data.type === 'Follow-up' || data.type === 'Callback') {
+          await supabase.from('leads').update({ follow_up_date: newDate }).eq('id', data.lead_id);
+        }
+        return data;
+      } else {
+        const db = loadLocalDb();
+        const idx = db.reminders.findIndex(r => r.id === taskId);
+        if (idx !== -1) {
+          db.reminders[idx].reminder_date = newDate;
+          db.reminders[idx].reminder_time = newTime;
+          const reminder = db.reminders[idx];
+          if (reminder.type === 'Follow-up' || reminder.type === 'Callback') {
+            const lIdx = db.leads.findIndex(l => l.id === reminder.lead_id);
+            if (lIdx !== -1) db.leads[lIdx].follow_up_date = newDate;
+          }
+          saveLocalDb(db);
+          return reminder;
+        }
+        throw new Error('Reminder not found');
+      }
+    }
+  },
+
+  async getDailyTargets(userId, role) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStart = todayStr + 'T00:00:00.000Z';
+    const todayEnd = todayStr + 'T23:59:59.999Z';
+    
+    if (this.isCloud()) {
+      let callLogsQuery = supabase.from('call_logs').select('id', { count: 'exact', head: true }).gte('call_date', todayStart).lte('call_date', todayEnd);
+      if (role === 'employee') callLogsQuery = callLogsQuery.eq('caller_id', userId);
+      const { count: callsCount } = await callLogsQuery;
+
+      let meetingsQuery = supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('type', 'Meeting').eq('is_read', true).gte('completed_at', todayStart).lte('completed_at', todayEnd);
+      if (role === 'employee') meetingsQuery = meetingsQuery.eq('assigned_employee_id', userId);
+      const { count: meetingsCount } = await meetingsQuery;
+
+      let visitsQuery = supabase.from('site_visits').select('id', { count: 'exact', head: true }).gte('created_at', todayStart).lte('created_at', todayEnd);
+      if (role === 'employee') visitsQuery = visitsQuery.eq('employee_id', userId);
+      const { count: visitsCount } = await visitsQuery;
+
+      let bookingsQuery = supabase.from('bookings').select('id', { count: 'exact', head: true }).gte('booking_date', todayStr).lte('booking_date', todayStr);
+      if (role === 'employee') bookingsQuery = bookingsQuery.eq('executive_id', userId);
+      const { count: bookingsCount } = await bookingsQuery;
+
+      let collectionsQuery = supabase.from('payments').select('id', { count: 'exact', head: true }).gte('created_at', todayStart).lte('created_at', todayEnd);
+      const { count: paymentsCount } = await collectionsQuery;
+
+      return {
+        calls: { actual: callsCount || 0, target: 30 },
+        meetings: { actual: meetingsCount || 0, target: 5 },
+        visits: { actual: visitsCount || 0, target: 3 },
+        bookings: { actual: bookingsCount || 0, target: 1 },
+        collections: { actual: paymentsCount || 0, target: 2 }
+      };
+    } else {
+      const db = loadLocalDb();
+      const callLogs = db.call_logs || [];
+      const reminders = db.reminders || [];
+      const visits = db.site_visits || [];
+      const bookings = db.bookings || [];
+      const payments = db.payments || [];
+
+      const callsCount = callLogs.filter(c => (c.call_date || c.created_at || '').startsWith(todayStr) && (role === 'admin' || c.caller_id === userId)).length;
+      const meetingsCount = reminders.filter(r => r.type === 'Meeting' && r.is_read && r.completed_at && r.completed_at.startsWith(todayStr) && (role === 'admin' || r.assigned_employee_id === userId)).length;
+      const visitsCount = visits.filter(v => v.created_at.startsWith(todayStr) && (role === 'admin' || v.employee_id === userId)).length;
+      const bookingsCount = bookings.filter(b => b.booking_date === todayStr && (role === 'admin' || b.executive_id === userId)).length;
+      const paymentsCount = payments.filter(p => p.created_at && p.created_at.startsWith(todayStr)).length;
+
+      return {
+        calls: { actual: callsCount, target: 30 },
+        meetings: { actual: meetingsCount, target: 5 },
+        visits: { actual: visitsCount, target: 3 },
+        bookings: { actual: bookingsCount, target: 1 },
+        collections: { actual: paymentsCount, target: 2 }
+      };
+    }
+  },
+
+  async getAdminPerformanceMetrics() {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStart = todayStr + 'T00:00:00.000Z';
+    const todayEnd = todayStr + 'T23:59:59.999Z';
+
+    if (this.isCloud()) {
+      const { data: users, error } = await supabase.from('users').select('*');
+      if (error) throw error;
+      
+      const performance = [];
+      for (const u of users) {
+        if (u.role === 'admin') continue;
+
+        const { count: todayTotal } = await supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('assigned_employee_id', u.id).eq('reminder_date', todayStr);
+        const { count: todayCompleted } = await supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('assigned_employee_id', u.id).eq('is_read', true).gte('completed_at', todayStart).lte('completed_at', todayEnd);
+        const { count: overdue } = await supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('assigned_employee_id', u.id).eq('is_read', false).lt('reminder_date', todayStr);
+        const { count: siteVisits } = await supabase.from('site_visits').select('id', { count: 'exact', head: true }).eq('employee_id', u.id).gte('created_at', todayStart).lte('created_at', todayEnd);
+        const { count: bookings } = await supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('executive_id', u.id).eq('booking_date', todayStr);
+
+        performance.push({
+          name: u.full_name,
+          todayTasks: todayTotal || 0,
+          completed: todayCompleted || 0,
+          pending: (todayTotal || 0) - (todayCompleted || 0),
+          overdue: overdue || 0,
+          siteVisits: siteVisits || 0,
+          bookings: bookings || 0,
+          collections: 0
+        });
+      }
+      return performance;
+    } else {
+      const db = loadLocalDb();
+      const users = db.users || [];
+      const reminders = db.reminders || [];
+      const visits = db.site_visits || [];
+      const bookings = db.bookings || [];
+
+      const performance = [];
+      users.forEach(u => {
+        if (u.role === 'admin') return;
+
+        const todayTotal = reminders.filter(r => r.assigned_employee_id === u.id && r.reminder_date === todayStr).length;
+        const todayCompleted = reminders.filter(r => r.assigned_employee_id === u.id && r.is_read && r.completed_at && r.completed_at.startsWith(todayStr)).length;
+        const overdue = reminders.filter(r => r.assigned_employee_id === u.id && !r.is_read && r.reminder_date < todayStr).length;
+        const siteVisits = visits.filter(v => v.employee_id === u.id && v.created_at && v.created_at.startsWith(todayStr)).length;
+        const bookingsCount = bookings.filter(b => b.executive_id === u.id && b.booking_date === todayStr).length;
+
+        performance.push({
+          name: u.full_name,
+          todayTasks: todayTotal,
+          completed: todayCompleted,
+          pending: todayTotal - todayCompleted,
+          overdue: overdue,
+          siteVisits: siteVisits,
+          bookings: bookingsCount,
+          collections: 0
+        });
+      });
+      return performance;
+    }
   }
 };
 

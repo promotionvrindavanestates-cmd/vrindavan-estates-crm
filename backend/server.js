@@ -2733,6 +2733,63 @@ app.put('/api/employees/:id/commission', authenticateToken, requireAdmin, async 
   }
 });
 
+// --- SALES COMMAND CENTER (DAYBOOK) ---
+app.get('/api/command-center/tasks', authenticateToken, async (req, res) => {
+  try {
+    const tasks = await DB.getCommandCenterTasks(req.user.id, req.user.role);
+    res.json(tasks);
+  } catch (error) {
+    console.error('Failed to fetch command center tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch command center tasks' });
+  }
+});
+
+app.post('/api/command-center/tasks/:id/complete', authenticateToken, async (req, res) => {
+  const { notes } = req.body;
+  try {
+    const result = await DB.completeCommandCenterTask(req.params.id, req.user.id, notes || '');
+    res.json({ message: 'Task completed successfully', task: result });
+  } catch (error) {
+    console.error('Failed to complete task:', error);
+    res.status(500).json({ error: 'Failed to complete task' });
+  }
+});
+
+app.post('/api/command-center/tasks/:id/reschedule', authenticateToken, async (req, res) => {
+  const { newDate, newTime } = req.body;
+  if (!newDate) {
+    return res.status(400).json({ error: 'Missing newDate for rescheduling' });
+  }
+  try {
+    const result = await DB.rescheduleCommandCenterTask(req.params.id, newDate, newTime || null);
+    res.json({ message: 'Task rescheduled successfully', task: result });
+  } catch (error) {
+    console.error('Failed to reschedule task:', error);
+    res.status(500).json({ error: 'Failed to reschedule task' });
+  }
+});
+
+app.get('/api/command-center/targets', authenticateToken, async (req, res) => {
+  try {
+    const targets = await DB.getDailyTargets(req.user.id, req.user.role);
+    res.json(targets);
+  } catch (error) {
+    console.error('Failed to fetch daily targets:', error);
+    res.status(500).json({ error: 'Failed to fetch daily targets' });
+  }
+});
+
+app.get('/api/command-center/performance', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const performance = await DB.getAdminPerformanceMetrics();
+    res.json(performance);
+  } catch (error) {
+    console.error('Failed to fetch admin performance stats:', error);
+    res.status(500).json({ error: 'Failed to fetch admin performance stats' });
+  }
+});
+
+
 app.get('/api/leads/duplicates', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const list = await DB.getDuplicateLeads();

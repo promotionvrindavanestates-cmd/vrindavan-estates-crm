@@ -21,8 +21,9 @@ import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
 const CollectionDashboard = React.lazy(() => import('./components/CollectionDashboard'));
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall } from 'lucide-react';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
+import CommandCenter from './components/CommandCenter';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -31,7 +32,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   // Active View Tab
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('command-center');
   const [kpiFilters, setKpiFilters] = useState(null);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -625,6 +626,12 @@ export default function App() {
         {/* Navigation Tabs */}
         <div class="nav-tabs" style={{ flexWrap: 'wrap', gap: '8px' }}>
           <div 
+            class={`nav-tab ${activeTab === 'command-center' ? 'active' : ''}`}
+            onClick={() => setActiveTab('command-center')}
+          >
+            <Compass size={15} style={{ color: 'var(--primary)' }} /> Daybook
+          </div>
+          <div 
             class={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
           >
@@ -723,6 +730,16 @@ export default function App() {
           </div>
         ) : (
           <>
+            {activeTab === 'command-center' && (
+              <CommandCenter 
+                leads={leads}
+                employees={employees}
+                currentUser={currentUser}
+                onOpenLeadDrawer={handleOpenLeadDrawer}
+                onRefreshData={fetchCRMData}
+              />
+            )}
+
             {activeTab === 'dashboard' && (
               <Dashboard 
                 leads={leads} 
