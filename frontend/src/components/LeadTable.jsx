@@ -802,17 +802,10 @@ export default function LeadTable({
                         <div style={{ display: 'inline-flex', gap: '8px' }}>
                           <button 
                             class="action-icon-btn" 
-                            title="View Timeline & Audits"
-                            onClick={() => onViewHistory(l)}
+                            title="WhatsApp Customer"
+                            onClick={() => handleWhatsAppClick(l.phone1 || l.phone2 || '', l)}
                           >
-                            <History size={14} />
-                          </button>
-                          <button 
-                            class="action-icon-btn" 
-                            title="Log Call Response"
-                            onClick={() => onLogCall(l)}
-                          >
-                            <PhoneCall size={14} />
+                            <FaWhatsapp size={14} style={{ color: '#25D366' }} />
                           </button>
                           <button 
                             class="action-icon-btn" 
