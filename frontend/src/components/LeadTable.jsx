@@ -15,7 +15,8 @@ export default function LeadTable({
   onDeleteLead, 
   onLogCall,
   onAssignLead,
-  onViewHistory
+  onViewHistory,
+  defaultShowTrash = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
@@ -57,13 +58,17 @@ export default function LeadTable({
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
   // Phase 9 Bulk Delete & Trash Bin States (Optimistic UI & Background Execution)
-  const [showTrash, setShowTrash] = useState(false);
+  const [showTrash, setShowTrash] = useState(defaultShowTrash);
   const [deletingLeadIds, setDeletingLeadIds] = useState([]);
   const [toasts, setToasts] = useState([]);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isPermanentDelete, setIsPermanentDelete] = useState(false);
   const [deleteType, setDeleteType] = useState('trash'); // 'trash' or 'permanent'
+
+  const [emptyTrashConfirmOpen, setEmptyTrashConfirmOpen] = useState(false);
+  const [emptyTrashInput, setEmptyTrashInput] = useState('');
+  const [emptyingTrash, setEmptyingTrash] = useState(false);
   
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [selectedBulkStatus, setSelectedBulkStatus] = useState('');
@@ -79,9 +84,10 @@ export default function LeadTable({
   const showToast = (message, type = 'success', action = null) => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, message, type, action }]);
+    const duration = action ? 10000 : (type === 'error' ? 5000 : 3000);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, type === 'error' && action ? 6000 : 3000);
+    }, duration);
   };
 
   // Click-to-WhatsApp Assistant States
@@ -424,7 +430,69 @@ export default function LeadTable({
             setToasts(prev => prev.filter(t => t.id !== jobId));
             
             if (job.failed === 0) {
-              showToast(`${job.succeeded} Leads deleted successfully`, 'success');
+              const isSoftDelete = deleteType === 'trash' && !showTrash;
+              if (isSoftDelete) {
+                const undoAction = (
+                  <button 
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setToasts(prev => prev.filter(t => t.id !== jobId)); // Remove the success toast
+                      showToast(`⚡ Undoing deletion...`, 'info');
+                      try {
+                        const restoreRes = await api.restoreLeadsBulk(targets);
+                        const restoreJobId = restoreRes.jobId;
+                        const restInterval = setInterval(async () => {
+                          try {
+                            const rJob = await api.getBulkJobStatus(restoreJobId);
+                            if (rJob.status === 'completed' || rJob.status === 'failed' || rJob.status === 'completed_with_errors') {
+                              clearInterval(restInterval);
+                              setToasts(prev => prev.filter(t => t.id !== restoreJobId));
+                              if (rJob.failed === 0) {
+                                showToast(`🔄 Undone: ${rJob.succeeded} Leads restored successfully`, 'success');
+                              } else {
+                                showToast(`🔄 Undone: Restored ${rJob.succeeded} leads. ${rJob.failed} failed.`, 'error');
+                              }
+                              fetchLeads();
+                            } else {
+                              const pct = Math.round((rJob.progress / rJob.total) * 100) || 0;
+                              setToasts(prev => {
+                                const exists = prev.some(t => t.id === restoreJobId);
+                                if (exists) {
+                                  return prev.map(t => t.id === restoreJobId ? { ...t, message: `⚡ Restoring leads: ${pct}%`, progress: pct } : t);
+                                } else {
+                                  return [...prev, { id: restoreJobId, message: `⚡ Restoring leads: ${pct}%`, type: 'processing', progress: pct }];
+                                }
+                              });
+                            }
+                          } catch (pollErr) {
+                            clearInterval(restInterval);
+                          }
+                        }, 1000);
+                      } catch (restoreErr) {
+                        showToast('Failed to queue restoration job for undo', 'error');
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(212, 175, 55, 0.15)',
+                      border: '1px solid #D4AF37',
+                      color: '#D4AF37',
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      marginTop: '6px',
+                      alignSelf: 'flex-end',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+                    }}
+                  >
+                    Undo (10s)
+                  </button>
+                );
+                showToast(`✅ ${job.succeeded} Leads Deleted`, 'success', undoAction);
+              } else {
+                showToast(`${job.succeeded} Leads deleted permanently`, 'success');
+              }
               setSelectedLeadIds([]);
               setDeletingLeadIds([]);
             } else {
@@ -460,6 +528,23 @@ export default function LeadTable({
       setBulkDeleting(false);
       setDeletingLeadIds([]);
       fetchLeads();
+    }
+  };
+
+  const handleExecuteEmptyTrash = async () => {
+    if (emptyTrashInput !== 'DELETE') return;
+    setEmptyTrashConfirmOpen(false);
+    setEmptyingTrash(true);
+    showToast('⚡ Emptying trash bin in background...', 'info');
+    try {
+      const res = await api.emptyTrash();
+      showToast(`✅ Trash bin emptied: ${res.deletedCount} leads permanently purged.`, 'success');
+      setEmptyTrashInput('');
+      fetchLeads();
+    } catch (err) {
+      showToast('Failed to empty trash bin', 'error');
+    } finally {
+      setEmptyingTrash(false);
     }
   };
 
@@ -985,6 +1070,27 @@ export default function LeadTable({
                 }}
               >
                 🗑️ {showTrash ? 'View Active Leads' : 'View Trash Bin'}
+              </button>
+            )}
+            {showTrash && currentUser.role === 'admin' && (
+              <button 
+                type="button"
+                className="btn"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid #ef4444',
+                  color: '#ef4444',
+                  fontWeight: 600
+                }}
+                onClick={() => {
+                  setEmptyTrashInput('');
+                  setEmptyTrashConfirmOpen(true);
+                }}
+              >
+                💀 Empty Trash
               </button>
             )}
             <button class="btn btn-primary" onClick={onAddLead}>
@@ -1778,6 +1884,72 @@ export default function LeadTable({
                 }}
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty Trash Confirmation Modal */}
+      {emptyTrashConfirmOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239, 68, 68, 0.25)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ⚠️ Empty Recycle Bin?
+            </h3>
+            
+            <p style={{ fontSize: '13px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
+              Are you sure you want to permanently purge all trash leads? This action will clean the entire Recycle Bin, cascade delete all call logs, reminders, and database connections. <strong>This action cannot be undone.</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Type <strong style={{ color: '#ef4444' }}>DELETE</strong> to confirm:</span>
+              <input 
+                type="text" 
+                value={emptyTrashInput} 
+                onChange={(e) => setEmptyTrashInput(e.target.value)} 
+                placeholder="DELETE"
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.03)', 
+                  border: '1.5px solid rgba(239, 68, 68, 0.3)', 
+                  borderRadius: '8px', 
+                  padding: '10px', 
+                  color: '#f1f5f9', 
+                  fontSize: '14px', 
+                  textAlign: 'center', 
+                  fontWeight: 'bold',
+                  outline: 'none'
+                }} 
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '6px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setEmptyTrashConfirmOpen(false);
+                  setEmptyTrashInput('');
+                }}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExecuteEmptyTrash}
+                disabled={emptyTrashInput !== 'DELETE' || emptyingTrash}
+                style={{ 
+                  padding: '8px 16px', 
+                  borderRadius: '8px', 
+                  background: '#ef4444', 
+                  color: '#ffffff', 
+                  border: 'none', 
+                  fontWeight: 600, 
+                  cursor: emptyTrashInput === 'DELETE' ? 'pointer' : 'not-allowed',
+                  opacity: emptyTrashInput === 'DELETE' ? 1 : 0.5
+                }}
+              >
+                {emptyingTrash ? 'Purging...' : 'Purge All Permanently'}
               </button>
             </div>
           </div>

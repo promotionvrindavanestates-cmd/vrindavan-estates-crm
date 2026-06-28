@@ -297,6 +297,8 @@ app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) 
   
   const jobId = `job_del_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   const device = getClientDevice(req);
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+  const startTime = Date.now();
   
   bulkJobs[jobId] = {
     id: jobId,
@@ -316,10 +318,25 @@ app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) 
       bulkJobs[jobId].succeeded = result.deletedCount;
       bulkJobs[jobId].failed = result.failed;
       bulkJobs[jobId].progress = leadIds.length;
-      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.deletedCount === 0 ? 'failed' : 'completed_with_errors');
+      const status = result.failed === 0 ? 'completed' : (result.deletedCount === 0 ? 'failed' : 'completed_with_errors');
+      bulkJobs[jobId].status = status;
 
-      const details = `Bulk deleted ${result.deletedCount} leads${permanent ? ' permanently' : ' (soft-deleted)'}. Failed: ${result.failed}. Job ID: ${jobId}`;
+      const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
+      const details = `Admin: ${req.user.full_name}\nAction: Deleted ${result.deletedCount} Leads${permanent ? ' permanently' : ' (soft-deleted)'}\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}`;
       await DB.logAudit(null, 'Bulk Leads Deleted', details, req.user.id, req.user.full_name, device);
+
+      // Auto-create unread bell notification reminder
+      await DB.createReminder({
+        lead_id: null,
+        title: 'Bulk Delete Completed',
+        type: 'System',
+        reminder_date: new Date().toLocaleDateString('en-CA'),
+        reminder_time: new Date().toTimeString().split(' ')[0],
+        notes: `Bulk deletion processed. ${result.deletedCount} leads deleted successfully. Failed: ${result.failed}.`,
+        is_read: false,
+        assigned_employee_id: req.user.id,
+        priority: 'High'
+      });
     } catch (err) {
       console.error(`Bulk job ${jobId} failed:`, err);
       bulkJobs[jobId].status = 'failed';
@@ -344,6 +361,8 @@ app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req,
 
   const jobId = `job_res_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   const device = getClientDevice(req);
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+  const startTime = Date.now();
   
   bulkJobs[jobId] = {
     id: jobId,
@@ -362,10 +381,25 @@ app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req,
       bulkJobs[jobId].succeeded = result.restoredCount;
       bulkJobs[jobId].failed = result.failed;
       bulkJobs[jobId].progress = leadIds.length;
-      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.restoredCount === 0 ? 'failed' : 'completed_with_errors');
+      const status = result.failed === 0 ? 'completed' : (result.restoredCount === 0 ? 'failed' : 'completed_with_errors');
+      bulkJobs[jobId].status = status;
 
-      const details = `Bulk restored ${result.restoredCount} leads from Trash Bin. Failed: ${result.failed}. Job ID: ${jobId}`;
+      const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
+      const details = `Admin: ${req.user.full_name}\nAction: Restored ${result.restoredCount} Leads from Trash Bin\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}`;
       await DB.logAudit(null, 'Bulk Leads Restored', details, req.user.id, req.user.full_name, device);
+
+      // Auto-create unread bell notification reminder
+      await DB.createReminder({
+        lead_id: null,
+        title: 'Bulk Restore Completed',
+        type: 'System',
+        reminder_date: new Date().toLocaleDateString('en-CA'),
+        reminder_time: new Date().toTimeString().split(' ')[0],
+        notes: `Bulk restoration processed. ${result.restoredCount} leads restored successfully. Failed: ${result.failed}.`,
+        is_read: false,
+        assigned_employee_id: req.user.id,
+        priority: 'High'
+      });
     } catch (err) {
       console.error(`Bulk job ${jobId} failed:`, err);
       bulkJobs[jobId].status = 'failed';
@@ -393,6 +427,8 @@ app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, r
 
   const jobId = `job_upd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   const device = getClientDevice(req);
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+  const startTime = Date.now();
   
   bulkJobs[jobId] = {
     id: jobId,
@@ -412,10 +448,25 @@ app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, r
       bulkJobs[jobId].succeeded = result.updatedCount;
       bulkJobs[jobId].failed = result.failed;
       bulkJobs[jobId].progress = leadIds.length;
-      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.updatedCount === 0 ? 'failed' : 'completed_with_errors');
+      const jobStatus = result.failed === 0 ? 'completed' : (result.updatedCount === 0 ? 'failed' : 'completed_with_errors');
+      bulkJobs[jobId].status = jobStatus;
 
-      const details = `Bulk updated status to "${status}" for ${result.updatedCount} leads. Failed: ${result.failed}. Job ID: ${jobId}`;
+      const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
+      const details = `Admin: ${req.user.full_name}\nAction: Bulk Updated Status to "${status}" for ${result.updatedCount} Leads\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${jobStatus}\nJob ID: ${jobId}`;
       await DB.logAudit(null, 'Bulk Leads Updated', details, req.user.id, req.user.full_name, device);
+
+      // Auto-create unread bell notification reminder
+      await DB.createReminder({
+        lead_id: null,
+        title: 'Bulk Status Update Completed',
+        type: 'System',
+        reminder_date: new Date().toLocaleDateString('en-CA'),
+        reminder_time: new Date().toTimeString().split(' ')[0],
+        notes: `Bulk status update processed. ${result.updatedCount} leads updated successfully. Failed: ${result.failed}.`,
+        is_read: false,
+        assigned_employee_id: req.user.id,
+        priority: 'High'
+      });
     } catch (err) {
       console.error(`Bulk job ${jobId} failed:`, err);
       bulkJobs[jobId].status = 'failed';
@@ -430,6 +481,37 @@ app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, r
     status: 'queued',
     total: leadIds.length
   });
+});
+
+app.delete('/api/leads/trash/empty', authenticateToken, requireAdmin, async (req, res) => {
+  const device = getClientDevice(req);
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+  const startTime = Date.now();
+
+  try {
+    const result = await DB.emptyTrash(req.user.id, req.user.role);
+    
+    const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
+    const details = `Admin: ${req.user.full_name}\nAction: Emptied Trash Bin (${result.deletedCount} Leads Purged)\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: completed`;
+    await DB.logAudit(null, 'Trash Bin Emptied', details, req.user.id, req.user.full_name, device);
+    
+    await DB.createReminder({
+      lead_id: null,
+      title: 'Recycle Bin Emptied',
+      type: 'System',
+      reminder_date: new Date().toLocaleDateString('en-CA'),
+      reminder_time: new Date().toTimeString().split(' ')[0],
+      notes: `Trash bin emptied. ${result.deletedCount} leads permanently purged.`,
+      is_read: false,
+      assigned_employee_id: req.user.id,
+      priority: 'High'
+    });
+
+    res.json({ message: 'Trash bin emptied successfully', deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error('Empty trash error:', error);
+    res.status(500).json({ error: error.message || 'Failed to empty trash bin' });
+  }
 });
 
 app.get('/api/leads/:id', authenticateToken, async (req, res) => {

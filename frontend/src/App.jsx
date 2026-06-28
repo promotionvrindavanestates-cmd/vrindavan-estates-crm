@@ -21,7 +21,7 @@ import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
 const CollectionDashboard = React.lazy(() => import('./components/CollectionDashboard'));
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass, Menu, X } from 'lucide-react';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass, Menu, X, Trash2 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import CommandCenter from './components/CommandCenter';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
@@ -676,6 +676,15 @@ export default function App() {
             </button>
           )}
 
+          {currentUser.role === 'admin' && (
+            <button 
+              className={`sidebar-item ${activeTab === 'trash' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('trash'); setSidebarOpen(false); }}
+            >
+              <Trash2 size={18} /> Recycle Bin
+            </button>
+          )}
+
           <button 
             className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
@@ -853,6 +862,10 @@ export default function App() {
                 employees={employees} 
                 onRefreshEmployees={fetchCRMData} 
               />
+            )}
+
+            {activeTab === 'trash' && currentUser.role === 'admin' && (
+              <LeadTable currentUser={currentUser} defaultShowTrash={true} />
             )}
 
             {activeTab === 'settings' && (

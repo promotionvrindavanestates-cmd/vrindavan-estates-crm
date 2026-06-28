@@ -705,115 +705,200 @@ const DB = {
     }
   },
 
+  async executeBulkOperation(leadIds, operationFn, concurrency = 4) {
+    let succeededCount = 0;
+    let failedCount = 0;
+    const failedIds = [];
+
+    // Queue of index positions to process
+    let currentIndex = 0;
+    let currentBatchSize = 200; // Start adaptively at 200
+
+    const workers = [];
+
+    const worker = async () => {
+      while (currentIndex < leadIds.length) {
+        const start = currentIndex;
+        const size = currentBatchSize;
+        currentIndex += size;
+
+        if (start >= leadIds.length) break;
+
+        const batch = leadIds.slice(start, start + size);
+        const startTime = Date.now();
+
+        try {
+          await operationFn(batch);
+          succeededCount += batch.length;
+
+          // Adaptive batching: increase size if fast, decrease if slow
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 200) {
+            currentBatchSize = Math.min(currentBatchSize + 300, 2000);
+          } else if (elapsed > 800) {
+            currentBatchSize = Math.max(currentBatchSize - 300, 200);
+          }
+        } catch (err) {
+          console.error(`Batch execution failed for range ${start}-${start + batch.length}:`, err.message);
+          
+          // Retry Queue: process records in the failed batch individually or in tiny chunks
+          const retryBatchSize = 20;
+          for (let j = 0; j < batch.length; j += retryBatchSize) {
+            const retrySubBatch = batch.slice(j, j + retryBatchSize);
+            try {
+              await operationFn(retrySubBatch);
+              succeededCount += retrySubBatch.length;
+            } catch (retryErr) {
+              console.error(`Retry sub-batch failed for size ${retrySubBatch.length}:`, retryErr.message);
+              // Fall back to item-by-item granular retry
+              for (const id of retrySubBatch) {
+                try {
+                  await operationFn([id]);
+                  succeededCount++;
+                } catch (itemErr) {
+                  failedCount++;
+                  failedIds.push(id);
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    // Spawn parallel workers (lock concurrency to 1 for local JSON to avoid lock write collisions)
+    const activeConcurrency = Math.min(concurrency, Math.ceil(leadIds.length / currentBatchSize));
+    for (let i = 0; i < activeConcurrency; i++) {
+      workers.push(worker());
+    }
+
+    await Promise.all(workers);
+
+    return { succeededCount, failedCount, failedIds };
+  },
+
   async deleteLeadsBulk(leadIds, userId, userRole, permanent = false) {
     if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can delete leads');
-    if (!leadIds || leadIds.length === 0) return { deletedCount: 0, skipped: 0, failed: 0 };
+    if (!leadIds || leadIds.length === 0) return { deletedCount: 0, failed: 0, failedIds: [] };
 
-    const batchSize = 1000;
-    let deletedCount = 0;
-    let failed = 0;
-
-    for (let i = 0; i < leadIds.length; i += batchSize) {
-      const batchIds = leadIds.slice(i, i + batchSize);
-      try {
-        if (permanent) {
-          if (this.isCloud()) {
-            const { error } = await supabase.from('leads').delete().in('id', batchIds);
-            if (error) throw error;
-          } else {
-            const db = loadLocalDb();
-            const batchSet = new Set(batchIds);
-            db.leads = db.leads.filter(l => !batchSet.has(l.id));
-            saveLocalDb(db);
-          }
-        } else {
-          if (this.isCloud()) {
-            const hasCol = await this.checkDeletedAtColumn();
-            if (hasCol) {
-              const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', batchIds);
-              if (error) throw error;
-            } else {
-              const { error } = await supabase.from('leads').delete().in('id', batchIds);
-              if (error) throw error;
-            }
-          } else {
-            const db = loadLocalDb();
-            const batchSet = new Set(batchIds);
-            db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: new Date().toISOString() } : l);
-            saveLocalDb(db);
-          }
-        }
-        deletedCount += batchIds.length;
-      } catch (err) {
-        console.error('Batch deletion failed:', err.message);
-        failed += batchIds.length;
-      }
-    }
-
-    return { deletedCount, skipped: 0, failed };
-  },
-
-  async restoreLeadsBulk(leadIds, userId, userRole) {
-    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can restore leads');
-    if (!leadIds || leadIds.length === 0) return { restoredCount: 0, failed: 0 };
-
-    const batchSize = 1000;
-    let restoredCount = 0;
-    let failed = 0;
-
-    for (let i = 0; i < leadIds.length; i += batchSize) {
-      const batchIds = leadIds.slice(i, i + batchSize);
-      try {
+    const operationFn = async (batchIds) => {
+      if (permanent) {
         if (this.isCloud()) {
-          const hasCol = await this.checkDeletedAtColumn();
-          if (hasCol) {
-            const { error } = await supabase.from('leads').update({ deleted_at: null }).in('id', batchIds);
-            if (error) throw error;
-          }
-        } else {
-          const db = loadLocalDb();
-          const batchSet = new Set(batchIds);
-          db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: null } : l);
-          saveLocalDb(db);
-        }
-        restoredCount += batchIds.length;
-      } catch (err) {
-        console.error('Batch restoration failed:', err.message);
-        failed += batchIds.length;
-      }
-    }
-
-    return { restoredCount, failed };
-  },
-
-  async updateLeadsStatusBulk(leadIds, status, userId, userRole) {
-    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can update leads');
-    if (!leadIds || leadIds.length === 0) return { updatedCount: 0, failed: 0 };
-
-    const batchSize = 1000;
-    let updatedCount = 0;
-    let failed = 0;
-
-    for (let i = 0; i < leadIds.length; i += batchSize) {
-      const batchIds = leadIds.slice(i, i + batchSize);
-      try {
-        if (this.isCloud()) {
-          const { error } = await supabase.from('leads').update({ status }).in('id', batchIds);
+          const { error } = await supabase.from('leads').delete().in('id', batchIds);
           if (error) throw error;
         } else {
           const db = loadLocalDb();
           const batchSet = new Set(batchIds);
-          db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, status } : l);
+          db.leads = db.leads.filter(l => !batchSet.has(l.id));
           saveLocalDb(db);
         }
-        updatedCount += batchIds.length;
-      } catch (err) {
-        console.error('Batch status update failed:', err.message);
-        failed += batchIds.length;
+      } else {
+        if (this.isCloud()) {
+          const hasCol = await this.checkDeletedAtColumn();
+          if (hasCol) {
+            const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', batchIds);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('leads').delete().in('id', batchIds);
+            if (error) throw error;
+          }
+        } else {
+          const db = loadLocalDb();
+          const batchSet = new Set(batchIds);
+          db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: new Date().toISOString() } : l);
+          saveLocalDb(db);
+        }
       }
-    }
+    };
 
-    return { updatedCount, failed };
+    const concurrency = this.isCloud() ? 4 : 1;
+    const result = await this.executeBulkOperation(leadIds, operationFn, concurrency);
+    
+    return {
+      deletedCount: result.succeededCount,
+      failed: result.failedCount,
+      failedIds: result.failedIds
+    };
+  },
+
+  async restoreLeadsBulk(leadIds, userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can restore leads');
+    if (!leadIds || leadIds.length === 0) return { restoredCount: 0, failed: 0, failedIds: [] };
+
+    const operationFn = async (batchIds) => {
+      if (this.isCloud()) {
+        const hasCol = await this.checkDeletedAtColumn();
+        if (hasCol) {
+          const { error } = await supabase.from('leads').update({ deleted_at: null }).in('id', batchIds);
+          if (error) throw error;
+        }
+      } else {
+        const db = loadLocalDb();
+        const batchSet = new Set(batchIds);
+        db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: null } : l);
+        saveLocalDb(db);
+      }
+    };
+
+    const concurrency = this.isCloud() ? 4 : 1;
+    const result = await this.executeBulkOperation(leadIds, operationFn, concurrency);
+
+    return {
+      restoredCount: result.succeededCount,
+      failed: result.failedCount,
+      failedIds: result.failedIds
+    };
+  },
+
+  async updateLeadsStatusBulk(leadIds, status, userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can update leads');
+    if (!leadIds || leadIds.length === 0) return { updatedCount: 0, failed: 0, failedIds: [] };
+
+    const operationFn = async (batchIds) => {
+      if (this.isCloud()) {
+        const { error } = await supabase.from('leads').update({ status }).in('id', batchIds);
+        if (error) throw error;
+      } else {
+        const db = loadLocalDb();
+        const batchSet = new Set(batchIds);
+        db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, status } : l);
+        saveLocalDb(db);
+      }
+    };
+
+    const concurrency = this.isCloud() ? 4 : 1;
+    const result = await this.executeBulkOperation(leadIds, operationFn, concurrency);
+
+    return {
+      updatedCount: result.succeededCount,
+      failed: result.failedCount,
+      failedIds: result.failedIds
+    };
+  },
+
+  async emptyTrash(userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can empty trash');
+    
+    if (this.isCloud()) {
+      const { data: trashedLeads, error: fetchErr } = await supabase
+        .from('leads')
+        .select('id')
+        .not('deleted_at', 'is', null);
+      
+      if (fetchErr) throw fetchErr;
+      if (!trashedLeads || trashedLeads.length === 0) return { deletedCount: 0 };
+      
+      const ids = trashedLeads.map(l => l.id);
+      const result = await this.deleteLeadsBulk(ids, userId, userRole, true);
+      return { deletedCount: result.deletedCount };
+    } else {
+      const db = loadLocalDb();
+      const initialCount = db.leads.length;
+      db.leads = db.leads.filter(l => !l.deleted_at);
+      saveLocalDb(db);
+      const deletedCount = initialCount - db.leads.length;
+      return { deletedCount };
+    }
   },
 
   async transferAllLeads(fromEmpId, toEmpId, adminUserId) {
