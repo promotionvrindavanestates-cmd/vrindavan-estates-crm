@@ -56,15 +56,12 @@ export default function LeadTable({
   const [bulkProjectMapping, setBulkProjectMapping] = useState({});
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
-  // Phase 9 Bulk Delete & Trash Bin States
+  // Phase 9 Bulk Delete & Trash Bin States (Optimistic UI & Background Execution)
   const [showTrash, setShowTrash] = useState(false);
-  const [bulkProgressOpen, setBulkProgressOpen] = useState(false);
-  const [bulkProgressCurrent, setBulkProgressCurrent] = useState(0);
-  const [bulkProgressTotal, setBulkProgressTotal] = useState(0);
-  const [bulkReport, setBulkReport] = useState(null);
+  const [deletingLeadIds, setDeletingLeadIds] = useState([]);
+  const [toasts, setToasts] = useState([]);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmTypedText, setDeleteConfirmTypedText] = useState('');
   const [isPermanentDelete, setIsPermanentDelete] = useState(false);
   
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
@@ -72,6 +69,19 @@ export default function LeadTable({
 
   const [bulkPriorityOpen, setBulkPriorityOpen] = useState(false);
   const [selectedBulkPriority, setSelectedBulkPriority] = useState('');
+
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkRestoring, setBulkRestoring] = useState(false);
+  const [bulkUpdatingStatus, setBulkUpdatingStatus] = useState(false);
+  const [bulkUpdatingPriority, setBulkUpdatingPriority] = useState(false);
+
+  const showToast = (message, type = 'success', action = null) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type, action }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, type === 'error' && action ? 6000 : 3000);
+  };
 
   // Click-to-WhatsApp Assistant States
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
@@ -229,8 +239,8 @@ export default function LeadTable({
     showTrash
   ]);
 
-  // Server-side filtered and paginated leads
-  const filteredLeads = leadsState;
+  // Server-side filtered and paginated leads (filtered optimistically for background deletions)
+  const filteredLeads = leadsState.filter(l => !deletingLeadIds.includes(l.id));
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -373,122 +383,193 @@ export default function LeadTable({
 
   const handleBulkDeleteTrigger = (permanent = false) => {
     setIsPermanentDelete(permanent);
-    setDeleteConfirmTypedText('');
     setDeleteConfirmOpen(true);
   };
 
   const handleExecuteBulkDelete = async () => {
-    if (deleteConfirmTypedText !== 'DELETE') return;
     setDeleteConfirmOpen(false);
     
-    setBulkProgressTotal(selectedLeadIds.length);
-    setBulkProgressCurrent(0);
-    setBulkProgressOpen(true);
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0) return;
+
+    setBulkDeleting(true);
+    // Optimistic UI: instantly hide deleting leads from the table
+    setDeletingLeadIds(prev => [...new Set([...prev, ...targets])]);
     
+    const batchSize = 1000;
+    let succeededCount = 0;
+    let failedCount = 0;
+    const failedIds = [];
     const startTime = Date.now();
-    let success = 0;
-    let failed = 0;
-    
-    try {
-      const res = await api.deleteLeadsBulk(selectedLeadIds, isPermanentDelete);
-      success = res.deleted || 0;
-      failed = res.failed || 0;
-      setBulkProgressCurrent(selectedLeadIds.length);
-    } catch (err) {
-      console.error('Bulk deletion call failed:', err);
-      failed = selectedLeadIds.length;
+
+    // Process sequentially in batches
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      try {
+        const res = await api.deleteLeadsBulk(batch, isPermanentDelete);
+        succeededCount += res.deleted || 0;
+        failedCount += res.failed || 0;
+        if (res.failed > 0) {
+          failedIds.push(...batch);
+        }
+      } catch (err) {
+        console.error('Batch delete request failed:', err);
+        failedCount += batch.length;
+        failedIds.push(...batch);
+      }
     }
-    
+
     const elapsed = Date.now() - startTime;
-    setBulkReport({
-      success,
-      failed,
-      time: `${(elapsed / 1000).toFixed(2)}s`
-    });
+    setBulkDeleting(false);
+
+    // Update optimistic list: remove successfully deleted from local states
+    setDeletingLeadIds(prev => prev.filter(id => failedIds.includes(id)));
+
+    if (failedCount === 0) {
+      showToast(`${succeededCount} Lead${succeededCount > 1 ? 's' : ''} Deleted Successfully`, 'success');
+      setSelectedLeadIds([]);
+      setDeletingLeadIds([]);
+      fetchLeads();
+    } else {
+      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} deleted successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be deleted.`, 'error');
+      // Keep only failed IDs selected for error recovery / retry
+      setSelectedLeadIds(failedIds);
+      setDeletingLeadIds([]);
+      fetchLeads();
+    }
   };
 
   const handleExecuteBulkRestore = async () => {
-    setBulkProgressTotal(selectedLeadIds.length);
-    setBulkProgressCurrent(0);
-    setBulkProgressOpen(true);
-    
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0) return;
+
+    setBulkRestoring(true);
+    // Optimistic UI: instantly hide restored leads from Trash Bin view
+    setDeletingLeadIds(prev => [...new Set([...prev, ...targets])]);
+
+    const batchSize = 1000;
+    let succeededCount = 0;
+    let failedCount = 0;
+    const failedIds = [];
     const startTime = Date.now();
-    let success = 0;
-    let failed = 0;
-    
-    try {
-      const res = await api.restoreLeadsBulk(selectedLeadIds);
-      success = res.restored || 0;
-      failed = res.failed || 0;
-      setBulkProgressCurrent(selectedLeadIds.length);
-    } catch (err) {
-      console.error('Bulk restoration call failed:', err);
-      failed = selectedLeadIds.length;
+
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      try {
+        const res = await api.restoreLeadsBulk(batch);
+        succeededCount += res.restored || 0;
+        failedCount += res.failed || 0;
+        if (res.failed > 0) {
+          failedIds.push(...batch);
+        }
+      } catch (err) {
+        console.error('Batch restore request failed:', err);
+        failedCount += batch.length;
+        failedIds.push(...batch);
+      }
     }
-    
-    const elapsed = Date.now() - startTime;
-    setBulkReport({
-      success,
-      failed,
-      time: `${(elapsed / 1000).toFixed(2)}s`
-    });
+
+    setBulkRestoring(false);
+    setDeletingLeadIds(prev => prev.filter(id => failedIds.includes(id)));
+
+    if (failedCount === 0) {
+      showToast(`${succeededCount} Lead${succeededCount > 1 ? 's' : ''} Restored Successfully`, 'success');
+      setSelectedLeadIds([]);
+      setDeletingLeadIds([]);
+      fetchLeads();
+    } else {
+      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} restored successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be restored.`, 'error');
+      setSelectedLeadIds(failedIds);
+      setDeletingLeadIds([]);
+      fetchLeads();
+    }
   };
 
   const handleExecuteBulkStatus = async () => {
     setBulkStatusOpen(false);
-    setBulkProgressTotal(selectedLeadIds.length);
-    setBulkProgressCurrent(0);
-    setBulkProgressOpen(true);
-    
-    const startTime = Date.now();
-    let success = 0;
-    let failed = 0;
-    
-    try {
-      const res = await api.updateLeadsStatusBulk(selectedLeadIds, selectedBulkStatus);
-      success = res.updated || 0;
-      failed = res.failed || 0;
-      setBulkProgressCurrent(selectedLeadIds.length);
-    } catch (err) {
-      console.error('Bulk status update call failed:', err);
-      failed = selectedLeadIds.length;
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0 || !selectedBulkStatus) return;
+
+    setBulkUpdatingStatus(true);
+    // Optimistic UI: update status in grid state immediately
+    setLeadsState(prev => prev.map(l => targets.includes(l.id) ? { ...l, status: selectedBulkStatus } : l));
+
+    const batchSize = 1000;
+    let succeededCount = 0;
+    let failedCount = 0;
+    const failedIds = [];
+
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      try {
+        const res = await api.updateLeadsStatusBulk(batch, selectedBulkStatus);
+        succeededCount += res.updated || 0;
+        failedCount += res.failed || 0;
+        if (res.failed > 0) {
+          failedIds.push(...batch);
+        }
+      } catch (err) {
+        console.error('Batch status update request failed:', err);
+        failedCount += batch.length;
+        failedIds.push(...batch);
+      }
     }
-    
-    const elapsed = Date.now() - startTime;
-    setBulkReport({
-      success,
-      failed,
-      time: `${(elapsed / 1000).toFixed(2)}s`
-    });
+
+    setBulkUpdatingStatus(false);
+
+    if (failedCount === 0) {
+      showToast(`Status Updated to "${selectedBulkStatus}" for ${succeededCount} Leads`, 'success');
+      setSelectedLeadIds([]);
+      fetchLeads();
+    } else {
+      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} updated successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be updated.`, 'error');
+      setSelectedLeadIds(failedIds);
+      fetchLeads();
+    }
     setSelectedBulkStatus('');
   };
 
   const handleExecuteBulkPriority = async () => {
     setBulkPriorityOpen(false);
-    setBulkProgressTotal(selectedLeadIds.length);
-    setBulkProgressCurrent(0);
-    setBulkProgressOpen(true);
-    
-    const startTime = Date.now();
-    let success = 0;
-    let failed = 0;
-    
-    try {
-      const res = await api.updateLeadsStatusBulk(selectedLeadIds, selectedBulkPriority);
-      success = res.updated || 0;
-      failed = res.failed || 0;
-      setBulkProgressCurrent(selectedLeadIds.length);
-    } catch (err) {
-      console.error('Bulk priority update call failed:', err);
-      failed = selectedLeadIds.length;
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0 || !selectedBulkPriority) return;
+
+    setBulkUpdatingPriority(true);
+    // Optimistic UI: update priority status immediately
+    setLeadsState(prev => prev.map(l => targets.includes(l.id) ? { ...l, status: selectedBulkPriority } : l));
+
+    const batchSize = 1000;
+    let succeededCount = 0;
+    let failedCount = 0;
+    const failedIds = [];
+
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      try {
+        const res = await api.updateLeadsStatusBulk(batch, selectedBulkPriority);
+        succeededCount += res.updated || 0;
+        failedCount += res.failed || 0;
+        if (res.failed > 0) {
+          failedIds.push(...batch);
+        }
+      } catch (err) {
+        console.error('Batch priority update request failed:', err);
+        failedCount += batch.length;
+        failedIds.push(...batch);
+      }
     }
-    
-    const elapsed = Date.now() - startTime;
-    setBulkReport({
-      success,
-      failed,
-      time: `${(elapsed / 1000).toFixed(2)}s`
-    });
+
+    setBulkUpdatingPriority(false);
+
+    if (failedCount === 0) {
+      showToast(`Priority Updated to "${selectedBulkPriority}" for ${succeededCount} Leads`, 'success');
+      setSelectedLeadIds([]);
+      fetchLeads();
+    } else {
+      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} updated successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be updated.`, 'error');
+      setSelectedLeadIds(failedIds);
+      fetchLeads();
+    }
     setSelectedBulkPriority('');
   };
 
@@ -1364,16 +1445,36 @@ export default function LeadTable({
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', background: 'none' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    border: `1px solid ${bulkDeleting ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.35)'}`, 
+                    color: bulkDeleting ? 'rgba(255,255,255,0.4)' : '#ef4444', 
+                    background: 'none',
+                    cursor: bulkDeleting ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={() => handleBulkDeleteTrigger(false)}
                 >
-                  🗑️ Move to Trash
+                  {bulkDeleting && !isPermanentDelete ? '⏳ Deleting...' : '🗑️ Move to Trash'}
                 </button>
 
                 <button 
                   type="button" 
                   className="btn btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px',
+                    opacity: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 0.5 : 1,
+                    cursor: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={() => {
                     const defaults = {};
                     uniqueProjects.forEach(p => { defaults[p] = ''; });
@@ -1388,25 +1489,55 @@ export default function LeadTable({
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    background: 'none',
+                    opacity: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 0.5 : 1,
+                    cursor: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={() => setBulkStatusOpen(true)}
                 >
-                  🏷️ Change Status
+                  {bulkUpdatingStatus ? '⏳ Updating...' : '🏷️ Change Status'}
                 </button>
 
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    background: 'none',
+                    opacity: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 0.5 : 1,
+                    cursor: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={() => setBulkPriorityOpen(true)}
                 >
-                  ⭐ Change Priority
+                  {bulkUpdatingPriority ? '⏳ Updating...' : '⭐ Change Priority'}
                 </button>
 
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    background: 'none',
+                    opacity: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 0.5 : 1,
+                    cursor: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={handleBulkExport}
                 >
                   📤 Export Selected
@@ -1417,19 +1548,41 @@ export default function LeadTable({
                 <button 
                   type="button" 
                   className="btn btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: '#10b981', borderColor: '#10b981', color: '#05080f' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    background: bulkRestoring ? 'rgba(255,255,255,0.1)' : '#10b981', 
+                    borderColor: bulkRestoring ? 'rgba(255,255,255,0.1)' : '#10b981', 
+                    color: bulkRestoring ? 'rgba(255,255,255,0.4)' : '#05080f',
+                    cursor: bulkRestoring ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={handleExecuteBulkRestore}
                 >
-                  ♻️ Restore Selected
+                  {bulkRestoring ? '⏳ Restoring...' : '♻️ Restore Selected'}
                 </button>
 
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', background: 'none' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    padding: '8px 14px', 
+                    fontSize: '12px', 
+                    border: `1px solid ${bulkDeleting ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.35)'}`, 
+                    color: bulkDeleting ? 'rgba(255,255,255,0.4)' : '#ef4444', 
+                    background: 'none',
+                    cursor: bulkDeleting ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
                   onClick={() => handleBulkDeleteTrigger(true)}
                 >
-                  💀 Delete Permanently
+                  {bulkDeleting && isPermanentDelete ? '⏳ Deleting...' : '💀 Delete Permanently'}
                 </button>
               </>
             )}
@@ -1437,7 +1590,14 @@ export default function LeadTable({
             <button 
               type="button" 
               className="btn btn-secondary" 
-              style={{ padding: '8px 12px', fontSize: '12px', background: 'none' }}
+              style={{ 
+                padding: '8px 12px', 
+                fontSize: '12px', 
+                background: 'none',
+                opacity: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 0.5 : 1,
+                cursor: (bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority) ? 'not-allowed' : 'pointer'
+              }}
+              disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
               onClick={() => setSelectedLeadIds([])}
             >
               ❌ Clear
@@ -1446,45 +1606,23 @@ export default function LeadTable({
         </div>
       )}
 
-      {/* Double Confirmation Modal */}
+      {/* Single Confirmation Modal */}
       {deleteConfirmOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239,68,68,0.35)', boxShadow: '0 0 30px rgba(239,68,68,0.2)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', borderBottom: '1px solid rgba(239, 68, 68, 0.2)', paddingBottom: '12px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              ⚠️ Confirm Bulk Deletion
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.2)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: isPermanentDelete ? '#ef4444' : '#D4AF37', margin: 0 }}>
+              {isPermanentDelete ? '⚠️ Permanent Delete' : '🗑️ Move to Trash'}
             </h3>
-            
             <p style={{ fontSize: '14px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
-              You are about to delete <strong>{selectedLeadIds.length}</strong> lead(s). 
-              {isPermanentDelete ? (
-                <span style={{ color: '#ef4444', display: 'block', marginTop: '6px', fontWeight: 600 }}>
-                  This action is permanent and CANNOT be undone. All associated reminders, timeline history, bookings, and payments will be deleted.
-                </span>
-              ) : (
-                <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                  Leads will be moved to the Trash Bin and can be restored within 30 days.
-                </span>
-              )}
+              {isPermanentDelete 
+                ? `Are you sure you want to permanently delete ${selectedLeadIds.length} selected leads? This action cannot be undone.`
+                : `Delete ${selectedLeadIds.length} selected leads?`
+              }
             </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                Type <span style={{ color: '#ef4444', fontWeight: 'bold' }}>DELETE</span> to confirm:
-              </label>
-              <input 
-                type="text" 
-                className="form-control"
-                placeholder="Type DELETE here..."
-                value={deleteConfirmTypedText}
-                onChange={(e) => setDeleteConfirmTypedText(e.target.value)}
-                style={{ background: 'rgba(5, 8, 15, 0.6)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px', padding: '10px', color: '#f1f5f9' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button 
                 className="btn btn-secondary" 
-                onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmTypedText(''); }}
+                onClick={() => setDeleteConfirmOpen(false)}
                 style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
               >
                 Cancel
@@ -1492,76 +1630,76 @@ export default function LeadTable({
               <button 
                 className="btn btn-primary" 
                 onClick={handleExecuteBulkDelete}
-                disabled={deleteConfirmTypedText !== 'DELETE'}
                 style={{ 
                   padding: '8px 16px', 
                   borderRadius: '8px', 
-                  background: deleteConfirmTypedText === 'DELETE' ? '#ef4444' : 'rgba(239,68,68,0.2)', 
-                  color: deleteConfirmTypedText === 'DELETE' ? '#ffffff' : 'rgba(255,255,255,0.3)', 
+                  background: isPermanentDelete ? '#ef4444' : '#D4AF37', 
+                  color: isPermanentDelete ? '#ffffff' : '#05080F', 
                   border: 'none', 
                   fontWeight: 600, 
-                  cursor: deleteConfirmTypedText === 'DELETE' ? 'pointer' : 'not-allowed'
+                  cursor: 'pointer' 
                 }}
               >
-                {isPermanentDelete ? 'Delete Permanently' : 'Move to Trash'}
+                Delete
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bulk Progress Modal */}
-      {bulkProgressOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10001 }}>
-          <div className="glass-card" style={{ padding: '32px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center', border: '1px solid rgba(212,175,55,0.2)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#D4AF37', margin: 0 }}>
-              {bulkProgressCurrent < bulkProgressTotal ? 'Processing Bulk Action...' : 'Bulk Action Completed!'}
-            </h3>
-            
-            <div style={{ fontSize: '14px', color: '#f1f5f9' }}>
-              {bulkProgressCurrent} of {bulkProgressTotal} leads processed.
+      {/* Toast Notifications container */}
+      <div style={{
+        position: 'fixed',
+        top: '24px',
+        right: '24px',
+        zIndex: 10000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        maxWidth: '320px',
+        width: '90%'
+      }}>
+        {toasts.map(t => (
+          <div 
+            key={t.id} 
+            style={{
+              background: 'rgba(5, 8, 15, 0.95)',
+              border: `1.5px solid ${t.type === 'error' ? '#ef4444' : '#D4AF37'}`,
+              boxShadow: `0 0 15px ${t.type === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(212, 175, 55, 0.2)'}`,
+              borderRadius: '8px',
+              padding: '12px 16px',
+              color: '#f1f5f9',
+              fontSize: '13px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              backdropFilter: 'blur(8px)',
+              animation: 'slideInRight 0.3s ease forwards'
+            }}
+          >
+            <style>{`
+              @keyframes slideInRight {
+                from { transform: translateX(120%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+              }
+            `}</style>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{t.type === 'error' ? '⚠️' : '✅'} {t.message}</span>
+              <button 
+                onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', padding: 0 }}
+              >
+                ×
+              </button>
             </div>
-
-            <div style={{ height: '8px', background: 'var(--bg-input)', borderRadius: '4px', overflow: 'hidden', width: '100%', border: '1px solid rgba(212, 175, 55, 0.15)' }}>
-              <div style={{ 
-                height: '100%', 
-                background: 'var(--primary)', 
-                width: `${(bulkProgressCurrent / bulkProgressTotal) * 100}%`, 
-                borderRadius: '4px', 
-                transition: 'width 0.3s ease' 
-              }}></div>
-            </div>
-
-            {bulkProgressCurrent === bulkProgressTotal && bulkReport && (
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(212, 175, 55, 0.15)', padding: '16px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
-                <h4 style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#D4AF37', margin: '0 0 6px 0' }}>Execution Report</h4>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Successful Operations:</span>
-                  <strong style={{ color: 'var(--color-success)' }}>{bulkReport.success}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Failed Operations:</span>
-                  <strong style={{ color: 'var(--color-hot)' }}>{bulkReport.failed}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Execution Elapsed Time:</span>
-                  <strong style={{ color: '#f1f5f9' }}>{bulkReport.time}</strong>
-                </div>
+            {t.action && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {t.action}
               </div>
             )}
-
-            {bulkProgressCurrent === bulkProgressTotal && (
-              <button 
-                className="btn btn-primary"
-                onClick={() => { setBulkProgressOpen(false); setSelectedLeadIds([]); setBulkReport(null); fetchLeads(); }}
-                style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#D4AF37', color: '#05080F', border: 'none', fontWeight: 600, cursor: 'pointer', marginTop: '10px' }}
-              >
-                Close & Refresh
-              </button>
-            )}
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* Bulk Status Change Modal */}
       {bulkStatusOpen && (

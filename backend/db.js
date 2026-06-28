@@ -709,7 +709,7 @@ const DB = {
     if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can delete leads');
     if (!leadIds || leadIds.length === 0) return { deletedCount: 0, skipped: 0, failed: 0 };
 
-    const batchSize = 100;
+    const batchSize = 1000;
     let deletedCount = 0;
     let failed = 0;
 
@@ -722,7 +722,8 @@ const DB = {
             if (error) throw error;
           } else {
             const db = loadLocalDb();
-            db.leads = db.leads.filter(l => !batchIds.includes(l.id));
+            const batchSet = new Set(batchIds);
+            db.leads = db.leads.filter(l => !batchSet.has(l.id));
             saveLocalDb(db);
           }
         } else {
@@ -737,7 +738,8 @@ const DB = {
             }
           } else {
             const db = loadLocalDb();
-            db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, deleted_at: new Date().toISOString() } : l);
+            const batchSet = new Set(batchIds);
+            db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: new Date().toISOString() } : l);
             saveLocalDb(db);
           }
         }
@@ -755,7 +757,7 @@ const DB = {
     if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can restore leads');
     if (!leadIds || leadIds.length === 0) return { restoredCount: 0, failed: 0 };
 
-    const batchSize = 100;
+    const batchSize = 1000;
     let restoredCount = 0;
     let failed = 0;
 
@@ -770,7 +772,8 @@ const DB = {
           }
         } else {
           const db = loadLocalDb();
-          db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, deleted_at: null } : l);
+          const batchSet = new Set(batchIds);
+          db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, deleted_at: null } : l);
           saveLocalDb(db);
         }
         restoredCount += batchIds.length;
@@ -787,7 +790,7 @@ const DB = {
     if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can update leads');
     if (!leadIds || leadIds.length === 0) return { updatedCount: 0, failed: 0 };
 
-    const batchSize = 100;
+    const batchSize = 1000;
     let updatedCount = 0;
     let failed = 0;
 
@@ -799,7 +802,8 @@ const DB = {
           if (error) throw error;
         } else {
           const db = loadLocalDb();
-          db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, status } : l);
+          const batchSet = new Set(batchIds);
+          db.leads = db.leads.map(l => batchSet.has(l.id) ? { ...l, status } : l);
           saveLocalDb(db);
         }
         updatedCount += batchIds.length;
