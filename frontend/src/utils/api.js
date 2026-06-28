@@ -520,5 +520,8 @@ export const api = {
     request('/api/leads/bulk-status', {
       method: 'PUT',
       body: JSON.stringify({ leadIds, status })
-    })
+    }),
+
+  getBulkJobStatus: (jobId) =>
+    request(`/api/leads/bulk/job/${jobId}`)
 };

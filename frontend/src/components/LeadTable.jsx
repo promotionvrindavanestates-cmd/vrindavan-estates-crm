@@ -63,6 +63,7 @@ export default function LeadTable({
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isPermanentDelete, setIsPermanentDelete] = useState(false);
+  const [deleteType, setDeleteType] = useState('trash'); // 'trash' or 'permanent'
   
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [selectedBulkStatus, setSelectedBulkStatus] = useState('');
@@ -382,8 +383,16 @@ export default function LeadTable({
   };
 
   const handleBulkDeleteTrigger = (permanent = false) => {
-    setIsPermanentDelete(permanent);
+    setIsPermanentDelete(permanent || showTrash);
+    setDeleteType(permanent || showTrash ? 'permanent' : 'trash');
     setDeleteConfirmOpen(true);
+  };
+
+  const getEstimatedTime = (count) => {
+    if (count <= 100) return '< 1 second';
+    if (count <= 500) return '< 2 seconds';
+    if (count <= 1000) return '< 5 seconds';
+    return '< 15 seconds';
   };
 
   const handleExecuteBulkDelete = async () => {
@@ -396,44 +405,59 @@ export default function LeadTable({
     // Optimistic UI: instantly hide deleting leads from the table
     setDeletingLeadIds(prev => [...new Set([...prev, ...targets])]);
     
-    const batchSize = 1000;
-    let succeededCount = 0;
-    let failedCount = 0;
-    const failedIds = [];
-    const startTime = Date.now();
-
-    // Process sequentially in batches
-    for (let i = 0; i < targets.length; i += batchSize) {
-      const batch = targets.slice(i, i + batchSize);
-      try {
-        const res = await api.deleteLeadsBulk(batch, isPermanentDelete);
-        succeededCount += res.deleted || 0;
-        failedCount += res.failed || 0;
-        if (res.failed > 0) {
-          failedIds.push(...batch);
+    try {
+      const isPerm = deleteType === 'permanent';
+      const res = await api.deleteLeadsBulk(targets, isPerm);
+      const jobId = res.jobId;
+      
+      showToast(`⚡ Deletion queued. Job ID: ${jobId}`, 'info');
+      
+      // Start polling background worker progress
+      const interval = setInterval(async () => {
+        try {
+          const job = await api.getBulkJobStatus(jobId);
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_errors') {
+            clearInterval(interval);
+            setBulkDeleting(false);
+            
+            // Remove processing toast
+            setToasts(prev => prev.filter(t => t.id !== jobId));
+            
+            if (job.failed === 0) {
+              showToast(`${job.succeeded} Leads deleted successfully`, 'success');
+              setSelectedLeadIds([]);
+              setDeletingLeadIds([]);
+            } else {
+              showToast(`${job.succeeded} leads deleted successfully. ${job.failed} leads could not be deleted.`, 'error');
+              setSelectedLeadIds(targets.slice(job.succeeded)); // keep failed selected
+              setDeletingLeadIds([]);
+            }
+            fetchLeads();
+          } else {
+            // Update progress toast in real-time
+            const pct = Math.round((job.progress / job.total) * 100) || 0;
+            setToasts(prev => {
+              const exists = prev.some(t => t.id === jobId);
+              if (exists) {
+                return prev.map(t => t.id === jobId ? { ...t, message: `⚡ Deleting leads: ${pct}% (${job.progress}/${job.total})`, progress: pct } : t);
+              } else {
+                return [...prev, { id: jobId, message: `⚡ Deleting leads: ${pct}%`, type: 'processing', progress: pct }];
+              }
+            });
+          }
+        } catch (pollErr) {
+          console.error('Error polling delete job status:', pollErr);
+          clearInterval(interval);
+          setBulkDeleting(false);
+          setDeletingLeadIds([]);
+          fetchLeads();
         }
-      } catch (err) {
-        console.error('Batch delete request failed:', err);
-        failedCount += batch.length;
-        failedIds.push(...batch);
-      }
-    }
+      }, 1000);
 
-    const elapsed = Date.now() - startTime;
-    setBulkDeleting(false);
-
-    // Update optimistic list: remove successfully deleted from local states
-    setDeletingLeadIds(prev => prev.filter(id => failedIds.includes(id)));
-
-    if (failedCount === 0) {
-      showToast(`${succeededCount} Lead${succeededCount > 1 ? 's' : ''} Deleted Successfully`, 'success');
-      setSelectedLeadIds([]);
-      setDeletingLeadIds([]);
-      fetchLeads();
-    } else {
-      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} deleted successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be deleted.`, 'error');
-      // Keep only failed IDs selected for error recovery / retry
-      setSelectedLeadIds(failedIds);
+    } catch (err) {
+      console.error('Failed to queue bulk delete:', err);
+      showToast('Failed to queue bulk deletion job', 'error');
+      setBulkDeleting(false);
       setDeletingLeadIds([]);
       fetchLeads();
     }
@@ -447,39 +471,54 @@ export default function LeadTable({
     // Optimistic UI: instantly hide restored leads from Trash Bin view
     setDeletingLeadIds(prev => [...new Set([...prev, ...targets])]);
 
-    const batchSize = 1000;
-    let succeededCount = 0;
-    let failedCount = 0;
-    const failedIds = [];
-    const startTime = Date.now();
-
-    for (let i = 0; i < targets.length; i += batchSize) {
-      const batch = targets.slice(i, i + batchSize);
-      try {
-        const res = await api.restoreLeadsBulk(batch);
-        succeededCount += res.restored || 0;
-        failedCount += res.failed || 0;
-        if (res.failed > 0) {
-          failedIds.push(...batch);
+    try {
+      const res = await api.restoreLeadsBulk(targets);
+      const jobId = res.jobId;
+      
+      showToast(`⚡ Restoration queued. Job ID: ${jobId}`, 'info');
+      
+      const interval = setInterval(async () => {
+        try {
+          const job = await api.getBulkJobStatus(jobId);
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_errors') {
+            clearInterval(interval);
+            setBulkRestoring(false);
+            setToasts(prev => prev.filter(t => t.id !== jobId));
+            
+            if (job.failed === 0) {
+              showToast(`${job.succeeded} Leads restored successfully`, 'success');
+              setSelectedLeadIds([]);
+              setDeletingLeadIds([]);
+            } else {
+              showToast(`${job.succeeded} leads restored successfully. ${job.failed} leads could not be restored.`, 'error');
+              setSelectedLeadIds(targets.slice(job.succeeded));
+              setDeletingLeadIds([]);
+            }
+            fetchLeads();
+          } else {
+            const pct = Math.round((job.progress / job.total) * 100) || 0;
+            setToasts(prev => {
+              const exists = prev.some(t => t.id === jobId);
+              if (exists) {
+                return prev.map(t => t.id === jobId ? { ...t, message: `⚡ Restoring leads: ${pct}% (${job.progress}/${job.total})`, progress: pct } : t);
+              } else {
+                return [...prev, { id: jobId, message: `⚡ Restoring leads: ${pct}%`, type: 'processing', progress: pct }];
+              }
+            });
+          }
+        } catch (pollErr) {
+          console.error('Error polling restore job status:', pollErr);
+          clearInterval(interval);
+          setBulkRestoring(false);
+          setDeletingLeadIds([]);
+          fetchLeads();
         }
-      } catch (err) {
-        console.error('Batch restore request failed:', err);
-        failedCount += batch.length;
-        failedIds.push(...batch);
-      }
-    }
+      }, 1000);
 
-    setBulkRestoring(false);
-    setDeletingLeadIds(prev => prev.filter(id => failedIds.includes(id)));
-
-    if (failedCount === 0) {
-      showToast(`${succeededCount} Lead${succeededCount > 1 ? 's' : ''} Restored Successfully`, 'success');
-      setSelectedLeadIds([]);
-      setDeletingLeadIds([]);
-      fetchLeads();
-    } else {
-      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} restored successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be restored.`, 'error');
-      setSelectedLeadIds(failedIds);
+    } catch (err) {
+      console.error('Failed to queue bulk restore:', err);
+      showToast('Failed to queue bulk restoration job', 'error');
+      setBulkRestoring(false);
       setDeletingLeadIds([]);
       fetchLeads();
     }
@@ -494,36 +533,51 @@ export default function LeadTable({
     // Optimistic UI: update status in grid state immediately
     setLeadsState(prev => prev.map(l => targets.includes(l.id) ? { ...l, status: selectedBulkStatus } : l));
 
-    const batchSize = 1000;
-    let succeededCount = 0;
-    let failedCount = 0;
-    const failedIds = [];
-
-    for (let i = 0; i < targets.length; i += batchSize) {
-      const batch = targets.slice(i, i + batchSize);
-      try {
-        const res = await api.updateLeadsStatusBulk(batch, selectedBulkStatus);
-        succeededCount += res.updated || 0;
-        failedCount += res.failed || 0;
-        if (res.failed > 0) {
-          failedIds.push(...batch);
+    try {
+      const res = await api.updateLeadsStatusBulk(targets, selectedBulkStatus);
+      const jobId = res.jobId;
+      
+      showToast(`⚡ Status update queued. Job ID: ${jobId}`, 'info');
+      
+      const interval = setInterval(async () => {
+        try {
+          const job = await api.getBulkJobStatus(jobId);
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_errors') {
+            clearInterval(interval);
+            setBulkUpdatingStatus(false);
+            setToasts(prev => prev.filter(t => t.id !== jobId));
+            
+            if (job.failed === 0) {
+              showToast(`Status updated to "${selectedBulkStatus}" for ${job.succeeded} leads`, 'success');
+              setSelectedLeadIds([]);
+            } else {
+              showToast(`${job.succeeded} leads updated. ${job.failed} leads failed.`, 'error');
+              setSelectedLeadIds(targets.slice(job.succeeded));
+            }
+            fetchLeads();
+          } else {
+            const pct = Math.round((job.progress / job.total) * 100) || 0;
+            setToasts(prev => {
+              const exists = prev.some(t => t.id === jobId);
+              if (exists) {
+                return prev.map(t => t.id === jobId ? { ...t, message: `⚡ Updating status: ${pct}% (${job.progress}/${job.total})`, progress: pct } : t);
+              } else {
+                return [...prev, { id: jobId, message: `⚡ Updating status: ${pct}%`, type: 'processing', progress: pct }];
+              }
+            });
+          }
+        } catch (pollErr) {
+          console.error('Error polling status job status:', pollErr);
+          clearInterval(interval);
+          setBulkUpdatingStatus(false);
+          fetchLeads();
         }
-      } catch (err) {
-        console.error('Batch status update request failed:', err);
-        failedCount += batch.length;
-        failedIds.push(...batch);
-      }
-    }
+      }, 1000);
 
-    setBulkUpdatingStatus(false);
-
-    if (failedCount === 0) {
-      showToast(`Status Updated to "${selectedBulkStatus}" for ${succeededCount} Leads`, 'success');
-      setSelectedLeadIds([]);
-      fetchLeads();
-    } else {
-      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} updated successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be updated.`, 'error');
-      setSelectedLeadIds(failedIds);
+    } catch (err) {
+      console.error('Failed to queue bulk status update:', err);
+      showToast('Failed to queue bulk status update job', 'error');
+      setBulkUpdatingStatus(false);
       fetchLeads();
     }
     setSelectedBulkStatus('');
@@ -538,36 +592,51 @@ export default function LeadTable({
     // Optimistic UI: update priority status immediately
     setLeadsState(prev => prev.map(l => targets.includes(l.id) ? { ...l, status: selectedBulkPriority } : l));
 
-    const batchSize = 1000;
-    let succeededCount = 0;
-    let failedCount = 0;
-    const failedIds = [];
-
-    for (let i = 0; i < targets.length; i += batchSize) {
-      const batch = targets.slice(i, i + batchSize);
-      try {
-        const res = await api.updateLeadsStatusBulk(batch, selectedBulkPriority);
-        succeededCount += res.updated || 0;
-        failedCount += res.failed || 0;
-        if (res.failed > 0) {
-          failedIds.push(...batch);
+    try {
+      const res = await api.updateLeadsStatusBulk(targets, selectedBulkPriority);
+      const jobId = res.jobId;
+      
+      showToast(`⚡ Priority update queued. Job ID: ${jobId}`, 'info');
+      
+      const interval = setInterval(async () => {
+        try {
+          const job = await api.getBulkJobStatus(jobId);
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_errors') {
+            clearInterval(interval);
+            setBulkUpdatingPriority(false);
+            setToasts(prev => prev.filter(t => t.id !== jobId));
+            
+            if (job.failed === 0) {
+              showToast(`Priority updated to "${selectedBulkPriority}" for ${job.succeeded} leads`, 'success');
+              setSelectedLeadIds([]);
+            } else {
+              showToast(`${job.succeeded} leads updated. ${job.failed} leads failed.`, 'error');
+              setSelectedLeadIds(targets.slice(job.succeeded));
+            }
+            fetchLeads();
+          } else {
+            const pct = Math.round((job.progress / job.total) * 100) || 0;
+            setToasts(prev => {
+              const exists = prev.some(t => t.id === jobId);
+              if (exists) {
+                return prev.map(t => t.id === jobId ? { ...t, message: `⚡ Updating priority: ${pct}% (${job.progress}/${job.total})`, progress: pct } : t);
+              } else {
+                return [...prev, { id: jobId, message: `⚡ Updating priority: ${pct}%`, type: 'processing', progress: pct }];
+              }
+            });
+          }
+        } catch (pollErr) {
+          console.error('Error polling priority job status:', pollErr);
+          clearInterval(interval);
+          setBulkUpdatingPriority(false);
+          fetchLeads();
         }
-      } catch (err) {
-        console.error('Batch priority update request failed:', err);
-        failedCount += batch.length;
-        failedIds.push(...batch);
-      }
-    }
+      }, 1000);
 
-    setBulkUpdatingPriority(false);
-
-    if (failedCount === 0) {
-      showToast(`Priority Updated to "${selectedBulkPriority}" for ${succeededCount} Leads`, 'success');
-      setSelectedLeadIds([]);
-      fetchLeads();
-    } else {
-      showToast(`${succeededCount} lead${succeededCount !== 1 ? 's' : ''} updated successfully. ${failedCount} lead${failedCount !== 1 ? 's' : ''} could not be updated.`, 'error');
-      setSelectedLeadIds(failedIds);
+    } catch (err) {
+      console.error('Failed to queue bulk priority update:', err);
+      showToast('Failed to queue bulk priority update job', 'error');
+      setBulkUpdatingPriority(false);
       fetchLeads();
     }
     setSelectedBulkPriority('');
@@ -1608,18 +1677,86 @@ export default function LeadTable({
 
       {/* Single Confirmation Modal */}
       {deleteConfirmOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-          <div className="glass-card" style={{ padding: '24px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.2)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: isPermanentDelete ? '#ef4444' : '#D4AF37', margin: 0 }}>
-              {isPermanentDelete ? '⚠️ Permanent Delete' : '🗑️ Move to Trash'}
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.25)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: deleteType === 'permanent' ? '#ef4444' : '#D4AF37', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {deleteType === 'permanent' ? '⚠️ Delete Permanently' : '🗑️ Move to Trash'}
             </h3>
-            <p style={{ fontSize: '14px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
-              {isPermanentDelete 
-                ? `Are you sure you want to permanently delete ${selectedLeadIds.length} selected leads? This action cannot be undone.`
-                : `Delete ${selectedLeadIds.length} selected leads?`
-              }
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.15)' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Selected Leads</span>
+              <strong style={{ fontSize: '16px', color: '#f1f5f9' }}>{selectedLeadIds.length}</strong>
+            </div>
+
+            {showTrash ? (
+              <p style={{ fontSize: '13px', color: '#ef4444', margin: 0, lineHeight: 1.5 }}>
+                These leads are already in the Trash Bin. Proceeding will permanently purge them and all cascading relational records. This cannot be undone.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    background: deleteType === 'trash' ? 'rgba(212, 175, 55, 0.08)' : 'rgba(255,255,255,0.01)', 
+                    border: `1px solid ${deleteType === 'trash' ? 'rgba(212, 175, 55, 0.4)' : 'rgba(255,255,255,0.05)'}`, 
+                    cursor: 'pointer' 
+                  }}
+                  onClick={() => setDeleteType('trash')}
+                >
+                  <input 
+                    type="radio" 
+                    name="deleteType" 
+                    value="trash" 
+                    checked={deleteType === 'trash'} 
+                    onChange={() => setDeleteType('trash')} 
+                    style={{ accentColor: '#D4AF37' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#f1f5f9' }}>Move to Trash Bin (Recommended)</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Soft deletes records for 30 days. Restorable at any time.</span>
+                  </div>
+                </label>
+
+                <label 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    background: deleteType === 'permanent' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.01)', 
+                    border: `1px solid ${deleteType === 'permanent' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.05)'}`, 
+                    cursor: 'pointer' 
+                  }}
+                  onClick={() => setDeleteType('permanent')}
+                >
+                  <input 
+                    type="radio" 
+                    name="deleteType" 
+                    value="permanent" 
+                    checked={deleteType === 'permanent'} 
+                    onChange={() => setDeleteType('permanent')} 
+                    style={{ accentColor: '#ef4444' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ef4444' }}>Delete Permanently (Risky)</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Purge records instantly. Cannot be recovered.</span>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Estimated Time: <strong style={{ color: '#D4AF37' }}>{getEstimatedTime(selectedLeadIds.length)}</strong>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '6px' }}>
               <button 
                 className="btn btn-secondary" 
                 onClick={() => setDeleteConfirmOpen(false)}
@@ -1633,14 +1770,14 @@ export default function LeadTable({
                 style={{ 
                   padding: '8px 16px', 
                   borderRadius: '8px', 
-                  background: isPermanentDelete ? '#ef4444' : '#D4AF37', 
-                  color: isPermanentDelete ? '#ffffff' : '#05080F', 
+                  background: deleteType === 'permanent' ? '#ef4444' : '#D4AF37', 
+                  color: deleteType === 'permanent' ? '#ffffff' : '#05080F', 
                   border: 'none', 
                   fontWeight: 600, 
                   cursor: 'pointer' 
                 }}
               >
-                Delete
+                Confirm
               </button>
             </div>
           </div>

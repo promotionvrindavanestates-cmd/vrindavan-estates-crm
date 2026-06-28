@@ -278,6 +278,160 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
   }
 });
 
+// Global memory store for bulk background jobs
+const bulkJobs = {};
+
+app.get('/api/leads/bulk/job/:jobId', authenticateToken, requireAdmin, (req, res) => {
+  const job = bulkJobs[req.params.jobId];
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json(job);
+});
+
+app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) => {
+  const { leadIds, permanent } = req.body;
+  if (!leadIds || leadIds.length === 0) {
+    return res.status(400).json({ error: 'No lead IDs provided for deletion' });
+  }
+  
+  const jobId = `job_del_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const device = getClientDevice(req);
+  
+  bulkJobs[jobId] = {
+    id: jobId,
+    status: 'queued',
+    progress: 0,
+    total: leadIds.length,
+    succeeded: 0,
+    failed: 0,
+    type: 'delete'
+  };
+
+  // Process asynchronously in background
+  setImmediate(async () => {
+    try {
+      bulkJobs[jobId].status = 'processing';
+      const result = await DB.deleteLeadsBulk(leadIds, req.user.id, req.user.role, permanent === true || permanent === 'true');
+      bulkJobs[jobId].succeeded = result.deletedCount;
+      bulkJobs[jobId].failed = result.failed;
+      bulkJobs[jobId].progress = leadIds.length;
+      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.deletedCount === 0 ? 'failed' : 'completed_with_errors');
+
+      const details = `Bulk deleted ${result.deletedCount} leads${permanent ? ' permanently' : ' (soft-deleted)'}. Failed: ${result.failed}. Job ID: ${jobId}`;
+      await DB.logAudit(null, 'Bulk Leads Deleted', details, req.user.id, req.user.full_name, device);
+    } catch (err) {
+      console.error(`Bulk job ${jobId} failed:`, err);
+      bulkJobs[jobId].status = 'failed';
+      bulkJobs[jobId].failed = leadIds.length;
+      bulkJobs[jobId].progress = leadIds.length;
+    }
+  });
+
+  res.json({
+    message: 'Bulk lead deletion queued',
+    jobId,
+    status: 'queued',
+    total: leadIds.length
+  });
+});
+
+app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req, res) => {
+  const { leadIds } = req.body;
+  if (!leadIds || leadIds.length === 0) {
+    return res.status(400).json({ error: 'No lead IDs provided for restoration' });
+  }
+
+  const jobId = `job_res_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const device = getClientDevice(req);
+  
+  bulkJobs[jobId] = {
+    id: jobId,
+    status: 'queued',
+    progress: 0,
+    total: leadIds.length,
+    succeeded: 0,
+    failed: 0,
+    type: 'restore'
+  };
+
+  setImmediate(async () => {
+    try {
+      bulkJobs[jobId].status = 'processing';
+      const result = await DB.restoreLeadsBulk(leadIds, req.user.id, req.user.role);
+      bulkJobs[jobId].succeeded = result.restoredCount;
+      bulkJobs[jobId].failed = result.failed;
+      bulkJobs[jobId].progress = leadIds.length;
+      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.restoredCount === 0 ? 'failed' : 'completed_with_errors');
+
+      const details = `Bulk restored ${result.restoredCount} leads from Trash Bin. Failed: ${result.failed}. Job ID: ${jobId}`;
+      await DB.logAudit(null, 'Bulk Leads Restored', details, req.user.id, req.user.full_name, device);
+    } catch (err) {
+      console.error(`Bulk job ${jobId} failed:`, err);
+      bulkJobs[jobId].status = 'failed';
+      bulkJobs[jobId].failed = leadIds.length;
+      bulkJobs[jobId].progress = leadIds.length;
+    }
+  });
+
+  res.json({
+    message: 'Bulk lead restoration queued',
+    jobId,
+    status: 'queued',
+    total: leadIds.length
+  });
+});
+
+app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, res) => {
+  const { leadIds, status } = req.body;
+  if (!leadIds || leadIds.length === 0) {
+    return res.status(400).json({ error: 'No lead IDs provided' });
+  }
+  if (!status) {
+    return res.status(400).json({ error: 'Status/Priority value is required' });
+  }
+
+  const jobId = `job_upd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const device = getClientDevice(req);
+  
+  bulkJobs[jobId] = {
+    id: jobId,
+    status: 'queued',
+    progress: 0,
+    total: leadIds.length,
+    succeeded: 0,
+    failed: 0,
+    type: 'status',
+    payload: { status }
+  };
+
+  setImmediate(async () => {
+    try {
+      bulkJobs[jobId].status = 'processing';
+      const result = await DB.updateLeadsStatusBulk(leadIds, status, req.user.id, req.user.role);
+      bulkJobs[jobId].succeeded = result.updatedCount;
+      bulkJobs[jobId].failed = result.failed;
+      bulkJobs[jobId].progress = leadIds.length;
+      bulkJobs[jobId].status = result.failed === 0 ? 'completed' : (result.updatedCount === 0 ? 'failed' : 'completed_with_errors');
+
+      const details = `Bulk updated status to "${status}" for ${result.updatedCount} leads. Failed: ${result.failed}. Job ID: ${jobId}`;
+      await DB.logAudit(null, 'Bulk Leads Updated', details, req.user.id, req.user.full_name, device);
+    } catch (err) {
+      console.error(`Bulk job ${jobId} failed:`, err);
+      bulkJobs[jobId].status = 'failed';
+      bulkJobs[jobId].failed = leadIds.length;
+      bulkJobs[jobId].progress = leadIds.length;
+    }
+  });
+
+  res.json({
+    message: 'Bulk lead status update queued',
+    jobId,
+    status: 'queued',
+    total: leadIds.length
+  });
+});
+
 app.get('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const lead = await DB.getLeadById(req.params.id, req.user.id, req.user.role);
@@ -299,8 +453,6 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
     }
 
     // Enterprise Lockdown check
-    // If employee attempts to modify name or phone, we block it or backend ignores it.
-    // Our db.js updateLead automatically ignores name/phone changes for employees.
     const lead = await DB.updateLead(req.params.id, req.body, req.user.id, req.user.role);
     
     // Compare changes and Log Audits
@@ -346,85 +498,6 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Failed to delete lead' });
-  }
-});
-
-app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) => {
-  const { leadIds, permanent } = req.body;
-  if (!leadIds || leadIds.length === 0) {
-    return res.status(400).json({ error: 'No lead IDs provided for deletion' });
-  }
-  const startTime = Date.now();
-  try {
-    const result = await DB.deleteLeadsBulk(leadIds, req.user.id, req.user.role, permanent === true || permanent === 'true');
-    const elapsed = Date.now() - startTime;
-    
-    const details = `Bulk deleted ${result.deletedCount} leads${permanent ? ' permanently' : ' (soft-deleted)'}. Failed: ${result.failed}.`;
-    const device = getClientDevice(req);
-    await DB.logAudit(null, 'Bulk Leads Deleted', details, req.user.id, req.user.full_name, device);
-
-    res.json({
-      message: 'Bulk lead deletion completed',
-      deleted: result.deletedCount,
-      skipped: result.skipped,
-      failed: result.failed,
-      executionTime: `${(elapsed / 1000).toFixed(2)}s`
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message || 'Failed to perform bulk deletion' });
-  }
-});
-
-app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req, res) => {
-  const { leadIds } = req.body;
-  if (!leadIds || leadIds.length === 0) {
-    return res.status(400).json({ error: 'No lead IDs provided for restoration' });
-  }
-  const startTime = Date.now();
-  try {
-    const result = await DB.restoreLeadsBulk(leadIds, req.user.id, req.user.role);
-    const elapsed = Date.now() - startTime;
-
-    const details = `Bulk restored ${result.restoredCount} leads from Trash Bin. Failed: ${result.failed}.`;
-    const device = getClientDevice(req);
-    await DB.logAudit(null, 'Bulk Leads Restored', details, req.user.id, req.user.full_name, device);
-
-    res.json({
-      message: 'Bulk lead restoration completed',
-      restored: result.restoredCount,
-      failed: result.failed,
-      executionTime: `${(elapsed / 1000).toFixed(2)}s`
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message || 'Failed to perform bulk restoration' });
-  }
-});
-
-app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, res) => {
-  const { leadIds, status } = req.body;
-  if (!leadIds || leadIds.length === 0) {
-    return res.status(400).json({ error: 'No lead IDs provided' });
-  }
-  if (!status) {
-    return res.status(400).json({ error: 'Status/Priority value is required' });
-  }
-  const startTime = Date.now();
-  try {
-    const result = await DB.updateLeadsStatusBulk(leadIds, status, req.user.id, req.user.role);
-    const elapsed = Date.now() - startTime;
-
-    const details = `Bulk updated status to "${status}" for ${result.updatedCount} leads. Failed: ${result.failed}.`;
-    const device = getClientDevice(req);
-    await DB.logAudit(null, 'Bulk Leads Updated', details, req.user.id, req.user.full_name, device);
-
-    res.json({
-      message: 'Bulk lead status update completed',
-      updated: result.updatedCount,
-      failed: result.failed,
-      executionTime: `${(elapsed / 1000).toFixed(2)}s`
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message || 'Failed to perform bulk status update' });
   }
 });
 
