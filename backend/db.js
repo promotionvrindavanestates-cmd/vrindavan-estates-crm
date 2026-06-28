@@ -138,6 +138,47 @@ function generateUuid() {
 const DB = {
   isCloud: () => isSupabaseConfigured && supabase !== null,
 
+  hasDeletedAtColumn: null,
+  async checkDeletedAtColumn() {
+    if (this.hasDeletedAtColumn !== null) return this.hasDeletedAtColumn;
+    if (!this.isCloud()) {
+      this.hasDeletedAtColumn = true;
+      return true;
+    }
+    try {
+      const { error } = await supabase.from('leads').select('deleted_at').limit(1);
+      this.hasDeletedAtColumn = !error;
+      return this.hasDeletedAtColumn;
+    } catch (e) {
+      this.hasDeletedAtColumn = false;
+      return false;
+    }
+  },
+
+  async purgeOldTrashLeads() {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const isoStr = thirtyDaysAgo.toISOString();
+
+      if (this.isCloud()) {
+        const hasCol = await this.checkDeletedAtColumn();
+        if (hasCol) {
+          await supabase.from('leads').delete().lt('deleted_at', isoStr);
+        }
+      } else {
+        const db = loadLocalDb();
+        const initialCount = db.leads.length;
+        db.leads = db.leads.filter(l => !l.deleted_at || new Date(l.deleted_at) >= thirtyDaysAgo);
+        if (db.leads.length !== initialCount) {
+          saveLocalDb(db);
+        }
+      }
+    } catch (err) {
+      console.error('Background purge old trash leads failed:', err.message);
+    }
+  },
+
   // --- USERS ---
   async getUserByUsername(username) {
     if (this.isCloud()) {
@@ -311,10 +352,22 @@ const DB = {
   },
 
   async getLeads(filters = {}, userId, userRole) {
+    // Run background purge of expired trash
+    this.purgeOldTrashLeads().catch(() => {});
+
     if (this.isCloud()) {
       let query = supabase
         .from('leads')
         .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)', { count: 'exact' });
+
+      const hasCol = await this.checkDeletedAtColumn();
+      if (hasCol) {
+        if (filters.trash === 'true' || filters.trash === true) {
+          query = query.not('deleted_at', 'is', null);
+        } else {
+          query = query.is('deleted_at', null);
+        }
+      }
 
       if (userRole === 'employee') {
         query = query.eq('assigned_employee_id', userId);
@@ -382,6 +435,12 @@ const DB = {
     } else {
       const db = loadLocalDb();
       let results = [...db.leads];
+
+      if (filters.trash === 'true' || filters.trash === true) {
+        results = results.filter(l => l.deleted_at);
+      } else {
+        results = results.filter(l => !l.deleted_at);
+      }
 
       if (userRole === 'employee') {
         results = results.filter(l => l.assigned_employee_id === userId);
@@ -493,6 +552,7 @@ const DB = {
   },
 
   async createLead(leadData, assignerId = null) {
+    const cleanAssignerId = (assignerId && assignerId !== 'system' && assignerId.length === 36) ? assignerId : null;
     const formattedLead = {
       name: leadData.name,
       city: leadData.city || '',
@@ -505,7 +565,7 @@ const DB = {
       status: leadData.status || 'Warm',
       follow_up_date: leadData.follow_up_date || null,
       assigned_employee_id: leadData.assigned_employee_id || null,
-      assigned_by_id: leadData.assigned_employee_id ? assignerId : null,
+      assigned_by_id: leadData.assigned_employee_id ? cleanAssignerId : null,
       assigned_date: leadData.assigned_employee_id ? new Date().toISOString() : null,
       lead_source: leadData.lead_source || 'Website',
       site_visit_date: leadData.site_visit_date || null,
@@ -550,9 +610,11 @@ const DB = {
     let assignedById = existing.assigned_by_id;
     let assignedDate = existing.assigned_date;
     
+    const cleanUserId = (userId && userId !== 'system' && userId.length === 36) ? userId : null;
+    
     // Admin only reassignment checks
     if (userRole === 'admin' && leadData.assigned_employee_id !== existing.assigned_employee_id) {
-      assignedById = userId;
+      assignedById = cleanUserId;
       assignedDate = new Date().toISOString();
       
       // Log lead transfer history
@@ -609,19 +671,145 @@ const DB = {
     }
   },
 
-  async deleteLead(id, userId, userRole) {
+  async deleteLead(id, userId, userRole, permanent = false) {
     if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can delete leads');
 
-    if (this.isCloud()) {
-      const { error } = await supabase.from('leads').delete().eq('id', id);
-      if (error) throw error;
-      return true;
+    if (permanent) {
+      if (this.isCloud()) {
+        const { error } = await supabase.from('leads').delete().eq('id', id);
+        if (error) throw error;
+        return true;
+      } else {
+        const db = loadLocalDb();
+        db.leads = db.leads.filter(l => l.id !== id);
+        saveLocalDb(db);
+        return true;
+      }
     } else {
-      const db = loadLocalDb();
-      db.leads = db.leads.filter(l => l.id !== id);
-      saveLocalDb(db);
-      return true;
+      if (this.isCloud()) {
+        const hasCol = await this.checkDeletedAtColumn();
+        if (hasCol) {
+          const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('leads').delete().eq('id', id);
+          if (error) throw error;
+        }
+        return true;
+      } else {
+        const db = loadLocalDb();
+        db.leads = db.leads.map(l => l.id === id ? { ...l, deleted_at: new Date().toISOString() } : l);
+        saveLocalDb(db);
+        return true;
+      }
     }
+  },
+
+  async deleteLeadsBulk(leadIds, userId, userRole, permanent = false) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can delete leads');
+    if (!leadIds || leadIds.length === 0) return { deletedCount: 0, skipped: 0, failed: 0 };
+
+    const batchSize = 100;
+    let deletedCount = 0;
+    let failed = 0;
+
+    for (let i = 0; i < leadIds.length; i += batchSize) {
+      const batchIds = leadIds.slice(i, i + batchSize);
+      try {
+        if (permanent) {
+          if (this.isCloud()) {
+            const { error } = await supabase.from('leads').delete().in('id', batchIds);
+            if (error) throw error;
+          } else {
+            const db = loadLocalDb();
+            db.leads = db.leads.filter(l => !batchIds.includes(l.id));
+            saveLocalDb(db);
+          }
+        } else {
+          if (this.isCloud()) {
+            const hasCol = await this.checkDeletedAtColumn();
+            if (hasCol) {
+              const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', batchIds);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase.from('leads').delete().in('id', batchIds);
+              if (error) throw error;
+            }
+          } else {
+            const db = loadLocalDb();
+            db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, deleted_at: new Date().toISOString() } : l);
+            saveLocalDb(db);
+          }
+        }
+        deletedCount += batchIds.length;
+      } catch (err) {
+        console.error('Batch deletion failed:', err.message);
+        failed += batchIds.length;
+      }
+    }
+
+    return { deletedCount, skipped: 0, failed };
+  },
+
+  async restoreLeadsBulk(leadIds, userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can restore leads');
+    if (!leadIds || leadIds.length === 0) return { restoredCount: 0, failed: 0 };
+
+    const batchSize = 100;
+    let restoredCount = 0;
+    let failed = 0;
+
+    for (let i = 0; i < leadIds.length; i += batchSize) {
+      const batchIds = leadIds.slice(i, i + batchSize);
+      try {
+        if (this.isCloud()) {
+          const hasCol = await this.checkDeletedAtColumn();
+          if (hasCol) {
+            const { error } = await supabase.from('leads').update({ deleted_at: null }).in('id', batchIds);
+            if (error) throw error;
+          }
+        } else {
+          const db = loadLocalDb();
+          db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, deleted_at: null } : l);
+          saveLocalDb(db);
+        }
+        restoredCount += batchIds.length;
+      } catch (err) {
+        console.error('Batch restoration failed:', err.message);
+        failed += batchIds.length;
+      }
+    }
+
+    return { restoredCount, failed };
+  },
+
+  async updateLeadsStatusBulk(leadIds, status, userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can update leads');
+    if (!leadIds || leadIds.length === 0) return { updatedCount: 0, failed: 0 };
+
+    const batchSize = 100;
+    let updatedCount = 0;
+    let failed = 0;
+
+    for (let i = 0; i < leadIds.length; i += batchSize) {
+      const batchIds = leadIds.slice(i, i + batchSize);
+      try {
+        if (this.isCloud()) {
+          const { error } = await supabase.from('leads').update({ status }).in('id', batchIds);
+          if (error) throw error;
+        } else {
+          const db = loadLocalDb();
+          db.leads = db.leads.map(l => batchIds.includes(l.id) ? { ...l, status } : l);
+          saveLocalDb(db);
+        }
+        updatedCount += batchIds.length;
+      } catch (err) {
+        console.error('Batch status update failed:', err.message);
+        failed += batchIds.length;
+      }
+    }
+
+    return { updatedCount, failed };
   },
 
   async transferAllLeads(fromEmpId, toEmpId, adminUserId) {
@@ -1053,6 +1241,7 @@ const DB = {
 
   // --- OWNERSHIP TRANSFER TRACKING ---
   async logLeadTransfer(leadId, fromEmpId, toEmpId, assignedByUserId) {
+    const cleanAssignedBy = (assignedByUserId && assignedByUserId !== 'system' && assignedByUserId.length === 36) ? assignedByUserId : null;
     if (this.isCloud()) {
       const { error } = await supabase
         .from('lead_transfers')
@@ -1060,7 +1249,7 @@ const DB = {
           lead_id: leadId,
           from_employee_id: fromEmpId,
           to_employee_id: toEmpId,
-          assigned_by: assignedByUserId
+          assigned_by: cleanAssignedBy
         }]);
       if (error) throw error;
     } else {
@@ -1107,6 +1296,7 @@ const DB = {
 
   // --- AUDIT TRAILS ---
   async logAudit(leadId, action, details, userId, userName, device = 'Web Portal') {
+    const cleanUserId = (userId && userId !== 'system' && userId.length === 36) ? userId : null;
     if (this.isCloud()) {
       const { error } = await supabase
         .from('audit_trails')
@@ -1114,7 +1304,7 @@ const DB = {
           lead_id: leadId,
           action,
           details,
-          user_id: userId,
+          user_id: cleanUserId,
           user_name: userName,
           device: device
         }]);

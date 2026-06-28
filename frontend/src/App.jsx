@@ -21,7 +21,7 @@ import DuplicateManager from './components/DuplicateManager';
 import InventoryPipeline from './components/InventoryPipeline';
 import BookingPipeline from './components/BookingPipeline';
 const CollectionDashboard = React.lazy(() => import('./components/CollectionDashboard'));
-import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass } from 'lucide-react';
+import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass, Menu, X } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import CommandCenter from './components/CommandCenter';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
@@ -33,6 +33,9 @@ export default function App() {
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState('command-center');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsSubTab, setSettingsSubTab] = useState('backup');
+  const [tasksSubTab, setTasksSubTab] = useState('leads-pipeline');
   const [kpiFilters, setKpiFilters] = useState(null);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -570,158 +573,159 @@ export default function App() {
         </div>
       )}
 
-      <div class="main-content">
-        
+      {/* Sidebar Backdrop for Mobile/Tablet */}
+      {sidebarOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setSidebarOpen(false)} 
+        />
+      )}
+
+      {/* Permanent Left Sidebar */}
+      <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <img src="/favicon-192x192.png" alt="VE Logo" className="sidebar-logo" />
+          <h2 className="sidebar-brand-name">Vrindavan</h2>
+          {/* Close button for Mobile */}
+          <button 
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              display: 'none',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              marginLeft: 'auto'
+            }}
+            className="mobile-sidebar-close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="sidebar-menu">
+          <button 
+            className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
+          >
+            <Home size={18} /> Dashboard
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'leads' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('leads'); setSidebarOpen(false); }}
+          >
+            <FileSpreadsheet size={18} /> Leads
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'command-center' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('command-center'); setSidebarOpen(false); }}
+          >
+            <Compass size={18} /> Day Book
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'contacts' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('contacts'); setSidebarOpen(false); }}
+          >
+            <PhoneCall size={18} /> Contacts
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'projects' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('projects'); setSidebarOpen(false); }}
+          >
+            <Building size={18} /> Projects
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'bookings' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('bookings'); setSidebarOpen(false); }}
+          >
+            <Receipt size={18} /> Bookings
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'payments' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('payments'); setSidebarOpen(false); }}
+          >
+            <BadgeCent size={18} /> Payments
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'tasks' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('tasks'); setSidebarOpen(false); }}
+          >
+            <Trello size={18} /> Tasks
+          </button>
+          
+          <button 
+            className={`sidebar-item ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('reports'); setSidebarOpen(false); }}
+          >
+            <BarChart3 size={18} /> Reports
+          </button>
+          
+          {currentUser.role === 'admin' && (
+            <button 
+              className={`sidebar-item ${activeTab === 'employees' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('employees'); setSidebarOpen(false); }}
+            >
+              <Users size={18} /> Employees
+            </button>
+          )}
+
+          <button 
+            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
+          >
+            <KeyRound size={18} /> Settings
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <button 
+            className="sidebar-item" 
+            onClick={handleLogout}
+            style={{ color: 'var(--color-hot)', borderColor: 'transparent' }}
+          >
+            <LogOut size={18} style={{ color: 'var(--color-hot)' }} /> Logout
+          </button>
+        </div>
+      </aside>
+
+      <div className="main-content">
+        {/* Mobile Header (Visible on screen < 1024px) */}
+        <div className="mobile-header">
+          <button 
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#D4AF37',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '6px'
+            }}
+          >
+            <Menu size={24} />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/favicon-192x192.png" alt="VE Logo" style={{ width: '24px', height: '24px' }} />
+            <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#D4AF37', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Vrindavan Estates</span>
+          </div>
+          <div style={{ width: '36px' }}></div>
+        </div>
+
         {/* Demo Mode Banner fallback info */}
         {!isCloud && (
-          <div class="demo-banner">
+          <div className="demo-banner">
             <span>⚠️ DEMO MODE: Currently using local JSON storage database.json.</span>
             <span>Configure <strong style={{ color: '#fff' }}>SUPABASE_URL</strong> and <strong style={{ color: '#fff' }}>SUPABASE_KEY</strong> in backend `.env` for production cloud storage.</span>
           </div>
         )}
-
-        {/* Brand Header & User Info */}
-        <div class="top-navbar">
-          <div class="brand-section">
-            <img src="/favicon-192x192.png" alt="VE Logo" class="brand-logo-img" />
-            <h1 class="brand-name">Vrindavan Estates</h1>
-          </div>
-          
-          <div class="user-controls">
-            <div 
-              onClick={() => {
-                console.log("Reminder clicked");
-                setRemindersOpen(true);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: todayReminderCount > 0 ? 'var(--color-info-bg)' : 'var(--bg-card)',
-                color: todayReminderCount > 0 ? 'var(--color-info)' : 'var(--text-muted)',
-                padding: '6px 12px',
-                borderRadius: '20px',
-                fontSize: '12px',
-                border: todayReminderCount > 0 ? '1px solid rgba(6, 182, 212, 0.2)' : '1px solid var(--border-color)',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-              title={`${todayReminderCount} follow-ups scheduled for today`}
-            >
-              <BellRing size={14} class={todayReminderCount > 0 ? "bell-animation" : ""} />
-              <span>{todayReminderCount} Reminders</span>
-            </div>
-
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600, fontSize: '14px' }}>{currentUser.full_name}</div>
-              <div style={{ fontSize: '11px', color: 'var(--primary)', textTransform: 'capitalize' }}>Role: {currentUser.role}</div>
-            </div>
-
-            <button class="btn btn-secondary" style={{ padding: '8px 12px' }} onClick={handleLogout} title="Log Out">
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div class="nav-tabs" style={{ flexWrap: 'wrap', gap: '8px' }}>
-          <div 
-            class={`nav-tab ${activeTab === 'command-center' ? 'active' : ''}`}
-            onClick={() => setActiveTab('command-center')}
-          >
-            <Compass size={15} style={{ color: 'var(--primary)' }} /> Daybook
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <Home size={15} /> Dashboard
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
-            onClick={() => setActiveTab('leads')}
-          >
-            <FileSpreadsheet size={15} /> Leads Manager
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pipeline')}
-          >
-            <Trello size={15} /> Pipeline
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'projects' ? 'active' : ''}`}
-            onClick={() => setActiveTab('projects')}
-          >
-            <Building size={15} /> Projects
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'inventory' ? 'active' : ''}`}
-            onClick={() => setActiveTab('inventory')}
-          >
-            <LayoutGrid size={15} /> Inventory
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'inventory-pipeline' ? 'active' : ''}`}
-            onClick={() => setActiveTab('inventory-pipeline')}
-          >
-            <Trello size={15} /> Inventory Pipeline
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'bookings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('bookings')}
-          >
-            <Receipt size={15} /> Bookings
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'booking-pipeline' ? 'active' : ''}`}
-            onClick={() => setActiveTab('booking-pipeline')}
-          >
-            <Trello size={15} /> Booking Pipeline
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'collections' ? 'active' : ''}`}
-            onClick={() => setActiveTab('collections')}
-          >
-            <BadgeCent size={15} /> Collections
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'whatsapp' ? 'active' : ''}`}
-            onClick={() => setActiveTab('whatsapp')}
-          >
-            <FaWhatsapp size={15} style={{ color: '#25D366' }} /> WhatsApp
-          </div>
-          <div 
-            class={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reports')}
-          >
-            <BarChart3 size={15} /> Reports
-          </div>
-          {currentUser.role === 'admin' && (
-            <div 
-              class={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
-              onClick={() => setActiveTab('employees')}
-            >
-              <Users size={15} /> Employees
-            </div>
-          )}
-          {currentUser.role === 'admin' && (
-            <div 
-              class={`nav-tab ${activeTab === 'duplicates' ? 'active' : ''}`}
-              onClick={() => setActiveTab('duplicates')}
-            >
-              <Copy size={15} /> Merge Duplicates
-            </div>
-          )}
-          {currentUser.role === 'admin' && (
-            <div 
-              class={`nav-tab ${activeTab === 'backup' ? 'active' : ''}`}
-              onClick={() => setActiveTab('backup')}
-            >
-              <Database size={15} /> Imports & Backups
-            </div>
-          )}
-        </div>
 
         {/* Main Tab Views Switcher */}
         {dataLoading && activeTab !== 'dashboard' ? (
@@ -780,10 +784,32 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'pipeline' && (
-              <LeadPipeline 
+            {activeTab === 'contacts' && (
+              <LeadTable 
+                leads={leads} 
+                employees={employees} 
                 currentUser={currentUser}
+                initialFilters={kpiFilters}
+                onClearInitialFilters={() => setKpiFilters(null)}
                 onOpenLeadDrawer={handleOpenLeadDrawer}
+                onAddLead={() => {
+                  setSelectedLeadForEdit(null);
+                  setLeadModalOpen(true);
+                }}
+                onEditLead={(lead) => {
+                  setSelectedLeadForEdit(lead);
+                  setLeadModalOpen(true);
+                }}
+                onDeleteLead={handleDeleteLead}
+                onLogCall={(lead) => {
+                  setSelectedLeadForCall(lead);
+                  setCallLogModalOpen(true);
+                }}
+                onAssignLead={handleReassignEmployee}
+                onViewHistory={(lead) => {
+                  setSelectedLeadForHistory(lead);
+                  setHistoryModalOpen(true);
+                }}
               />
             )}
 
@@ -791,30 +817,29 @@ export default function App() {
               <ProjectMaster currentUser={currentUser} />
             )}
 
-            {activeTab === 'inventory' && (
-              <InventoryMgmt currentUser={currentUser} />
-            )}
-
-            {activeTab === 'inventory-pipeline' && (
-              <InventoryPipeline currentUser={currentUser} />
-            )}
-
             {activeTab === 'bookings' && (
               <BookingsRegistry currentUser={currentUser} />
             )}
 
-            {activeTab === 'booking-pipeline' && (
-              <BookingPipeline currentUser={currentUser} />
-            )}
-
-            {activeTab === 'collections' && (
-              <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Collections...</div>}>
+            {activeTab === 'payments' && (
+              <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Payments...</div>}>
                 <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />
               </React.Suspense>
             )}
 
-            {activeTab === 'whatsapp' && (
-              <WhatsAppCampaigns currentUser={currentUser} />
+            {activeTab === 'tasks' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '12px', flexWrap: 'wrap' }}>
+                  <button className={`btn ${tasksSubTab === 'leads-pipeline' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTasksSubTab('leads-pipeline')} style={{ padding: '6px 12px', fontSize: '12px' }}>Leads Pipeline</button>
+                  <button className={`btn ${tasksSubTab === 'booking-pipeline' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTasksSubTab('booking-pipeline')} style={{ padding: '6px 12px', fontSize: '12px' }}>Booking Pipeline</button>
+                  <button className={`btn ${tasksSubTab === 'inventory-pipeline' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTasksSubTab('inventory-pipeline')} style={{ padding: '6px 12px', fontSize: '12px' }}>Inventory Pipeline</button>
+                </div>
+                <div>
+                  {tasksSubTab === 'leads-pipeline' && <LeadPipeline currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />}
+                  {tasksSubTab === 'booking-pipeline' && <BookingPipeline currentUser={currentUser} />}
+                  {tasksSubTab === 'inventory-pipeline' && <InventoryPipeline currentUser={currentUser} />}
+                </div>
+              </div>
             )}
 
             {activeTab === 'reports' && (
@@ -830,15 +855,24 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'backup' && (
-              <BackupMgmt 
-                onRefreshLeads={fetchCRMData} 
-                currentUser={currentUser}
-              />
-            )}
-
-            {activeTab === 'duplicates' && currentUser.role === 'admin' && (
-              <DuplicateManager employees={employees} />
+            {activeTab === 'settings' && (
+              <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <h3 className="text-gold-gradient" style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Settings & Portal Admin</h3>
+                <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '12px', flexWrap: 'wrap' }}>
+                  <button className={`btn ${settingsSubTab === 'backup' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('backup')} style={{ padding: '6px 12px', fontSize: '12px' }}>Imports & Backups</button>
+                  {currentUser.role === 'admin' && (
+                    <button className={`btn ${settingsSubTab === 'duplicates' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('duplicates')} style={{ padding: '6px 12px', fontSize: '12px' }}>Merge Duplicates</button>
+                  )}
+                  <button className={`btn ${settingsSubTab === 'inventory' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('inventory')} style={{ padding: '6px 12px', fontSize: '12px' }}>Inventory Master</button>
+                  <button className={`btn ${settingsSubTab === 'whatsapp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('whatsapp')} style={{ padding: '6px 12px', fontSize: '12px' }}>WhatsApp Campaigns</button>
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                  {settingsSubTab === 'backup' && <BackupMgmt onRefreshLeads={fetchCRMData} currentUser={currentUser} />}
+                  {settingsSubTab === 'duplicates' && currentUser.role === 'admin' && <DuplicateManager employees={employees} />}
+                  {settingsSubTab === 'inventory' && <InventoryMgmt currentUser={currentUser} />}
+                  {settingsSubTab === 'whatsapp' && <WhatsAppCampaigns currentUser={currentUser} />}
+                </div>
+              </div>
             )}
           </>
         )}

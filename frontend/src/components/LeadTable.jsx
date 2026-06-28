@@ -56,6 +56,23 @@ export default function LeadTable({
   const [bulkProjectMapping, setBulkProjectMapping] = useState({});
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
+  // Phase 9 Bulk Delete & Trash Bin States
+  const [showTrash, setShowTrash] = useState(false);
+  const [bulkProgressOpen, setBulkProgressOpen] = useState(false);
+  const [bulkProgressCurrent, setBulkProgressCurrent] = useState(0);
+  const [bulkProgressTotal, setBulkProgressTotal] = useState(0);
+  const [bulkReport, setBulkReport] = useState(null);
+  
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmTypedText, setDeleteConfirmTypedText] = useState('');
+  const [isPermanentDelete, setIsPermanentDelete] = useState(false);
+  
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [selectedBulkStatus, setSelectedBulkStatus] = useState('');
+
+  const [bulkPriorityOpen, setBulkPriorityOpen] = useState(false);
+  const [selectedBulkPriority, setSelectedBulkPriority] = useState('');
+
   // Click-to-WhatsApp Assistant States
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [activeWhatsAppLead, setActiveWhatsAppLead] = useState(null);
@@ -151,7 +168,8 @@ export default function LeadTable({
         calls_today: callsToday,
         site_visit_completed: siteVisitCompleted,
         page: currentPage,
-        limit: limit
+        limit: limit,
+        trash: showTrash
       });
 
       if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -186,7 +204,8 @@ export default function LeadTable({
     createdEnd,
     callsToday,
     siteVisitCompleted,
-    limit
+    limit,
+    showTrash
   ]);
 
   // Load leads whenever pagination or filters change
@@ -206,7 +225,8 @@ export default function LeadTable({
     siteVisitCompleted,
     currentPage,
     limit,
-    leads.length
+    leads.length,
+    showTrash
   ]);
 
   // Server-side filtered and paginated leads
@@ -308,10 +328,13 @@ export default function LeadTable({
 
   // Checkbox Selection Helpers
   const handleToggleSelectAll = () => {
-    if (selectedLeadIds.length === filteredLeads.length) {
-      setSelectedLeadIds([]);
+    const allPageIdsSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadIds.includes(l.id));
+    if (allPageIdsSelected) {
+      const pageIds = filteredLeads.map(l => l.id);
+      setSelectedLeadIds(prev => prev.filter(id => !pageIds.includes(id)));
     } else {
-      setSelectedLeadIds(filteredLeads.map(l => l.id));
+      const pageIds = filteredLeads.map(l => l.id);
+      setSelectedLeadIds(prev => [...new Set([...prev, ...pageIds])]);
     }
   };
 
@@ -319,6 +342,187 @@ export default function LeadTable({
     setSelectedLeadIds(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
+  };
+
+  const handleSelectAllFiltered = async () => {
+    setLoadingLeads(true);
+    try {
+      const data = await api.getLeads({
+        search: searchTerm,
+        city: selectedCity,
+        budget: selectedBudget,
+        project: selectedProject,
+        status: selectedStatus,
+        assigned_employee_id: selectedEmployee,
+        source: selectedSource,
+        created_start: createdStart,
+        created_end: createdEnd,
+        calls_today: callsToday,
+        site_visit_completed: siteVisitCompleted,
+        limit: 999999,
+        trash: showTrash
+      });
+      const list = data && data.leads ? data.leads : (Array.isArray(data) ? data : []);
+      setSelectedLeadIds(list.map(l => l.id));
+    } catch (err) {
+      console.error('Failed to select all filtered leads:', err);
+    } finally {
+      setLoadingLeads(false);
+    }
+  };
+
+  const handleBulkDeleteTrigger = (permanent = false) => {
+    setIsPermanentDelete(permanent);
+    setDeleteConfirmTypedText('');
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (deleteConfirmTypedText !== 'DELETE') return;
+    setDeleteConfirmOpen(false);
+    
+    setBulkProgressTotal(selectedLeadIds.length);
+    setBulkProgressCurrent(0);
+    setBulkProgressOpen(true);
+    
+    const startTime = Date.now();
+    let success = 0;
+    let failed = 0;
+    
+    try {
+      const res = await api.deleteLeadsBulk(selectedLeadIds, isPermanentDelete);
+      success = res.deleted || 0;
+      failed = res.failed || 0;
+      setBulkProgressCurrent(selectedLeadIds.length);
+    } catch (err) {
+      console.error('Bulk deletion call failed:', err);
+      failed = selectedLeadIds.length;
+    }
+    
+    const elapsed = Date.now() - startTime;
+    setBulkReport({
+      success,
+      failed,
+      time: `${(elapsed / 1000).toFixed(2)}s`
+    });
+  };
+
+  const handleExecuteBulkRestore = async () => {
+    setBulkProgressTotal(selectedLeadIds.length);
+    setBulkProgressCurrent(0);
+    setBulkProgressOpen(true);
+    
+    const startTime = Date.now();
+    let success = 0;
+    let failed = 0;
+    
+    try {
+      const res = await api.restoreLeadsBulk(selectedLeadIds);
+      success = res.restored || 0;
+      failed = res.failed || 0;
+      setBulkProgressCurrent(selectedLeadIds.length);
+    } catch (err) {
+      console.error('Bulk restoration call failed:', err);
+      failed = selectedLeadIds.length;
+    }
+    
+    const elapsed = Date.now() - startTime;
+    setBulkReport({
+      success,
+      failed,
+      time: `${(elapsed / 1000).toFixed(2)}s`
+    });
+  };
+
+  const handleExecuteBulkStatus = async () => {
+    setBulkStatusOpen(false);
+    setBulkProgressTotal(selectedLeadIds.length);
+    setBulkProgressCurrent(0);
+    setBulkProgressOpen(true);
+    
+    const startTime = Date.now();
+    let success = 0;
+    let failed = 0;
+    
+    try {
+      const res = await api.updateLeadsStatusBulk(selectedLeadIds, selectedBulkStatus);
+      success = res.updated || 0;
+      failed = res.failed || 0;
+      setBulkProgressCurrent(selectedLeadIds.length);
+    } catch (err) {
+      console.error('Bulk status update call failed:', err);
+      failed = selectedLeadIds.length;
+    }
+    
+    const elapsed = Date.now() - startTime;
+    setBulkReport({
+      success,
+      failed,
+      time: `${(elapsed / 1000).toFixed(2)}s`
+    });
+    setSelectedBulkStatus('');
+  };
+
+  const handleExecuteBulkPriority = async () => {
+    setBulkPriorityOpen(false);
+    setBulkProgressTotal(selectedLeadIds.length);
+    setBulkProgressCurrent(0);
+    setBulkProgressOpen(true);
+    
+    const startTime = Date.now();
+    let success = 0;
+    let failed = 0;
+    
+    try {
+      const res = await api.updateLeadsStatusBulk(selectedLeadIds, selectedBulkPriority);
+      success = res.updated || 0;
+      failed = res.failed || 0;
+      setBulkProgressCurrent(selectedLeadIds.length);
+    } catch (err) {
+      console.error('Bulk priority update call failed:', err);
+      failed = selectedLeadIds.length;
+    }
+    
+    const elapsed = Date.now() - startTime;
+    setBulkReport({
+      success,
+      failed,
+      time: `${(elapsed / 1000).toFixed(2)}s`
+    });
+    setSelectedBulkPriority('');
+  };
+
+  const handleBulkExport = async () => {
+    try {
+      const selectedLeads = leadsState.filter(l => selectedLeadIds.includes(l.id));
+      if (selectedLeads.length === 0) return;
+      
+      const headers = ['Name', 'Phone1', 'Phone2', 'Project', 'Budget', 'City', 'Status', 'Lead Source', 'Created At'];
+      const rows = selectedLeads.map(l => [
+        l.name || '',
+        l.phone1 || '',
+        l.phone2 || '',
+        l.project || '',
+        l.budget || '',
+        l.city || '',
+        l.status || '',
+        l.lead_source || '',
+        l.created_at || ''
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `selected_leads_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Failed to export leads: ' + err.message);
+    }
   };
 
   // Bulk Assignment Submission
@@ -577,46 +781,72 @@ export default function LeadTable({
 
       {/* Leads Table Panel */}
       <div class="table-panel">
+        {/* Selection Banner */}
+        {selectedLeadIds.length > 0 && selectedLeadIds.length < totalCount && (
+          <div style={{
+            background: 'rgba(212, 175, 55, 0.08)',
+            border: '1px solid rgba(212, 175, 55, 0.25)',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '13px'
+          }}>
+            <span>
+              Selected <strong>{selectedLeadIds.length}</strong> leads on this page.
+            </span>
+            <button 
+              type="button"
+              className="btn btn-primary"
+              style={{ padding: '4px 10px', fontSize: '11px' }}
+              onClick={handleSelectAllFiltered}
+              disabled={loadingLeads}
+            >
+              Select all {totalCount} matching leads
+            </button>
+          </div>
+        )}
+
         <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h3>{employeeFilterHeading || `Leads Directory (${filteredLeads.length})`}</h3>
-            
-            {/* Bulk Actions Indicator & Trigger */}
-            {selectedLeadIds.length > 0 && currentUser.role === 'admin' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--color-info-bg)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-info)' }}>
-                  {selectedLeadIds.length} Selected
-                </span>
-                <button 
-                  type="button" 
-                  class="btn btn-primary" 
-                  style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', gap: '4px', alignItems: 'center' }}
-                  onClick={() => {
-                    // Populate default mapped projects config
-                    const defaults = {};
-                    uniqueProjects.forEach(p => {
-                      defaults[p] = '';
-                    });
-                    setBulkProjectMapping(defaults);
-                    setBulkSelectedEmployees(employees.filter(e => e.status === 'active').map(e => e.id));
-                    setBulkModalOpen(true);
-                  }}
-                >
-                  <UserPlus size={12} /> Bulk Assign
-                </button>
-              </div>
-            )}
+            <h3>{showTrash ? `Trash Bin (${totalCount})` : (employeeFilterHeading || `Leads Directory (${totalCount})`)}</h3>
           </div>
 
-          <button class="btn btn-primary" onClick={onAddLead}>
-            <Plus size={16} /> Add Lead
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {currentUser.role === 'admin' && (
+              <button 
+                type="button"
+                className={`btn ${showTrash ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  background: showTrash ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                  border: showTrash ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.06)',
+                  color: showTrash ? '#ef4444' : 'var(--text-muted)'
+                }}
+                onClick={() => {
+                  const targetTrash = !showTrash;
+                  setShowTrash(targetTrash);
+                  setSelectedLeadIds([]);
+                  setCurrentPage(1);
+                }}
+              >
+                🗑️ {showTrash ? 'View Active Leads' : 'View Trash Bin'}
+              </button>
+            )}
+            <button class="btn btn-primary" onClick={onAddLead}>
+              <Plus size={16} /> Add Lead
+            </button>
+          </div>
         </div>
 
         <div class="table-container">
           {filteredLeads.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-              No leads match the filters. Click "Add Lead" to create a new one.
+              No leads match the filters. {showTrash ? 'Trash bin is empty.' : 'Click "Add Lead" to create a new one.'}
             </div>
           ) : (
             <table>
@@ -629,7 +859,7 @@ export default function LeadTable({
                         style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0 }}
                         onClick={handleToggleSelectAll}
                       >
-                        {selectedLeadIds.length === filteredLeads.length ? (
+                        {filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadIds.includes(l.id)) ? (
                           <CheckSquare size={16} />
                         ) : (
                           <Square size={16} />
@@ -800,29 +1030,65 @@ export default function LeadTable({
                       
                       <td data-label="Actions" style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '8px' }}>
-                          <button 
-                            class="action-icon-btn" 
-                            title="WhatsApp Customer"
-                            onClick={() => handleWhatsAppClick(l.phone1 || l.phone2 || '', l)}
-                          >
-                            <FaWhatsapp size={14} style={{ color: '#25D366' }} />
-                          </button>
-                          <button 
-                            class="action-icon-btn" 
-                            title="Edit Lead"
-                            onClick={() => onEditLead(l)}
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          {currentUser.role === 'admin' && (
-                            <button 
-                              class="action-icon-btn" 
-                              style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
-                              title="Delete Lead"
-                              onClick={() => onDeleteLead(l.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                          {!showTrash ? (
+                            <>
+                              <button 
+                                class="action-icon-btn" 
+                                title="WhatsApp Customer"
+                                onClick={() => handleWhatsAppClick(l.phone1 || l.phone2 || '', l)}
+                              >
+                                <FaWhatsapp size={14} style={{ color: '#25D366' }} />
+                              </button>
+                              <button 
+                                class="action-icon-btn" 
+                                title="Edit Lead"
+                                onClick={() => onEditLead(l)}
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              {currentUser.role === 'admin' && (
+                                <button 
+                                  class="action-icon-btn" 
+                                  style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
+                                  title="Move to Trash"
+                                  onClick={async () => {
+                                    if (confirm('Are you sure you want to move this lead to the Trash Bin?')) {
+                                      await api.deleteLeadsBulk([l.id], false);
+                                      fetchLeads();
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <button 
+                                class="action-icon-btn" 
+                                title="Restore Lead"
+                                style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.15)', background: 'none' }}
+                                onClick={async () => {
+                                  await api.restoreLeadsBulk([l.id]);
+                                  fetchLeads();
+                                }}
+                              >
+                                ♻️
+                              </button>
+                              <button 
+                                class="action-icon-btn" 
+                                title="Delete Permanently"
+                                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.15)', background: 'none' }}
+                                onClick={() => {
+                                  setSelectedLeadIds([l.id]);
+                                  setIsPermanentDelete(true);
+                                  setDeleteConfirmTypedText('');
+                                  setDeleteConfirmOpen(true);
+                                }}
+                              >
+                                💀
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -1049,6 +1315,342 @@ export default function LeadTable({
               <button class="btn btn-secondary" onClick={() => { setWhatsAppModalOpen(false); setActiveWhatsAppLead(null); }}>Cancel</button>
               <button class="btn btn-primary" onClick={handleSendWhatsAppMessage}>
                 🚀 Open WhatsApp & Log
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky Bulk Action Toolbar */}
+      {selectedLeadIds.length > 0 && currentUser.role === 'admin' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: 'rgba(5, 8, 15, 0.95)',
+          border: '1.5px solid #D4AF37',
+          boxShadow: '0 0 25px rgba(212, 175, 55, 0.35), 0 20px 40px rgba(0, 0, 0, 0.8)',
+          borderRadius: '16px',
+          padding: '16px 28px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '20px',
+          backdropFilter: 'blur(16px)',
+          animation: 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+        }}>
+          <style>{`
+            @keyframes slideUp {
+              from { transform: translate(-50%, 100px); opacity: 0; }
+              to { transform: translate(-50%, 0); opacity: 1; }
+            }
+          `}</style>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#D4AF37', whiteSpace: 'nowrap' }}>
+              Selected: {selectedLeadIds.length} Leads
+            </span>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Bulk Action Console
+            </span>
+          </div>
+
+          <div style={{ height: '32px', width: '1px', background: 'rgba(212, 175, 55, 0.25)' }}></div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {!showTrash ? (
+              <>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', background: 'none' }}
+                  onClick={() => handleBulkDeleteTrigger(false)}
+                >
+                  🗑️ Move to Trash
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px' }}
+                  onClick={() => {
+                    const defaults = {};
+                    uniqueProjects.forEach(p => { defaults[p] = ''; });
+                    setBulkProjectMapping(defaults);
+                    setBulkSelectedEmployees(employees.filter(e => e.status === 'active').map(e => e.id));
+                    setBulkModalOpen(true);
+                  }}
+                >
+                  👤 Assign Employee
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  onClick={() => setBulkStatusOpen(true)}
+                >
+                  🏷️ Change Status
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  onClick={() => setBulkPriorityOpen(true)}
+                >
+                  ⭐ Change Priority
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: 'none' }}
+                  onClick={handleBulkExport}
+                >
+                  📤 Export Selected
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', background: '#10b981', borderColor: '#10b981', color: '#05080f' }}
+                  onClick={handleExecuteBulkRestore}
+                >
+                  ♻️ Restore Selected
+                </button>
+
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '12px', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', background: 'none' }}
+                  onClick={() => handleBulkDeleteTrigger(true)}
+                >
+                  💀 Delete Permanently
+                </button>
+              </>
+            )}
+
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ padding: '8px 12px', fontSize: '12px', background: 'none' }}
+              onClick={() => setSelectedLeadIds([])}
+            >
+              ❌ Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Double Confirmation Modal */}
+      {deleteConfirmOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239,68,68,0.35)', boxShadow: '0 0 30px rgba(239,68,68,0.2)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', borderBottom: '1px solid rgba(239, 68, 68, 0.2)', paddingBottom: '12px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ⚠️ Confirm Bulk Deletion
+            </h3>
+            
+            <p style={{ fontSize: '14px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
+              You are about to delete <strong>{selectedLeadIds.length}</strong> lead(s). 
+              {isPermanentDelete ? (
+                <span style={{ color: '#ef4444', display: 'block', marginTop: '6px', fontWeight: 600 }}>
+                  This action is permanent and CANNOT be undone. All associated reminders, timeline history, bookings, and payments will be deleted.
+                </span>
+              ) : (
+                <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                  Leads will be moved to the Trash Bin and can be restored within 30 days.
+                </span>
+              )}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                Type <span style={{ color: '#ef4444', fontWeight: 'bold' }}>DELETE</span> to confirm:
+              </label>
+              <input 
+                type="text" 
+                className="form-control"
+                placeholder="Type DELETE here..."
+                value={deleteConfirmTypedText}
+                onChange={(e) => setDeleteConfirmTypedText(e.target.value)}
+                style={{ background: 'rgba(5, 8, 15, 0.6)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px', padding: '10px', color: '#f1f5f9' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmTypedText(''); }}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExecuteBulkDelete}
+                disabled={deleteConfirmTypedText !== 'DELETE'}
+                style={{ 
+                  padding: '8px 16px', 
+                  borderRadius: '8px', 
+                  background: deleteConfirmTypedText === 'DELETE' ? '#ef4444' : 'rgba(239,68,68,0.2)', 
+                  color: deleteConfirmTypedText === 'DELETE' ? '#ffffff' : 'rgba(255,255,255,0.3)', 
+                  border: 'none', 
+                  fontWeight: 600, 
+                  cursor: deleteConfirmTypedText === 'DELETE' ? 'pointer' : 'not-allowed'
+                }}
+              >
+                {isPermanentDelete ? 'Delete Permanently' : 'Move to Trash'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Progress Modal */}
+      {bulkProgressOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10001 }}>
+          <div className="glass-card" style={{ padding: '32px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center', border: '1px solid rgba(212,175,55,0.2)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#D4AF37', margin: 0 }}>
+              {bulkProgressCurrent < bulkProgressTotal ? 'Processing Bulk Action...' : 'Bulk Action Completed!'}
+            </h3>
+            
+            <div style={{ fontSize: '14px', color: '#f1f5f9' }}>
+              {bulkProgressCurrent} of {bulkProgressTotal} leads processed.
+            </div>
+
+            <div style={{ height: '8px', background: 'var(--bg-input)', borderRadius: '4px', overflow: 'hidden', width: '100%', border: '1px solid rgba(212, 175, 55, 0.15)' }}>
+              <div style={{ 
+                height: '100%', 
+                background: 'var(--primary)', 
+                width: `${(bulkProgressCurrent / bulkProgressTotal) * 100}%`, 
+                borderRadius: '4px', 
+                transition: 'width 0.3s ease' 
+              }}></div>
+            </div>
+
+            {bulkProgressCurrent === bulkProgressTotal && bulkReport && (
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(212, 175, 55, 0.15)', padding: '16px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+                <h4 style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#D4AF37', margin: '0 0 6px 0' }}>Execution Report</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Successful Operations:</span>
+                  <strong style={{ color: 'var(--color-success)' }}>{bulkReport.success}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Failed Operations:</span>
+                  <strong style={{ color: 'var(--color-hot)' }}>{bulkReport.failed}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Execution Elapsed Time:</span>
+                  <strong style={{ color: '#f1f5f9' }}>{bulkReport.time}</strong>
+                </div>
+              </div>
+            )}
+
+            {bulkProgressCurrent === bulkProgressTotal && (
+              <button 
+                className="btn btn-primary"
+                onClick={() => { setBulkProgressOpen(false); setSelectedLeadIds([]); setBulkReport(null); fetchLeads(); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#D4AF37', color: '#05080F', border: 'none', fontWeight: 600, cursor: 'pointer', marginTop: '10px' }}
+              >
+                Close & Refresh
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Status Change Modal */}
+      {bulkStatusOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.2)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#D4AF37', borderBottom: '1px solid rgba(212, 175, 55, 0.2)', paddingBottom: '10px', margin: 0 }}>
+              Bulk Change Status
+            </h3>
+            
+            <div class="form-group">
+              <label style={{ fontSize: '13px', color: '#f1f5f9', fontWeight: 600, display: 'block', marginBottom: '8px' }}>Select New Status</label>
+              <select 
+                className="form-control"
+                value={selectedBulkStatus}
+                onChange={(e) => setSelectedBulkStatus(e.target.value)}
+                style={{ width: '100%', background: 'rgba(5, 8, 15, 0.6)', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '8px', padding: '10px', color: '#f1f5f9' }}
+              >
+                <option value="">Choose status...</option>
+                <option value="New">New</option>
+                <option value="Attempted">Attempted</option>
+                <option value="Connected">Connected</option>
+                <option value="Interested">Interested</option>
+                <option value="Site Visit Scheduled">Site Visit Scheduled</option>
+                <option value="Site Visit Done">Site Visit Done</option>
+                <option value="Negotiation">Negotiation</option>
+                <option value="Booked">Booked</option>
+                <option value="Lost">Lost</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => { setBulkStatusOpen(false); setSelectedBulkStatus(''); }}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExecuteBulkStatus}
+                disabled={!selectedBulkStatus}
+                style={{ padding: '8px 16px', borderRadius: '8px', background: '#D4AF37', color: '#05080F', border: 'none', fontWeight: 600, cursor: selectedBulkStatus ? 'pointer' : 'not-allowed' }}
+              >
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Priority Change Modal */}
+      {bulkPriorityOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.2)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#D4AF37', borderBottom: '1px solid rgba(212, 175, 55, 0.2)', paddingBottom: '10px', margin: 0 }}>
+              Bulk Change Priority
+            </h3>
+            
+            <div class="form-group">
+              <label style={{ fontSize: '13px', color: '#f1f5f9', fontWeight: 600, display: 'block', marginBottom: '8px' }}>Select New Priority</label>
+              <select 
+                className="form-control"
+                value={selectedBulkPriority}
+                onChange={(e) => setSelectedBulkPriority(e.target.value)}
+                style={{ width: '100%', background: 'rgba(5, 8, 15, 0.6)', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '8px', padding: '10px', color: '#f1f5f9' }}
+              >
+                <option value="">Choose priority...</option>
+                <option value="Hot">🔥 Hot</option>
+                <option value="Warm">🟡 Warm</option>
+                <option value="Cold">⚪ Cold</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => { setBulkPriorityOpen(false); setSelectedBulkPriority(''); }}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExecuteBulkPriority}
+                disabled={!selectedBulkPriority}
+                style={{ padding: '8px 16px', borderRadius: '8px', background: '#D4AF37', color: '#05080F', border: 'none', fontWeight: 600, cursor: selectedBulkPriority ? 'pointer' : 'not-allowed' }}
+              >
+                Update Priority
               </button>
             </div>
           </div>

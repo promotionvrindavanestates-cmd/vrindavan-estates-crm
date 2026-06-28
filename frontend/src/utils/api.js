@@ -502,5 +502,23 @@ export const api = {
   completeCommandCenterTask: (taskId, notes) => request(`/api/command-center/tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rescheduleCommandCenterTask: (taskId, newDate, newTime) => request(`/api/command-center/tasks/${taskId}/reschedule`, { method: 'POST', body: JSON.stringify({ newDate, newTime }) }),
   getDailyTargets: () => request('/api/command-center/targets'),
-  getAdminPerformance: () => request('/api/command-center/performance')
+  getAdminPerformance: () => request('/api/command-center/performance'),
+
+  deleteLeadsBulk: (leadIds, permanent = false) =>
+    request('/api/leads/bulk', {
+      method: 'DELETE',
+      body: JSON.stringify({ leadIds, permanent })
+    }),
+
+  restoreLeadsBulk: (leadIds) =>
+    request('/api/leads/bulk-restore', {
+      method: 'POST',
+      body: JSON.stringify({ leadIds })
+    }),
+
+  updateLeadsStatusBulk: (leadIds, status) =>
+    request('/api/leads/bulk-status', {
+      method: 'PUT',
+      body: JSON.stringify({ leadIds, status })
+    })
 };

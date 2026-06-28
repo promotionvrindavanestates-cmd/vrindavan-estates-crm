@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Phone, Clock, MessageSquare, Plus, CheckCircle, Calendar, RefreshCw, BarChart2, Award, Users, AlertTriangle, TrendingUp, Compass, Search, Filter, ArrowRight, User, MapPin, DollarSign, Award as Trophy, FolderOpen, MoreVertical } from 'lucide-react';
+import { Phone, Clock, MessageSquare, Plus, CheckCircle, Calendar, RefreshCw, BarChart2, Award, Users, AlertTriangle, TrendingUp, Compass, Search, Filter, ArrowRight, User, MapPin, DollarSign, Award as Trophy, FolderOpen, MoreVertical, Bell, Sun, Moon } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
 export default function CommandCenter({ leads = [], employees = [], currentUser, onOpenLeadDrawer, onRefreshData }) {
@@ -438,8 +438,8 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
   return (
     <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '100vh', background: '#05080F', color: '#f1f5f9', position: 'relative' }}>
       
-      {/* 1. TOP HEADER */}
-      <div className="glass-card" style={{ padding: '20px 24px', borderBottom: '1px solid rgba(212, 175, 55, 0.2)' }}>
+      {/* 1. TOP HEADER REDESIGN */}
+      <div className="glass-card" style={{ padding: '20px 24px', borderBottom: '1px solid rgba(212, 175, 55, 0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
           {/* Left: Branding */}
           <div>
@@ -454,51 +454,121 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
           {/* Center: Large Search Bar */}
           <div style={{ flex: 1, maxWidth: '500px', position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#D4AF37' }} />
+            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#D4AF37' }} />
             <input 
               type="text" 
               className="form-control" 
               placeholder="Search Name, Mobile, Project, City, Lead ID..." 
               style={{ 
-                paddingLeft: '38px', 
-                height: '40px', 
+                paddingLeft: '40px', 
+                height: '42px', 
                 borderRadius: '8px', 
                 background: 'rgba(5, 8, 15, 0.8)', 
-                border: '1px solid rgba(212, 175, 55, 0.25)', 
+                border: '1px solid rgba(212, 175, 55, 0.3)', 
                 color: '#f1f5f9',
-                width: '100%'
+                width: '100%',
+                transition: 'all 0.2s'
               }}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={(e) => e.target.style.borderColor = '#D4AF37'}
+              onBlur={(e) => e.target.style.borderColor = 'rgba(212, 175, 55, 0.3)'}
             />
           </div>
 
           {/* Right: Controls & User Profile */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button 
-              style={{ background: 'none', border: 'none', color: '#D4AF37', cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px solid rgba(212, 175, 55, 0.2)', 
+                color: '#D4AF37', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                transition: 'all 0.2s'
+              }} 
               title="Theme Toggle (Dark Mode Forced)"
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#D4AF37'}
+              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.2)'}
             >
-              <Clock size={18} />
+              <Moon size={16} />
             </button>
             
             <button 
-              style={{ background: 'none', border: 'none', color: '#D4AF37', cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }} 
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px solid rgba(212, 175, 55, 0.2)', 
+                color: '#D4AF37', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                position: 'relative',
+                transition: 'all 0.2s'
+              }} 
               title="Notifications"
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#D4AF37'}
+              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.2)'}
             >
-              <Award size={18} />
-              <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: 'var(--color-hot)', color: '#05080F', fontSize: '9px', fontWeight: 'bold', width: '14px', height: '14px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifycontent: 'center' }}>
-                {counts.overdue}
-              </span>
+              <Bell size={16} />
+              {counts.overdue > 0 && (
+                <span style={{ 
+                  position: 'absolute', 
+                  top: '-4px', 
+                  right: '-4px', 
+                  background: 'var(--color-hot)', 
+                  color: '#ffffff', 
+                  fontSize: '9px', 
+                  fontWeight: 'bold', 
+                  minWidth: '16px', 
+                  height: '16px', 
+                  borderRadius: '50%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  padding: '2px',
+                  boxShadow: '0 0 6px rgba(255,94,94,0.4)'
+                }}>
+                  {counts.overdue}
+                </span>
+              )}
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.1)' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#D4AF37', color: '#05080F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              background: 'rgba(255,255,255,0.03)', 
+              padding: '6px 12px', 
+              borderRadius: '24px', 
+              border: '1px solid rgba(212, 175, 55, 0.2)' 
+            }}>
+              <div style={{ 
+                width: '30px', 
+                height: '30px', 
+                borderRadius: '50%', 
+                background: '#D4AF37', 
+                color: '#05080F', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                fontWeight: 'bold', 
+                fontSize: '13px',
+                boxShadow: '0 0 8px rgba(212,175,55,0.3)'
+              }}>
                 {(currentUser?.full_name || 'Abhinav')[0].toUpperCase()}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600 }}>{currentUser?.full_name || 'Abhinav'}</span>
-                <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{currentUser?.role || 'Admin'}</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f1f5f9', lineHeight: 1.1 }}>{currentUser?.full_name || 'Abhinav'}</span>
+                <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>{currentUser?.role || 'Admin'}</span>
               </div>
             </div>
           </div>
@@ -508,39 +578,52 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
         {renderBriefingWidget()}
       </div>
 
-      {/* 2. KPI ROW (One Horizontal Row, No Wrapping, No Stacking) */}
+      {/* 2. KPI ROW (One Horizontal Row, No Wrapping) */}
       <div className="kpi-row-layout">
-        {renderKPICounter('overdue', '🔴 Overdue', counts.overdue, 'var(--color-hot)')}
-        {renderKPICounter('today', '🟡 Today', counts.today, 'var(--color-warm)')}
-        {renderKPICounter('tomorrow', '🔵 Tomorrow', counts.tomorrow, '#38bdf8')}
-        {renderKPICounter('week', '🟣 This Week', counts.week, '#a855f7')}
-        {renderKPICounter('completed', '🟢 Completed', counts.completed, 'var(--color-success)')}
+        {renderKPICounter('overdue', 'Overdue', counts.overdue, 'var(--color-hot)', '🔥', true)}
+        {renderKPICounter('today', 'Today', counts.today, 'var(--color-warm)', '📅')}
+        {renderKPICounter('tomorrow', 'Tomorrow', counts.tomorrow, '#38bdf8', '⌛')}
+        {renderKPICounter('week', 'This Week', counts.week, '#a855f7', '📊')}
+        {renderKPICounter('completed', 'Completed', counts.completed, 'var(--color-success)', '🏆')}
       </div>
 
-      {/* 3. WIDGET ROW (One Horizontal Row on Desktop, Tablet 2-col, Mobile Stack) */}
+      {/* 3. WIDGET ROW */}
       <div className="widget-row-layout">
-        {/* Widget 1: Missed Follow Ups & Revenue Risk */}
-        <div className="glass-card-risk" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-hot)', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            <AlertTriangle size={16} />
-            <span>🚨 Missed Follow Ups</span>
+        {/* Widget 1: Revenue Risk Widget */}
+        <div className="glass-card-risk" style={{ 
+          padding: '20px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '12px',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          boxShadow: '0 8px 32px 0 rgba(239, 68, 68, 0.08), 0 0 15px rgba(239, 68, 68, 0.15)'
+        }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Revenue Risk Widget
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Overdue Count:</span>
-            <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-hot)' }}>{missedStats.count} Tasks</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+            <span style={{ fontSize: '14px', fontWeight: '700', color: '#ff4d4d' }}>Deal Risk (High Priority)</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total At Risk</span>
           </div>
-          <div style={{ borderTop: '1px solid rgba(239, 68, 68, 0.1)', paddingTop: '10px', marginTop: '4px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Estimated Revenue Risk:</span>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '2px', filter: 'drop-shadow(0 0 6px rgba(255, 94, 94, 0.2))' }}>
-              ₹{missedStats.risk} Crore
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Overdue: {missedStats.count} Leads</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#ff4d4d', filter: 'drop-shadow(0 0 8px rgba(255,77,77,0.3))' }}>
+              ₹{missedStats.risk} Cr
+            </span>
+          </div>
+          <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', marginTop: '4px' }}>
+            <div style={{ height: '100%', background: '#ff4d4d', width: '99%', borderRadius: '3px', boxShadow: '0 0 8px #ff4d4d' }}></div>
+          </div>
+          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Key Properties:</span>
+            <span style={{ color: '#ff4d4d', fontWeight: 600 }}>{missedStats.keyProps || 'None'}</span>
           </div>
         </div>
 
-        {/* Widget 2: Today's Targets progress bars */}
+        {/* Widget 2: Today's Targets */}
         {targets && (
           <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '8px' }}>
+            <div style={{ fontSize: '11px', color: '#D4AF37', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '8px' }}>
               🎯 Today's Targets
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -553,40 +636,43 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
           </div>
         )}
 
-        {/* Widget 3: Employee Productivity Leaderboard */}
+        {/* Widget 3: Employee Productivity Leaderboard Table */}
         {isAdmin && performance.length > 0 && (
           <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '8px' }}>
-              🏆 Employee Performance
+            <div style={{ fontSize: '11px', color: '#D4AF37', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', paddingBottom: '8px' }}>
+              🏆 Employee Leaderboard
             </div>
-            <div style={{ overflowX: 'auto', maxHeight: '160px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', fontSize: '11px', textAlign: 'left', borderCollapse: 'collapse' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '180px', overflowY: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '12px', textAlign: 'left', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(212, 175, 55, 0.15)', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '4px' }}>Employee</th>
-                    <th style={{ padding: '4px', textAlign: 'center' }}>Tasks</th>
-                    <th style={{ padding: '4px', textAlign: 'center' }}>Done</th>
-                    <th style={{ padding: '4px', textAlign: 'center' }}>Pending</th>
-                    <th style={{ padding: '4px', textAlign: 'center' }}>Overdue</th>
+                    <th style={{ padding: '8px 4px', fontSize: '11px' }}>Employee</th>
+                    <th style={{ padding: '8px 4px', fontSize: '11px', textAlign: 'center' }}>Tasks</th>
+                    <th style={{ padding: '8px 4px', fontSize: '11px', textAlign: 'center' }}>Done</th>
+                    <th style={{ padding: '8px 4px', fontSize: '11px', textAlign: 'center' }}>Pending</th>
+                    <th style={{ padding: '8px 4px', fontSize: '11px', textAlign: 'center' }}>Overdue</th>
                   </tr>
                 </thead>
                 <tbody>
                   {performance.map((p, idx) => {
-                    let rankIcon = '👤';
-                    if (idx === 0) rankIcon = '🥇';
-                    else if (idx === 1) rankIcon = '🥈';
-                    else if (idx === 2) rankIcon = '🥉';
+                    let rankMedal = '👤';
+                    if (idx === 0) rankMedal = '🥇';
+                    else if (idx === 1) rankMedal = '🥈';
+                    else if (idx === 2) rankMedal = '🥉';
 
                     return (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <td style={{ padding: '6px 4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span>{rankIcon}</span>
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }} className="leaderboard-row-hover">
+                        <td style={{ padding: '8px 4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>{rankMedal}</span>
+                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#D4AF37', color: '#05080F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '10px' }}>
+                            {p.name[0].toUpperCase()}
+                          </div>
                           <span>{p.name}</span>
                         </td>
-                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>{p.todayTasks}</td>
-                        <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{p.completed}</td>
-                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>{p.todayTasks - p.completed}</td>
-                        <td style={{ padding: '6px 4px', textAlign: 'center', color: 'var(--color-hot)' }}>{p.overdue || 0}</td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center', fontWeight: 500 }}>{p.todayTasks}</td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center', color: 'var(--color-success)', fontWeight: 'bold' }}>{p.completed}</td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>{p.todayTasks - p.completed}</td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center', color: 'var(--color-hot)', fontWeight: 500 }}>{p.overdue || 0}</td>
                       </tr>
                     );
                   })}
@@ -597,7 +683,7 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
         )}
       </div>
 
-      {/* 4. FILTER ROW (Sticky single horizontal row) */}
+      {/* 4. FILTER ROW */}
       <div className="filter-row-layout">
         {/* View Mode */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -619,7 +705,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
         {/* Selector Filters */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', flex: 1 }}>
-          {/* Task Type */}
           <select 
             style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
             value={filterType} 
@@ -634,7 +719,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             <option value="reminder">📋 Reminders</option>
           </select>
 
-          {/* Priority */}
           <select 
             style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
             value={filterPriority} 
@@ -646,7 +730,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             <option value="cold">⚪ Cold Leads</option>
           </select>
 
-          {/* Date Range */}
           <select 
             style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
             value={filterDateRange} 
@@ -659,7 +742,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             <option value="overdue">Overdue</option>
           </select>
 
-          {/* Project */}
           <select 
             style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
             value={filterProject} 
@@ -670,7 +752,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             <option value="vrindavan">Vrindavan</option>
           </select>
 
-          {/* Source */}
           <select 
             style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
             value={filterSource} 
@@ -683,7 +764,6 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             <option value="Website">Website</option>
           </select>
 
-          {/* Assigned Employee */}
           {isAdmin && (
             <select 
               style={{ background: '#0e172a', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', color: '#f1f5f9' }}
@@ -708,6 +788,30 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           
+          {/* Header Row for Enterprise 6-Column Layout */}
+          {filteredTasks.length > 0 && (
+            <div className="task-grid-header" style={{
+              display: 'grid',
+              gridTemplateColumns: '100px 1.5fr 1.2fr 2fr 1.2fr 220px',
+              gap: '16px',
+              padding: '12px 20px',
+              color: 'var(--text-muted)',
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              fontWeight: 'bold',
+              letterSpacing: '0.08em',
+              borderBottom: '1px solid rgba(212, 175, 55, 0.15)',
+              marginBottom: '-12px'
+            }}>
+              <div>Time</div>
+              <div>Client</div>
+              <div>Project</div>
+              <div>Task Details</div>
+              <div>Assigned Agent</div>
+              <div>Actions</div>
+            </div>
+          )}
+
           {/* Overdue Section */}
           {grouped.overdue.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -833,70 +937,70 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
     if (isMorning) {
       return (
-        <div style={{ background: 'rgba(212, 175, 55, 0.05)', padding: '16px', borderRadius: '12px', border: '1px dashed rgba(212, 175, 55, 0.3)', marginTop: '14px' }}>
+        <div style={{ background: 'rgba(212, 175, 55, 0.04)', padding: '18px 24px', borderRadius: '12px', border: '1px solid rgba(212, 175, 55, 0.25)', marginTop: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#D4AF37' }}>
+            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#D4AF37', letterSpacing: '0.02em' }}>
               🌅 Good Morning, {welcomeName}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Morning Briefing Dashboard</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Morning Briefing Dashboard</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginTop: '12px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Today's Calls</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#D4AF37', marginTop: '2px' }}>{todayCallsCount} Calls</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Today's Calls</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#D4AF37', marginTop: '4px' }}>{todayCallsCount} Calls</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Meetings</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>{todayMeetingsCount} Meets</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Meetings</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#38bdf8', marginTop: '4px' }}>{todayMeetingsCount} Meets</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Site Visits</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffb830', marginTop: '2px' }}>{todayVisitsCount} Visits</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,184,48,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Site Visits</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ffb830', marginTop: '4px' }}>{todayVisitsCount} Visits</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Collections</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#a855f7', marginTop: '2px' }}>{todayCollectionsCount} Bills</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(168,85,247,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Collections</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#a855f7', marginTop: '4px' }}>{todayCollectionsCount} Bills</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Potential Revenue</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '2px' }}>₹{todayPotentialRevCrores} Cr</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Potential Revenue</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '4px' }}>₹{todayPotentialRevCrores} Cr</div>
             </div>
           </div>
         </div>
       );
     } else {
       return (
-        <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '16px', borderRadius: '12px', border: '1px dashed rgba(56, 189, 248, 0.3)', marginTop: '14px' }}>
+        <div style={{ background: 'rgba(56, 189, 248, 0.04)', padding: '18px 24px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.25)', marginTop: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#38bdf8' }}>
+            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#38bdf8', letterSpacing: '0.02em' }}>
               🌙 Good Evening, {welcomeName}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Evening Summary Dashboard</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Evening Summary Dashboard</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginTop: '12px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Calls Completed</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#D4AF37', marginTop: '2px' }}>{completedCallsCount} Calls</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Calls Completed</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#D4AF37', marginTop: '4px' }}>{completedCallsCount} Calls</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Meetings Completed</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>{completedMeetingsCount} Meets</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(56,189,248,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Meetings Completed</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#38bdf8', marginTop: '4px' }}>{completedMeetingsCount} Meets</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Site Visits Completed</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffb830', marginTop: '2px' }}>{completedVisitsCount} Visits</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,184,48,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Site Visits Completed</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ffb830', marginTop: '4px' }}>{completedVisitsCount} Visits</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bookings Completed</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '2px' }}>{completedBookingsCount} Book</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Bookings Completed</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '4px' }}>{completedBookingsCount} Booked</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Collections Completed</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#a855f7', marginTop: '2px' }}>{completedCollectionsCount} Done</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(168,85,247,0.1)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Collections Completed</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#a855f7', marginTop: '4px' }}>{completedCollectionsCount} Done</div>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pending Tasks</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '2px' }}>{pendingTasksCount} Left</div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,94,94,0.15)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Pending Tasks</div>
+              <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'var(--color-hot)', marginTop: '4px' }}>{pendingTasksCount} Left</div>
             </div>
           </div>
         </div>
@@ -923,28 +1027,64 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
   }
 
   // Helper: single KPI counter renderer
-  function renderKPICounter(category, label, count, color) {
+  function renderKPICounter(category, label, count, color, iconEmoji, isRedAccent = false) {
     const isActive = activeCounterFilter === category;
+    const borderStyle = isActive 
+      ? `1.5px solid ${isRedAccent ? '#ff4d4d' : '#D4AF37'}` 
+      : `1px solid ${isRedAccent ? 'rgba(239, 68, 68, 0.25)' : 'rgba(212, 175, 55, 0.15)'}`;
+    
+    const glowColor = isRedAccent ? 'rgba(239, 68, 68, 0.35)' : 'rgba(212, 175, 55, 0.25)';
+    const shadowStyle = isActive 
+      ? `0 0 20px ${glowColor}, 0 8px 32px 0 rgba(0, 0, 0, 0.45)` 
+      : '0 8px 32px 0 rgba(0, 0, 0, 0.45)';
+
     return (
       <div 
         onClick={() => setActiveCounterFilter(isActive ? 'all' : category)}
         className="glass-card"
         style={{ 
-          padding: '16px', 
+          padding: '14px 18px', 
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          border: isActive ? `1.5px solid ${color}` : '1px solid rgba(212, 175, 55, 0.15)',
-          boxShadow: isActive ? `0 0 15px rgba(255,255,255,0.05), 0 0 10px ${color}22` : '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
+          border: borderStyle,
+          boxShadow: shadowStyle,
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          borderRadius: '12px',
+          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          minWidth: '100px'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-3px)';
+          e.currentTarget.style.borderColor = isRedAccent ? '#ff4d4d' : '#D4AF37';
+          e.currentTarget.style.boxShadow = `0 0 15px ${glowColor}, 0 8px 32px 0 rgba(0, 0, 0, 0.55)`;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.borderColor = isActive 
+            ? (isRedAccent ? '#ff4d4d' : '#D4AF37') 
+            : (isRedAccent ? 'rgba(239, 68, 68, 0.25)' : 'rgba(212, 175, 55, 0.15)');
+          e.currentTarget.style.boxShadow = shadowStyle;
         }}
       >
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</span>
-        <span style={{ fontSize: '28px', fontWeight: 'bold', color: color, marginTop: '8px', filter: `drop-shadow(0 0 6px ${color}44)` }}>{count}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <span style={{ fontSize: '28px', fontWeight: '800', color: '#ffffff', lineHeight: 1 }}>{count}</span>
+          <span style={{ fontSize: '18px', filter: `drop-shadow(0 0 4px ${color})` }}>{iconEmoji}</span>
+        </div>
+        <span style={{ 
+          fontSize: '10px', 
+          color: isRedAccent ? '#ff5e5e' : 'var(--text-muted)', 
+          fontWeight: 'bold', 
+          textTransform: 'uppercase', 
+          letterSpacing: '0.08em',
+          marginTop: '10px'
+        }}>
+          {label}
+        </span>
         {isActive && (
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: color }}></div>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: isRedAccent ? '#ff4d4d' : '#D4AF37' }}></div>
         )}
       </div>
     );
@@ -960,11 +1100,11 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
     return (
       <div 
         key={task.id} 
-        className="glass-card"
+        className="glass-card glass-card-hover"
         style={{ 
-          borderLeft: `4px solid ${isHot ? 'var(--color-hot)' : (priority === 'Warm' ? 'var(--color-warm)' : 'var(--border-color)')}`,
+          borderLeft: `4px solid ${isHot ? '#ff4d4d' : (priority === 'Warm' ? '#D4AF37' : '#94a3b8')}`,
           padding: '16px 20px',
-          boxShadow: isHot ? '0 8px 32px 0 rgba(255, 94, 94, 0.05)' : '0 8px 32px 0 rgba(0,0,0,0.2)'
+          borderRadius: '12px'
         }}
       >
         <div className="task-card-grid">
@@ -1021,72 +1161,208 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
             )}
           </div>
 
-          {/* Column 5: Assigned Employee */}
+          {/* Column 5: Assigned Agent */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Assigned Agent</span>
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>{employeeName}</span>
           </div>
 
           {/* Column 6: Quick Actions */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-start', alignItems: 'center' }}>
             {!task.is_completed ? (
               <>
                 <button 
                   className="btn btn-secondary btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', border: '1px solid rgba(212, 175, 55, 0.25)', background: 'rgba(255, 255, 255, 0.03)', color: '#D4AF37', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '1px solid rgba(212, 175, 55, 0.25)', 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    color: '#D4AF37', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => handleCallAction(task)} 
                   title="Call Client"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(212, 175, 55, 0.4)';
+                    e.currentTarget.style.borderColor = '#D4AF37';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.25)';
+                  }}
                 >
-                  <Phone size={14} />
+                  <Phone size={13} />
                 </button>
                 
                 <button 
                   className="btn btn-secondary btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', border: '1px solid rgba(37, 211, 102, 0.2)', background: 'rgba(255, 255, 255, 0.03)', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '1px solid rgba(37, 211, 102, 0.25)', 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => handleWhatsAppAction(task)} 
                   title="WhatsApp Client"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(37, 211, 102, 0.4)';
+                    e.currentTarget.style.borderColor = '#25D366';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(37, 211, 102, 0.25)';
+                  }}
                 >
-                  <FaWhatsapp size={16} style={{ color: '#25D366' }} />
+                  <FaWhatsapp size={15} style={{ color: '#25D366' }} />
                 </button>
                 
                 <button 
                   className="btn btn-secondary btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', border: '1px solid rgba(212, 175, 55, 0.25)', background: 'rgba(255, 255, 255, 0.03)', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '1px solid rgba(212, 175, 55, 0.25)', 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => onOpenLeadDrawer(task.lead_id)} 
                   title="Open Lead Profile"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(212, 175, 55, 0.4)';
+                    e.currentTarget.style.borderColor = '#D4AF37';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.25)';
+                  }}
                 >
-                  <FolderOpen size={14} style={{ color: '#D4AF37' }} />
+                  <FolderOpen size={13} style={{ color: '#D4AF37' }} />
                 </button>
                 
                 <button 
                   className="btn btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', color: 'var(--color-success)', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    background: 'rgba(16, 185, 129, 0.12)', 
+                    border: '1px solid rgba(16, 185, 129, 0.35)', 
+                    color: 'var(--color-success)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => handleCompleteAction(task)} 
                   title="Mark Complete"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
+                    e.currentTarget.style.borderColor = '#10B981';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+                  }}
                 >
-                  <CheckCircle size={14} />
+                  <CheckCircle size={13} />
                 </button>
                 
                 <button 
                   className="btn btn-secondary btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255, 255, 255, 0.02)', color: 'var(--text-muted)', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '1px solid rgba(255,255,255,0.06)', 
+                    background: 'rgba(255, 255, 255, 0.02)', 
+                    color: 'var(--text-muted)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => handleRescheduleAction(task)} 
                   title="Reschedule Task"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.borderColor = '#ffffff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                  }}
                 >
-                  <Calendar size={14} />
+                  <Calendar size={13} />
                 </button>
                 
                 <button 
                   className="btn btn-secondary btn-icon-round" 
-                  style={{ padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '34px', height: '34px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255, 255, 255, 0.02)', color: 'var(--text-muted)', cursor: 'pointer' }} 
+                  style={{ 
+                    padding: '0', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '50%', 
+                    width: '32px', 
+                    height: '32px', 
+                    border: '1px solid rgba(255,255,255,0.06)', 
+                    background: 'rgba(255, 255, 255, 0.02)', 
+                    color: 'var(--text-muted)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }} 
                   onClick={() => handleAddNoteAction(task)} 
                   title="Add Log Note"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.borderColor = '#ffffff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                  }}
                 >
-                  <MoreVertical size={14} />
+                  <MoreVertical size={13} />
                 </button>
               </>
             ) : (
-              <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600 }}>✔️ Activity Completed</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600 }}>✔️ Completed</span>
             )}
           </div>
         </div>
