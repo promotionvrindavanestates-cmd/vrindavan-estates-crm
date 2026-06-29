@@ -230,7 +230,9 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       executive: req.query.executive,
       // Pagination parameters
       page: req.query.page,
-      limit: req.query.limit
+      limit: req.query.limit,
+      trash: req.query.trash,
+      cp_code: req.query.cp_code
     };
 
     const leads = await DB.getLeads(filters, req.user.id, req.user.role);
@@ -388,7 +390,7 @@ app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req,
       bulkJobs[jobId].status = status;
 
       const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
-      const details = `Admin: ${req.user.full_name}\nAction: Restored ${result.restoredCount} Leads from Trash Bin\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}`;
+      const details = `Admin: ${req.user.full_name}\nAction: Restored ${result.restoredCount} Leads from Recycle Bin\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}`;
       await DB.logAudit(null, 'Bulk Leads Restored', details, req.user.id, req.user.full_name, device);
 
       // Auto-create unread bell notification reminder
@@ -486,17 +488,17 @@ app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, r
   });
 });
 
-app.delete('/api/leads/trash/empty', authenticateToken, requireAdmin, async (req, res) => {
+app.delete('/api/leads/recycle-bin/empty', authenticateToken, requireAdmin, async (req, res) => {
   const device = getClientDevice(req);
   const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
   const startTime = Date.now();
 
   try {
-    const result = await DB.emptyTrash(req.user.id, req.user.role);
+    const result = await DB.emptyRecycleBin(req.user.id, req.user.role);
     
     const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
-    const details = `Admin: ${req.user.full_name}\nAction: Emptied Trash Bin (${result.deletedCount} Leads Purged)\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: completed`;
-    await DB.logAudit(null, 'Trash Bin Emptied', details, req.user.id, req.user.full_name, device);
+    const details = `Admin: ${req.user.full_name}\nAction: Emptied Recycle Bin (${result.deletedCount} Leads Purged)\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: completed`;
+    await DB.logAudit(null, 'Recycle Bin Emptied', details, req.user.id, req.user.full_name, device);
     
     await DB.createReminder({
       lead_id: null,
@@ -504,16 +506,16 @@ app.delete('/api/leads/trash/empty', authenticateToken, requireAdmin, async (req
       type: 'System',
       reminder_date: new Date().toLocaleDateString('en-CA'),
       reminder_time: new Date().toTimeString().split(' ')[0],
-      notes: `Trash bin emptied. ${result.deletedCount} leads permanently purged.`,
+      notes: `Recycle Bin emptied. ${result.deletedCount} leads permanently purged.`,
       is_read: false,
       assigned_employee_id: req.user.id,
       priority: 'High'
     });
 
-    res.json({ message: 'Trash bin emptied successfully', deletedCount: result.deletedCount });
+    res.json({ message: 'Recycle Bin emptied successfully', deletedCount: result.deletedCount });
   } catch (error) {
-    console.error('Empty trash error:', error);
-    res.status(500).json({ error: error.message || 'Failed to empty trash bin' });
+    console.error('Empty recycle bin error:', error);
+    res.status(500).json({ error: error.message || 'Failed to empty recycle bin' });
   }
 });
 
@@ -2794,6 +2796,21 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const hasCol = await DB.checkDeletedAtColumn();
+    const envKeys = Object.keys(process.env);
+    res.json({
+      supabaseUrl: process.env.SUPABASE_URL,
+      hasDeletedAtColumn: hasCol,
+      envKeys,
+      dbIsCloud: DB.isCloud()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- PHASE 2: ADVANCED ANALYTICS DASHBOARDS ---
 
 app.get('/api/dashboard/advanced', authenticateToken, async (req, res) => {
@@ -3277,3 +3294,11 @@ function purgeOldBackups() {
 // Run cleanup on startup and then every 24 hours
 purgeOldBackups();
 setInterval(purgeOldBackups, 24 * 60 * 60 * 1000);
+
+// Run Recycle Bin 30-day auto-purge cleanup job on startup and then every hour
+DB.purgeOldRecycleLeads().catch(() => {});
+setInterval(() => {
+  DB.purgeOldRecycleLeads().catch(err => {
+    console.error('Scheduled Recycle Bin auto-purge job failed:', err.message);
+  });
+}, 60 * 60 * 1000);
