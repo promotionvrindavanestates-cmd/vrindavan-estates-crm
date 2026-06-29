@@ -155,6 +155,23 @@ const DB = {
     }
   },
 
+  hasCpColumns: null,
+  async checkCpColumns() {
+    if (this.hasCpColumns !== null) return this.hasCpColumns;
+    if (!this.isCloud()) {
+      this.hasCpColumns = true;
+      return true;
+    }
+    try {
+      const { error } = await supabase.from('leads').select('cp_code').limit(1);
+      this.hasCpColumns = !error;
+      return this.hasCpColumns;
+    } catch (e) {
+      this.hasCpColumns = false;
+      return false;
+    }
+  },
+
   async purgeOldTrashLeads() {
     try {
       const thirtyDaysAgo = new Date();
@@ -373,9 +390,14 @@ const DB = {
         query = query.eq('assigned_employee_id', userId);
       }
 
+      const hasCp = await this.checkCpColumns();
       if (filters.search) {
         const term = `%${filters.search}%`;
-        query = query.or(`name.ilike.${term},phone1.ilike.${term},phone2.ilike.${term},project.ilike.${term},city.ilike.${term},cp_code.ilike.${term}`);
+        if (hasCp) {
+          query = query.or(`name.ilike.${term},phone1.ilike.${term},phone2.ilike.${term},project.ilike.${term},city.ilike.${term},cp_code.ilike.${term}`);
+        } else {
+          query = query.or(`name.ilike.${term},phone1.ilike.${term},phone2.ilike.${term},project.ilike.${term},city.ilike.${term},comments.ilike.${term}`);
+        }
       }
       if (filters.city) query = query.ilike('city', `%${filters.city}%`);
       if (filters.budget) query = query.ilike('budget', `%${filters.budget}%`);
@@ -386,7 +408,11 @@ const DB = {
       if (filters.site_visit_status) query = query.eq('site_visit_status', filters.site_visit_status);
       
       if (filters.cp_code && filters.cp_code !== 'All') {
-        query = query.eq('cp_code', filters.cp_code);
+        if (hasCp) {
+          query = query.eq('cp_code', filters.cp_code);
+        } else {
+          query = query.ilike('comments', `%[CP: ${filters.cp_code}%`);
+        }
       }
       
       // Phase 3 Filters
@@ -425,6 +451,19 @@ const DB = {
       
       const { data, error, count } = await query.order('created_at', { ascending: false });
       if (error) throw error;
+
+      if (!hasCp && data) {
+        data.forEach(l => {
+          if (l.comments) {
+            const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+            if (match) {
+              l.cp_code = match[1];
+              l.broker_name = match[2] || null;
+              l.broker_mobile = match[3] || null;
+            }
+          }
+        });
+      }
 
       if (filters.page && filters.limit) {
         return {
@@ -550,6 +589,14 @@ const DB = {
       }
       const { data, error } = await query.maybeSingle();
       if (error) throw error;
+      if (data && !data.cp_code && data.comments) {
+        const match = data.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+        if (match) {
+          data.cp_code = match[1];
+          data.broker_name = match[2] || null;
+          data.broker_mobile = match[3] || null;
+        }
+      }
       return data;
     } else {
       const db = loadLocalDb();
@@ -591,12 +638,33 @@ const DB = {
     };
 
     if (this.isCloud()) {
+      const hasCp = await this.checkCpColumns();
+      if (!hasCp) {
+        if (formattedLead.cp_code) {
+          const cpStr = `[CP: ${formattedLead.cp_code}${formattedLead.broker_name ? ` | Broker: ${formattedLead.broker_name} (${formattedLead.broker_mobile || ''})` : ''}]`;
+          formattedLead.comments = formattedLead.comments ? `${formattedLead.comments}\n${cpStr}` : cpStr;
+        }
+        delete formattedLead.cp_code;
+        delete formattedLead.broker_name;
+        delete formattedLead.broker_mobile;
+      }
       const { data, error } = await supabase
         .from('leads')
         .insert([formattedLead])
         .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)')
         .single();
       if (error) throw error;
+
+      if (!hasCp && data) {
+        if (data.comments) {
+          const match = data.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+          if (match) {
+            data.cp_code = match[1];
+            data.broker_name = match[2] || null;
+            data.broker_mobile = match[3] || null;
+          }
+        }
+      }
       return data;
     } else {
       const db = loadLocalDb();
@@ -666,6 +734,19 @@ const DB = {
     };
 
     if (this.isCloud()) {
+      const hasCp = await this.checkCpColumns();
+      if (!hasCp) {
+        if (updateFields.cp_code) {
+          const cpStr = `[CP: ${updateFields.cp_code}${updateFields.broker_name ? ` | Broker: ${updateFields.broker_name} (${updateFields.broker_mobile || ''})` : ''}]`;
+          const cleanComments = (updateFields.comments || '').replace(/\[CP:\s*.*?\s*\]/g, '').trim();
+          updateFields.comments = cleanComments ? `${cleanComments}\n${cpStr}` : cpStr;
+        } else {
+          updateFields.comments = (updateFields.comments || '').replace(/\[CP:\s*.*?\s*\]/g, '').trim();
+        }
+        delete updateFields.cp_code;
+        delete updateFields.broker_name;
+        delete updateFields.broker_mobile;
+      }
       const { data, error } = await supabase
         .from('leads')
         .update(updateFields)
@@ -673,6 +754,17 @@ const DB = {
         .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)')
         .single();
       if (error) throw error;
+
+      if (!hasCp && data) {
+        if (data.comments) {
+          const match = data.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+          if (match) {
+            data.cp_code = match[1];
+            data.broker_name = match[2] || null;
+            data.broker_mobile = match[3] || null;
+          }
+        }
+      }
       return data;
     } else {
       const db = loadLocalDb();
@@ -923,6 +1015,20 @@ const DB = {
         .select('*')
         .in('id', leadIds);
       if (error) throw error;
+      
+      const hasCp = await this.checkCpColumns();
+      if (!hasCp && data) {
+        data.forEach(l => {
+          if (l.comments) {
+            const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+            if (match) {
+              l.cp_code = match[1];
+              l.broker_name = match[2] || null;
+              l.broker_mobile = match[3] || null;
+            }
+          }
+        });
+      }
       return data || [];
     } else {
       const db = loadLocalDb();
@@ -1033,6 +1139,21 @@ const DB = {
 
   async getUniqueCpCodes() {
     if (this.isCloud()) {
+      const hasCp = await this.checkCpColumns();
+      if (!hasCp) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('comments')
+          .not('comments', 'is', null)
+          .like('comments', '%[CP:%');
+        if (error) throw error;
+        const codes = [];
+        data.forEach(l => {
+          const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)/);
+          if (match) codes.push(match[1]);
+        });
+        return [...new Set(codes)].sort();
+      }
       const { data, error } = await supabase
         .from('leads')
         .select('cp_code')
@@ -1043,7 +1164,7 @@ const DB = {
       return codes.sort();
     } else {
       const db = loadLocalDb();
-      const codes = [...new Set(db.leads.map(l => l.cp_code).filter(Boolean))];
+      const codes = [...new Set((db.leads || []).map(l => l.cp_code).filter(Boolean))];
       return codes.sort();
     }
   },
@@ -1051,15 +1172,34 @@ const DB = {
   async getChannelPartnerAnalytics() {
     let leads = [];
     let bookings = [];
-
+ 
     if (this.isCloud()) {
-      const { data: l } = await supabase
-        .from('leads')
-        .select('id, cp_code, status, booking_status, booking_token_amount')
-        .not('cp_code', 'is', null)
-        .not('cp_code', 'eq', '');
-      leads = l || [];
-
+      const hasCp = await this.checkCpColumns();
+      if (!hasCp) {
+        const { data: l, error } = await supabase
+          .from('leads')
+          .select('id, status, booking_status, booking_token_amount, comments')
+          .not('comments', 'is', null)
+          .like('comments', '%[CP:%');
+        if (error) throw error;
+        
+        leads = l || [];
+        leads.forEach(x => {
+          const match = x.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)/);
+          if (match) {
+            x.cp_code = match[1];
+          }
+        });
+        leads = leads.filter(x => x.cp_code);
+      } else {
+        const { data: l } = await supabase
+          .from('leads')
+          .select('id, cp_code, status, booking_status, booking_token_amount')
+          .not('cp_code', 'is', null)
+          .not('cp_code', 'eq', '');
+        leads = l || [];
+      }
+ 
       const leadIds = leads.map(x => x.id);
       if (leadIds.length > 0) {
         const { data: b } = await supabase
