@@ -375,7 +375,7 @@ const DB = {
 
       if (filters.search) {
         const term = `%${filters.search}%`;
-        query = query.or(`name.ilike.${term},phone1.ilike.${term},phone2.ilike.${term},project.ilike.${term},city.ilike.${term}`);
+        query = query.or(`name.ilike.${term},phone1.ilike.${term},phone2.ilike.${term},project.ilike.${term},city.ilike.${term},cp_code.ilike.${term}`);
       }
       if (filters.city) query = query.ilike('city', `%${filters.city}%`);
       if (filters.budget) query = query.ilike('budget', `%${filters.budget}%`);
@@ -384,6 +384,10 @@ const DB = {
       if (filters.assigned_employee_id) query = query.eq('assigned_employee_id', filters.assigned_employee_id);
       if (filters.source) query = query.eq('lead_source', filters.source);
       if (filters.site_visit_status) query = query.eq('site_visit_status', filters.site_visit_status);
+      
+      if (filters.cp_code && filters.cp_code !== 'All') {
+        query = query.eq('cp_code', filters.cp_code);
+      }
       
       // Phase 3 Filters
       if (filters.created_start) query = query.gte('created_at', filters.created_start);
@@ -453,8 +457,13 @@ const DB = {
           (l.phone1 && l.phone1.toLowerCase().includes(term)) ||
           (l.phone2 && l.phone2.toLowerCase().includes(term)) ||
           (l.project && l.project.toLowerCase().includes(term)) ||
-          (l.city && l.city.toLowerCase().includes(term))
+          (l.city && l.city.toLowerCase().includes(term)) ||
+          (l.cp_code && l.cp_code.toLowerCase().includes(term))
         );
+      }
+
+      if (filters.cp_code && filters.cp_code !== 'All') {
+        results = results.filter(l => l.cp_code === filters.cp_code);
       }
 
       if (filters.city) results = results.filter(l => l.city && l.city.toLowerCase().includes(filters.city.toLowerCase()));
@@ -575,7 +584,10 @@ const DB = {
       booking_date: leadData.booking_date || null,
       booking_status: leadData.booking_status || 'None',
       last_call_date: leadData.last_call_date || null,
-      last_response: leadData.last_response || null
+      last_response: leadData.last_response || null,
+      cp_code: leadData.cp_code || null,
+      broker_name: leadData.broker_name || null,
+      broker_mobile: leadData.broker_mobile || null
     };
 
     if (this.isCloud()) {
@@ -647,7 +659,10 @@ const DB = {
       booking_date: leadData.booking_date,
       booking_status: leadData.booking_status,
       last_call_date: leadData.last_call_date,
-      last_response: leadData.last_response
+      last_response: leadData.last_response,
+      cp_code: leadData.cp_code,
+      broker_name: leadData.broker_name,
+      broker_mobile: leadData.broker_mobile
     };
 
     if (this.isCloud()) {
@@ -1014,6 +1029,100 @@ const DB = {
       saveLocalDb(db);
       return count;
     }
+  },
+
+  async getUniqueCpCodes() {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('cp_code')
+        .not('cp_code', 'is', null)
+        .not('cp_code', 'eq', '');
+      if (error) throw error;
+      const codes = [...new Set(data.map(l => l.cp_code))];
+      return codes.sort();
+    } else {
+      const db = loadLocalDb();
+      const codes = [...new Set(db.leads.map(l => l.cp_code).filter(Boolean))];
+      return codes.sort();
+    }
+  },
+
+  async getChannelPartnerAnalytics() {
+    let leads = [];
+    let bookings = [];
+
+    if (this.isCloud()) {
+      const { data: l } = await supabase
+        .from('leads')
+        .select('id, cp_code, status, booking_status, booking_token_amount')
+        .not('cp_code', 'is', null)
+        .not('cp_code', 'eq', '');
+      leads = l || [];
+
+      const leadIds = leads.map(x => x.id);
+      if (leadIds.length > 0) {
+        const { data: b } = await supabase
+          .from('bookings')
+          .select('token_amount, booking_amount, lead_id')
+          .in('lead_id', leadIds);
+        bookings = b || [];
+      }
+    } else {
+      const db = loadLocalDb();
+      leads = (db.leads || []).filter(l => l.cp_code && !l.deleted_at);
+      const leadIds = new Set(leads.map(x => x.id));
+      bookings = (db.bookings || []).filter(b => leadIds.has(b.lead_id));
+    }
+
+    const bookingMap = new Map();
+    bookings.forEach(b => {
+      if (!bookingMap.has(b.lead_id)) {
+        bookingMap.set(b.lead_id, []);
+      }
+      bookingMap.get(b.lead_id).push(b);
+    });
+
+    const stats = {};
+    leads.forEach(l => {
+      const code = l.cp_code;
+      if (!code) return;
+
+      if (!stats[code]) {
+        stats[code] = {
+          cp_code: code,
+          leads: 0,
+          bookings: 0,
+          revenue: 0
+        };
+      }
+
+      stats[code].leads++;
+
+      const isBooked = l.status === 'Booked' || l.booking_status === 'Confirmed' || bookingMap.has(l.id);
+      if (isBooked) {
+        stats[code].bookings++;
+        
+        let leadRev = 0;
+        if (bookingMap.has(l.id)) {
+          bookingMap.get(l.id).forEach(b => {
+            leadRev += (parseFloat(b.token_amount) || 0) + (parseFloat(b.booking_amount) || 0);
+          });
+        }
+        if (leadRev === 0) {
+          leadRev = parseFloat(l.booking_token_amount) || 0;
+        }
+        stats[code].revenue += leadRev;
+      }
+    });
+
+    return Object.values(stats).map(s => {
+      const conv = s.leads > 0 ? parseFloat(((s.bookings / s.leads) * 100).toFixed(1)) : 0.0;
+      return {
+        ...s,
+        conversion: conv
+      };
+    }).sort((a, b) => b.leads - a.leads);
   },
 
   // --- CALL LOGGING ---

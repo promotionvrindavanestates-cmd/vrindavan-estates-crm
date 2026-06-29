@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS leads (
     site_visit_remarks TEXT,
     booking_token_amount NUMERIC(12, 2) DEFAULT 0.00,
     booking_date DATE,
-    booking_status VARCHAR(100) CHECK (booking_status IN ('None', 'Pending', 'Confirmed', 'Cancelled'))
+    booking_status VARCHAR(100) CHECK (booking_status IN ('None', 'Pending', 'Confirmed', 'Cancelled')),
+    cp_code VARCHAR(100),
+    broker_name VARCHAR(255),
+    broker_mobile VARCHAR(50)
 );
 
 -- Create Call Logs Table (Base)

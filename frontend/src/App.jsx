@@ -762,6 +762,7 @@ export default function App() {
                 onSelectLead={handleSelectLeadFromDashboard} 
                 onDrillDown={handleDrillDown}
                 onOpenLeadDrawer={handleOpenLeadDrawer}
+                currentUser={currentUser}
               />
             )}
 

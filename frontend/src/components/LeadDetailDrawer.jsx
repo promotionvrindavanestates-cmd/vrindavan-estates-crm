@@ -832,6 +832,13 @@ export default function LeadDetailDrawer({
                   <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{lead.follow_up_date}</span>
                 </div>
               )}
+              {lead.cp_code && (
+                <div style={{ gridColumn: 'span 2', marginTop: '6px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+                  <div><strong style={{ color: '#D4AF37' }}>CP Code:</strong> <span style={{ padding: '2px 6px', background: 'rgba(212,175,55,0.1)', border: '1px solid #D4AF37', borderRadius: '4px', fontWeight: 'bold' }}>{lead.cp_code}</span></div>
+                  <div><strong style={{ color: 'var(--text-muted)' }}>Broker Name:</strong> {lead.broker_name || 'N/A'}</div>
+                  <div style={{ gridColumn: 'span 2' }}><strong style={{ color: 'var(--text-muted)' }}>Broker Mobile:</strong> {lead.broker_mobile || 'N/A'}</div>
+                </div>
+              )}
             </div>
 
             {/* Predefined One-Click Quick Actions */}

@@ -566,6 +566,24 @@ app.post('/api/leads/bulk-backup', authenticateToken, requireAdmin, async (req, 
   }
 });
 
+app.get('/api/leads/cp-codes', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const codes = await DB.getUniqueCpCodes();
+    res.json(codes);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch CP codes' });
+  }
+});
+
+app.get('/api/reports/channel-partners', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const analytics = await DB.getChannelPartnerAnalytics();
+    res.json(analytics);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch Channel Partner analytics' });
+  }
+});
+
 app.get('/api/leads/:id', authenticateToken, async (req, res) => {
   try {
     const lead = await DB.getLeadById(req.params.id, req.user.id, req.user.role);
@@ -1062,7 +1080,10 @@ app.get('/api/export', authenticateToken, async (req, res) => {
       'Booking Date': l.booking_date || '',
       'Booking Status': l.booking_status || '',
       'Last Call Date': l.last_call_date || '',
-      'Last Call Response': l.last_response || ''
+      'Last Call Response': l.last_response || '',
+      'CP Code': l.cp_code || '',
+      'Broker Name': l.broker_name || '',
+      'Broker Mobile': l.broker_mobile || ''
     }));
 
     if (format === 'xlsx') {
@@ -1078,7 +1099,7 @@ app.get('/api/export', authenticateToken, async (req, res) => {
       if (plainLeads.length === 0) {
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=leads_export.csv');
-        return res.send('Date,Name,City,Phone 1,Phone 2,Budget,Project,Requirement,Comments,Status,Follow Up Date,Assigned Employee,Lead Source,Site Visit Date,Site Visit Status,Site Visit Remarks,Booking Token Amount,Booking Date,Booking Status,Last Call Date,Last Call Response\n');
+        return res.send('Date,Name,City,Phone 1,Phone 2,Budget,Project,Requirement,Comments,Status,Follow Up Date,Assigned Employee,Lead Source,Site Visit Date,Site Visit Status,Site Visit Remarks,Booking Token Amount,Booking Date,Booking Status,Last Call Date,Last Call Response,CP Code,Broker Name,Broker Mobile\n');
       }
 
       const headers = Object.keys(plainLeads[0]);
@@ -1396,6 +1417,9 @@ app.post('/api/import/run', authenticateToken, requireAdmin, async (req, res) =>
           const phone1 = record.phone1 ? String(record.phone1).trim() : '';
           const phone2 = record.phone2 ? String(record.phone2).trim() : '';
           const phoneWhatsapp = record.phone_whatsapp ? String(record.phone_whatsapp).trim() : '';
+          const cpCode = record.cp_code || record['cp_code'] || record['CP Code'] || record['cp code'] || record['CP CODE'] || record.cpCode || null;
+          const brokerName = record.broker_name || record['broker_name'] || record['Broker Name'] || record['broker name'] || record['BROKER NAME'] || record.brokerName || null;
+          const brokerMobile = record.broker_mobile || record['broker_mobile'] || record['Broker Mobile'] || record['broker mobile'] || record['BROKER MOBILE'] || record.brokerMobile || null;
           
           if (!record.name || (!phone1 && !phone2)) {
             failedCount++;
@@ -1425,7 +1449,10 @@ app.post('/api/import/run', authenticateToken, requireAdmin, async (req, res) =>
                 project: record.project || duplicate.project,
                 requirement: record.requirement || duplicate.requirement,
                 comments: record.comments || record.remarks || duplicate.comments,
-                lead_source: record.lead_source || duplicate.lead_source
+                lead_source: record.lead_source || duplicate.lead_source,
+                cp_code: cpCode || duplicate.cp_code || null,
+                broker_name: brokerName || duplicate.broker_name || null,
+                broker_mobile: brokerMobile || duplicate.broker_mobile || null
               };
               await DB.updateLead(duplicate.id, updateFields, userId, userRole);
               await DB.logAudit(duplicate.id, 'Status Changed', `Lead overwritten during bulk import update.`, userId, userName, device);
@@ -1442,7 +1469,10 @@ app.post('/api/import/run', authenticateToken, requireAdmin, async (req, res) =>
                 project: duplicate.project || record.project || '',
                 requirement: duplicate.requirement || record.requirement || '',
                 comments: duplicate.comments || record.comments || record.remarks || '',
-                lead_source: duplicate.lead_source || record.lead_source || 'Website'
+                lead_source: duplicate.lead_source || record.lead_source || 'Website',
+                cp_code: duplicate.cp_code || cpCode || null,
+                broker_name: duplicate.broker_name || brokerName || null,
+                broker_mobile: duplicate.broker_mobile || brokerMobile || null
               };
               await DB.updateLead(duplicate.id, updateFields, userId, userRole);
               await DB.logAudit(duplicate.id, 'Status Changed', `Lead fields merged during bulk import merge.`, userId, userName, device);
@@ -1463,7 +1493,10 @@ app.post('/api/import/run', authenticateToken, requireAdmin, async (req, res) =>
               requirement: record.requirement || '',
               comments: record.comments || record.remarks || '',
               lead_source: record.lead_source || 'Website',
-              status: 'New'
+              status: 'New',
+              cp_code: cpCode,
+              broker_name: brokerName,
+              broker_mobile: brokerMobile
             };
             const created = await DB.createLead(newLead, userId);
             await DB.logAudit(created.id, 'Lead Created', `Lead created via Excel/CSV import.`, userId, userName, device);
@@ -3197,7 +3230,10 @@ function generateExcelBuffer(leads) {
     'Last Call Date': l.last_call_date || '',
     'Notes': l.comments || '',
     'Created Date': l.created_at || '',
-    'Updated Date': l.updated_at || ''
+    'Updated Date': l.updated_at || '',
+    'CP Code': l.cp_code || '',
+    'Broker Name': l.broker_name || '',
+    'Broker Mobile': l.broker_mobile || ''
   }));
 
   const worksheet = xlsx.utils.json_to_sheet(rows);

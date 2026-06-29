@@ -3,8 +3,9 @@ import { api } from '../utils/api';
 import { Calendar, AlertTriangle, Users, TrendingUp, Compass, Award, Phone, CheckCircle, RefreshCw, BarChart2, Award as Trophy, Eye, LayoutGrid, DollarSign, PhoneCall, MessageSquare, Percent, Landmark, Activity } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import RecentActivities from './RecentActivities';
+import ChannelPartnerWidget from './ChannelPartnerWidget';
 
-export default function Dashboard({ leads = [], employees = [], lastUpdated, onSelectLead, onDrillDown, onOpenLeadDrawer }) {
+export default function Dashboard({ leads = [], employees = [], lastUpdated, onSelectLead, onDrillDown, onOpenLeadDrawer, currentUser = {} }) {
   const [stats, setStats] = useState(null);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -668,6 +669,11 @@ export default function Dashboard({ leads = [], employees = [], lastUpdated, onS
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: '350px' }}>
               <RecentActivities limit={10} />
             </div>
+
+            {/* Widget 5: Top Channel Partners Leaderboard */}
+            {currentUser.role === 'admin' && (
+              <ChannelPartnerWidget />
+            )}
 
             {/* Widget 4: Booking & Revenue Summary */}
             <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: '16px', minHeight: '350px' }}>

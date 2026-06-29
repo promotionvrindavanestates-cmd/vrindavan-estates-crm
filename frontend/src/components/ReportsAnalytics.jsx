@@ -19,6 +19,27 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
   const [funnelLoading, setFunnelLoading] = useState(false);
   const [funnelFilterEmployeeId, setFunnelFilterEmployeeId] = useState('');
 
+  // Channel Partner State
+  const [cpReportData, setCpReportData] = useState([]);
+  const [cpLoading, setCpLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeSubTab === 'channel_partner') {
+      const loadCpReport = async () => {
+        setCpLoading(true);
+        try {
+          const res = await api.getChannelPartnerReports();
+          setCpReportData(res || []);
+        } catch (e) {
+          console.error('Failed to load CP report data:', e);
+        } finally {
+          setCpLoading(false);
+        }
+      };
+      loadCpReport();
+    }
+  }, [activeSubTab]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -196,6 +217,14 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
             onClick={() => setActiveSubTab('inactive')}
           >
             ⚠️ Inactive Queue ({inactiveLeads.length})
+          </button>
+        )}
+        {isAdmin && (
+          <button 
+            className={`btn ${activeSubTab === 'channel_partner' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveSubTab('channel_partner')}
+          >
+            🤝 Channel Partners
           </button>
         )}
       </div>
@@ -616,6 +645,129 @@ export default function ReportsAnalytics({ currentUser, onDrillDown }) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Channel Partner Reports (Admin only) */}
+          {activeSubTab === 'channel_partner' && isAdmin && (
+            <div className="card">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', color: '#D4AF37' }}>
+                🤝 Channel Partner Performance Analytics
+              </h2>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '25px', fontSize: '13px' }}>
+                View complete performance charts, booking token amounts, and conversion rate reports aggregated by active referral Channel Partner codes.
+              </p>
+
+              {cpLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Channel Partner reports...</div>
+              ) : cpReportData.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>No Channel Partner referral leads registered yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                  {/* Four Report Cards Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                    
+                    {/* Report 1: Leads Wise */}
+                    <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>CP Wise Leads</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                        {cpReportData.slice(0, 3).map(cp => (
+                          <div key={cp.cp_code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <strong style={{ color: '#D4AF37' }}>{cp.cp_code}</strong>
+                            <span>{cp.leads} Leads</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Report 2: Bookings Wise */}
+                    <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>CP Wise Bookings</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                        {cpReportData.slice(0, 3).map(cp => (
+                          <div key={cp.cp_code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <strong style={{ color: '#D4AF37' }}>{cp.cp_code}</strong>
+                            <span>{cp.bookings} Bookings</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Report 3: Sales Wise */}
+                    <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>CP Wise Sales</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                        {cpReportData.slice(0, 3).map(cp => {
+                          const num = cp.revenue;
+                          const revStr = num >= 10000000 
+                            ? `₹${(num / 10000000).toFixed(2)} Cr` 
+                            : (num >= 100000 ? `₹${(num / 100000).toFixed(2)} L` : `₹${num.toLocaleString('en-IN')}`);
+                          return (
+                            <div key={cp.cp_code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                              <strong style={{ color: '#D4AF37' }}>{cp.cp_code}</strong>
+                              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{revStr}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Report 4: Conversion Wise */}
+                    <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>CP Wise Conversion</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                        {cpReportData.slice(0, 3).map(cp => (
+                          <div key={cp.cp_code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <strong style={{ color: '#D4AF37' }}>{cp.cp_code}</strong>
+                            <span style={{ fontWeight: 600, color: cp.conversion >= 15 ? '#22c55e' : (cp.conversion >= 5 ? '#eab308' : '#ef4444') }}>{cp.conversion}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Main Details Table */}
+                  <div className="table-responsive">
+                    <table className="leads-table">
+                      <thead>
+                        <tr>
+                          <th>CP Code</th>
+                          <th>Total Leads Registered</th>
+                          <th>Confirmed Bookings</th>
+                          <th>Total Booking Sales Revenue</th>
+                          <th>Average Conversion Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cpReportData.map(cp => {
+                          const num = cp.revenue;
+                          const revStr = num >= 10000000 
+                            ? `₹${(num / 10000000).toFixed(2)} Cr` 
+                            : (num >= 100000 ? `₹${(num / 100000).toFixed(2)} L` : `₹${num.toLocaleString('en-IN')}`);
+                          return (
+                            <tr key={cp.cp_code}>
+                              <td>
+                                <span style={{ padding: '3px 8px', borderRadius: '4px', background: 'rgba(212,175,55,0.1)', border: '1px solid #D4AF37', color: '#D4AF37', fontSize: '11px', fontWeight: 'bold' }}>
+                                  {cp.cp_code}
+                                </span>
+                              </td>
+                              <td><strong style={{ color: 'var(--text-main)' }}>{cp.leads} Leads</strong></td>
+                              <td>{cp.bookings} Bookings</td>
+                              <td style={{ color: 'var(--primary)', fontWeight: 600 }}>{revStr}</td>
+                              <td>
+                                <span style={{ color: cp.conversion >= 15 ? '#22c55e' : (cp.conversion >= 5 ? '#eab308' : '#ef4444'), fontWeight: 600 }}>
+                                  {cp.conversion}%
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>

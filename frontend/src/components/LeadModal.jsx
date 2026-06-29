@@ -32,6 +32,12 @@ export default function LeadModal({ isOpen, onClose, onSave, lead = null, employ
   // Assignment
   const [assignedEmployeeId, setAssignedEmployeeId] = useState('');
 
+  // Channel Partner / Referral
+  const [cpCode, setCpCode] = useState('');
+  const [customCpCode, setCustomCpCode] = useState('');
+  const [brokerName, setBrokerName] = useState('');
+  const [brokerMobile, setBrokerMobile] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -85,6 +91,22 @@ export default function LeadModal({ isOpen, onClose, onSave, lead = null, employ
       setBookingStatus(lead.booking_status || 'None');
       
       setAssignedEmployeeId(lead.assigned_employee_id || '');
+      
+      const standardCodes = ['LDS', 'LDR', 'VE', 'VES', 'VEN', 'LD'];
+      if (lead.cp_code) {
+        if (standardCodes.includes(lead.cp_code)) {
+          setCpCode(lead.cp_code);
+          setCustomCpCode('');
+        } else {
+          setCpCode('other');
+          setCustomCpCode(lead.cp_code);
+        }
+      } else {
+        setCpCode('');
+        setCustomCpCode('');
+      }
+      setBrokerName(lead.broker_name || '');
+      setBrokerMobile(lead.broker_mobile || '');
     } else {
       // Clear fields for fresh add
       setName('');
@@ -105,6 +127,10 @@ export default function LeadModal({ isOpen, onClose, onSave, lead = null, employ
       setBookingDate('');
       setBookingStatus('None');
       setAssignedEmployeeId(currentUser.role === 'employee' ? currentUser.id : '');
+      setCpCode('');
+      setCustomCpCode('');
+      setBrokerName('');
+      setBrokerMobile('');
     }
     setError('');
   }, [lead, isOpen]);
@@ -139,7 +165,10 @@ export default function LeadModal({ isOpen, onClose, onSave, lead = null, employ
       booking_token_amount: parseFloat(bookingTokenAmount) || 0,
       booking_date: bookingDate || null,
       booking_status: bookingStatus,
-      assigned_employee_id: assignedEmployeeId || null
+      assigned_employee_id: assignedEmployeeId || null,
+      cp_code: cpCode === 'other' ? customCpCode : (cpCode || null),
+      broker_name: cpCode ? (brokerName || null) : null,
+      broker_mobile: cpCode ? (brokerMobile || null) : null
     };
 
     try {
@@ -170,6 +199,70 @@ export default function LeadModal({ isOpen, onClose, onSave, lead = null, employ
 
             {/* Basic Info */}
             <h4 style={{ color: 'var(--primary)', marginBottom: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>Basic Details</h4>
+
+            {/* Channel Partner Details (CP) */}
+            <div className="grid-2-col" style={{ marginBottom: '14px', background: 'rgba(212,175,55,0.02)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(212,175,55,0.1)' }}>
+              <div className="form-group">
+                <label style={{ color: '#D4AF37' }}>Channel Partner (CP) Code</label>
+                <select
+                  className="form-control"
+                  value={cpCode}
+                  onChange={(e) => setCpCode(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="">Direct Lead (None)</option>
+                  <option value="LDS">LDS</option>
+                  <option value="LDR">LDR</option>
+                  <option value="VE">VE</option>
+                  <option value="VES">VES</option>
+                  <option value="VEN">VEN</option>
+                  <option value="LD">LD</option>
+                  <option value="other">Create Custom Code...</option>
+                </select>
+              </div>
+
+              {cpCode === 'other' && (
+                <div className="form-group">
+                  <label style={{ color: '#D4AF37' }}>Custom CP Code *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Enter custom CP code (e.g. VEX)"
+                    value={customCpCode}
+                    onChange={(e) => setCustomCpCode(e.target.value.toUpperCase())}
+                    disabled={loading}
+                  />
+                </div>
+              )}
+            </div>
+
+            {cpCode && (
+              <div className="grid-2-col" style={{ marginBottom: '14px', background: 'rgba(255,255,255,0.01)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="form-group">
+                  <label>Broker Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Broker name (optional)"
+                    value={brokerName}
+                    onChange={(e) => setBrokerName(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Broker Mobile</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Broker mobile (optional)"
+                    value={brokerMobile}
+                    onChange={(e) => setBrokerMobile(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+
             <div class="grid-2-col" style={{ marginBottom: '14px' }}>
               <div class="form-group">
                 <label>Client Name * {lead && currentUser.role === 'employee' && <span style={{ color: 'var(--text-muted)' }}>(Locked)</span>}</label>

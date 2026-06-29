@@ -36,6 +36,8 @@ export default function LeadTable({
   const [siteVisitEnd, setSiteVisitEnd] = useState('');
   const [callsToday, setCallsToday] = useState('');
   const [siteVisitCompleted, setSiteVisitCompleted] = useState('');
+  const [selectedCpCode, setSelectedCpCode] = useState('');
+  const [uniqueCpCodes, setUniqueCpCodes] = useState(['LDS', 'LDR', 'VE', 'VES', 'VEN', 'LD']);
 
   // Server-side Pagination & Query States
   const [leadsState, setLeadsState] = useState([]);
@@ -113,8 +115,20 @@ export default function LeadTable({
         console.error('Failed to load bulk delete settings:', err);
       }
     };
+    const loadCpCodes = async () => {
+      try {
+        const codes = await api.getUniqueCpCodes();
+        const defaults = ['LDS', 'LDR', 'VE', 'VES', 'VEN', 'LD'];
+        const merged = [...new Set([...defaults, ...(codes || [])])];
+        setUniqueCpCodes(merged.sort());
+      } catch (err) {
+        console.error('Failed to load unique cp codes:', err);
+      }
+    };
+
     if (currentUser && currentUser.role === 'admin') {
       loadSettings();
+      loadCpCodes();
     }
   }, [currentUser]);
 
@@ -204,6 +218,7 @@ export default function LeadTable({
         created_end: createdEnd,
         calls_today: callsToday,
         site_visit_completed: siteVisitCompleted,
+        cp_code: selectedCpCode,
         page: currentPage,
         limit: limit,
         trash: showTrash
@@ -241,6 +256,7 @@ export default function LeadTable({
     createdEnd,
     callsToday,
     siteVisitCompleted,
+    selectedCpCode,
     limit,
     showTrash
   ]);
@@ -260,6 +276,7 @@ export default function LeadTable({
     createdEnd,
     callsToday,
     siteVisitCompleted,
+    selectedCpCode,
     currentPage,
     limit,
     leads.length,
@@ -1020,6 +1037,7 @@ export default function LeadTable({
               setCallsToday('');
               setSiteVisitCompleted('');
               setEmployeeFilterHeading('');
+              setSelectedCpCode('');
             }}
           >
             Reset All Filters
@@ -1034,6 +1052,14 @@ export default function LeadTable({
               <select class="form-control" value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)}>
                 <option value="">All Sources</option>
                 {uniqueSources.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label>Channel Partner</label>
+              <select className="form-control" value={selectedCpCode} onChange={(e) => setSelectedCpCode(e.target.value)}>
+                <option value="">All Channel Partners</option>
+                {uniqueCpCodes.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             
@@ -1225,6 +1251,25 @@ export default function LeadTable({
                           onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
                           title="Click to view details side drawer"
                         >
+                          {l.cp_code && (
+                            <span 
+                              style={{ 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                border: '1px solid #D4AF37', 
+                                background: 'rgba(212,175,55,0.1)', 
+                                color: '#D4AF37', 
+                                fontSize: '10px', 
+                                fontWeight: 'bold', 
+                                marginRight: '6px',
+                                display: 'inline-block',
+                                letterSpacing: '0.5px',
+                                textShadow: '0 0 5px rgba(212,175,55,0.2)'
+                              }}
+                            >
+                              CP:{l.cp_code}
+                            </span>
+                          )}
                           {l.name}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>

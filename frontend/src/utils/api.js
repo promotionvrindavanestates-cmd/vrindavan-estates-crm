@@ -537,5 +537,11 @@ export const api = {
     request('/api/settings/bulk-delete', {
       method: 'PUT',
       body: JSON.stringify(settings)
-    })
+    }),
+
+  getUniqueCpCodes: () =>
+    request('/api/leads/cp-codes'),
+
+  getChannelPartnerReports: () =>
+    request('/api/reports/channel-partners')
 };
