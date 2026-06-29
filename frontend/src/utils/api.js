@@ -504,10 +504,10 @@ export const api = {
   getDailyTargets: () => request('/api/command-center/targets'),
   getAdminPerformance: () => request('/api/command-center/performance'),
 
-  deleteLeadsBulk: (leadIds, permanent = false) =>
+  deleteLeadsBulk: (leadIds, permanent = false, backupCreated = false) =>
     request('/api/leads/bulk', {
       method: 'DELETE',
-      body: JSON.stringify({ leadIds, permanent })
+      body: JSON.stringify({ leadIds, permanent, backupCreated })
     }),
 
   restoreLeadsBulk: (leadIds) =>
@@ -528,5 +528,14 @@ export const api = {
   emptyTrash: () =>
     request('/api/leads/trash/empty', {
       method: 'DELETE'
+    }),
+
+  getBulkDeleteSettings: () =>
+    request('/api/settings/bulk-delete'),
+
+  updateBulkDeleteSettings: (settings) =>
+    request('/api/settings/bulk-delete', {
+      method: 'PUT',
+      body: JSON.stringify(settings)
     })
 };

@@ -24,6 +24,7 @@ const CollectionDashboard = React.lazy(() => import('./components/CollectionDash
 import { LogOut, Home, Users, Database, FileSpreadsheet, KeyRound, BellRing, Building, LayoutGrid, BarChart3, Receipt, Trello, Copy, ShieldAlert, BadgeCent, PhoneCall, Compass, Menu, X, Trash2 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import CommandCenter from './components/CommandCenter';
+import BulkDeleteSettings from './components/BulkDeleteSettings';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
 
 export default function App() {
@@ -878,12 +879,16 @@ export default function App() {
                   )}
                   <button className={`btn ${settingsSubTab === 'inventory' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('inventory')} style={{ padding: '6px 12px', fontSize: '12px' }}>Inventory Master</button>
                   <button className={`btn ${settingsSubTab === 'whatsapp' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('whatsapp')} style={{ padding: '6px 12px', fontSize: '12px' }}>WhatsApp Campaigns</button>
+                  {currentUser.role === 'admin' && (
+                    <button className={`btn ${settingsSubTab === 'bulk-delete' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSettingsSubTab('bulk-delete')} style={{ padding: '6px 12px', fontSize: '12px' }}>Bulk Delete Settings</button>
+                  )}
                 </div>
                 <div style={{ marginTop: '8px' }}>
                   {settingsSubTab === 'backup' && <BackupMgmt onRefreshLeads={fetchCRMData} currentUser={currentUser} />}
                   {settingsSubTab === 'duplicates' && currentUser.role === 'admin' && <DuplicateManager employees={employees} />}
                   {settingsSubTab === 'inventory' && <InventoryMgmt currentUser={currentUser} />}
                   {settingsSubTab === 'whatsapp' && <WhatsAppCampaigns currentUser={currentUser} />}
+                  {settingsSubTab === 'bulk-delete' && currentUser.role === 'admin' && <BulkDeleteSettings />}
                 </div>
               </div>
             )}

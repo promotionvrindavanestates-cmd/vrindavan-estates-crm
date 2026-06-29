@@ -98,6 +98,26 @@ export default function LeadTable({
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [customWhatsAppText, setCustomWhatsAppText] = useState('');
 
+  // Smart Bulk Delete Settings & States
+  const [bulkDeleteSettings, setBulkDeleteSettings] = useState({ requireBackup: true, threshold: 20 });
+  const [safetyDialogOpen, setSafetyDialogOpen] = useState(false);
+  const [backupCompleted, setBackupCompleted] = useState(false);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await api.getBulkDeleteSettings();
+        setBulkDeleteSettings(res || { requireBackup: true, threshold: 20 });
+      } catch (err) {
+        console.error('Failed to load bulk delete settings:', err);
+      }
+    };
+    if (currentUser && currentUser.role === 'admin') {
+      loadSettings();
+    }
+  }, [currentUser]);
+
   // Extract unique projects, cities, budgets for dynamic filter dropdowns
   const uniqueProjects = [...new Set(leads.map(l => l.project).filter(Boolean))];
   const uniqueCities = [...new Set(leads.map(l => l.city).filter(Boolean))];
@@ -391,7 +411,56 @@ export default function LeadTable({
   const handleBulkDeleteTrigger = (permanent = false) => {
     setIsPermanentDelete(permanent || showTrash);
     setDeleteType(permanent || showTrash ? 'permanent' : 'trash');
-    setDeleteConfirmOpen(true);
+    
+    const count = selectedLeadIds.length;
+    const isAboveThreshold = bulkDeleteSettings.requireBackup && count > bulkDeleteSettings.threshold;
+
+    if (isAboveThreshold) {
+      setBackupCompleted(false);
+      setSafetyDialogOpen(true);
+    } else {
+      setDeleteConfirmOpen(true);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0) return;
+
+    setDownloadingBackup(true);
+    showToast('⚡ Generating safety Excel backup...', 'info');
+
+    try {
+      const response = await fetch(`${api.baseUrl || ''}/api/leads/bulk-backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ leadIds: targets })
+      });
+
+      if (!response.ok) throw new Error('Backup failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      a.download = `Leads_Backup_${todayStr}_${targets.length}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      
+      setBackupCompleted(true);
+      showToast('✅ Safety backup created successfully!', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to download safety backup', 'error');
+    } finally {
+      setDownloadingBackup(false);
+    }
   };
 
   const getEstimatedTime = (count) => {
@@ -413,7 +482,7 @@ export default function LeadTable({
     
     try {
       const isPerm = deleteType === 'permanent';
-      const res = await api.deleteLeadsBulk(targets, isPerm);
+      const res = await api.deleteLeadsBulk(targets, isPerm, backupCompleted);
       const jobId = res.jobId;
       
       showToast(`⚡ Deletion queued. Job ID: ${jobId}`, 'info');
@@ -1886,6 +1955,139 @@ export default function LeadTable({
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enterprise Safety Dialog */}
+      {safetyDialogOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+          <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '460px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239, 68, 68, 0.3)', boxShadow: '0 15px 35px rgba(0,0,0,0.6)' }}>
+            {!backupCompleted ? (
+              <>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ⚠️ Large Delete Detected
+                </h3>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                  <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Selected Leads</span>
+                  <strong style={{ fontSize: '16px', color: '#f1f5f9' }}>{selectedLeadIds.length.toLocaleString()}</strong>
+                </div>
+
+                <p style={{ fontSize: '13px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
+                  This operation will permanently remove a large amount of customer data. It is highly recommended to export a backup before executing.
+                </p>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Estimated Excel Size:</span>
+                    <strong style={{ color: '#D4AF37' }}>{(selectedLeadIds.length * 0.15).toFixed(1)} KB</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Estimated Delete Time:</span>
+                    <strong style={{ color: '#D4AF37' }}>{getEstimatedTime(selectedLeadIds.length)}</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={handleDownloadBackup}
+                    disabled={downloadingBackup}
+                    autoFocus
+                    style={{ 
+                      padding: '12px 16px', 
+                      borderRadius: '8px', 
+                      background: '#D4AF37', 
+                      color: '#05080F', 
+                      border: 'none', 
+                      fontWeight: 700, 
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    ⬇️ Download Backup
+                  </button>
+
+                  <button 
+                    className="btn" 
+                    onClick={() => {
+                      setSafetyDialogOpen(false);
+                      setDeleteConfirmOpen(true);
+                    }}
+                    style={{ 
+                      padding: '10px 16px', 
+                      borderRadius: '8px', 
+                      background: 'rgba(239, 68, 68, 0.1)', 
+                      border: '1px solid #ef4444', 
+                      color: '#ef4444', 
+                      fontWeight: 600, 
+                      cursor: 'pointer',
+                      fontSize: '13px'
+                    }}
+                  >
+                    🗑️ Delete Without Backup
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setSafetyDialogOpen(false)}
+                    style={{ 
+                      padding: '10px 16px', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      cursor: 'pointer', 
+                      background: 'none',
+                      fontSize: '13px'
+                    }}
+                  >
+                    ❌ Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#22c55e', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ✅ Backup Completed Successfully
+                </h3>
+                
+                <p style={{ fontSize: '14px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
+                  Excel backup has been generated and downloaded. Do you want to proceed with deleting these {selectedLeadIds.length} leads?
+                </p>
+
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setSafetyDialogOpen(false)}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      setSafetyDialogOpen(false);
+                      setDeleteConfirmOpen(true);
+                    }}
+                    style={{ 
+                      padding: '8px 16px', 
+                      borderRadius: '8px', 
+                      background: '#ef4444', 
+                      color: '#ffffff', 
+                      border: 'none', 
+                      fontWeight: 600, 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

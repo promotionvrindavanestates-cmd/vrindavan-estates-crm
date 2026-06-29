@@ -290,7 +290,7 @@ app.get('/api/leads/bulk/job/:jobId', authenticateToken, requireAdmin, (req, res
 });
 
 app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) => {
-  const { leadIds, permanent } = req.body;
+  const { leadIds, permanent, backupCreated } = req.body;
   if (!leadIds || leadIds.length === 0) {
     return res.status(400).json({ error: 'No lead IDs provided for deletion' });
   }
@@ -321,8 +321,11 @@ app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) 
       const status = result.failed === 0 ? 'completed' : (result.deletedCount === 0 ? 'failed' : 'completed_with_errors');
       bulkJobs[jobId].status = status;
 
+      const backupWasCreated = backupCreated === true || backupCreated === 'true' ? 'Yes' : 'No';
+      const backupName = backupWasCreated === 'Yes' ? `Leads_Backup_${new Date().toLocaleDateString('en-CA')}_${leadIds.length}.xlsx` : 'None';
+
       const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2) + ' seconds';
-      const details = `Admin: ${req.user.full_name}\nAction: Deleted ${result.deletedCount} Leads${permanent ? ' permanently' : ' (soft-deleted)'}\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}`;
+      const details = `Admin: ${req.user.full_name}\nAction: Deleted ${result.deletedCount} Leads${permanent ? ' permanently' : ' (soft-deleted)'}\nIP Address: ${ipAddress}\nDevice: ${device}\nTime Taken: ${timeTaken}\nStatus: ${status}\nJob ID: ${jobId}\nBackup Created: ${backupWasCreated}\nBackup File Name: ${backupName}\nDeleted By: ${req.user.full_name}\nDelete Time: ${new Date().toISOString()}\nTotal Leads Deleted: ${result.deletedCount}`;
       await DB.logAudit(null, 'Bulk Leads Deleted', details, req.user.id, req.user.full_name, device);
 
       // Auto-create unread bell notification reminder
@@ -511,6 +514,55 @@ app.delete('/api/leads/trash/empty', authenticateToken, requireAdmin, async (req
   } catch (error) {
     console.error('Empty trash error:', error);
     res.status(500).json({ error: error.message || 'Failed to empty trash bin' });
+  }
+});
+
+app.get('/api/settings/bulk-delete', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const settings = await DB.getBulkDeleteSettings();
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+app.put('/api/settings/bulk-delete', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const settings = await DB.updateBulkDeleteSettings(req.body);
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.post('/api/leads/bulk-backup', authenticateToken, requireAdmin, async (req, res) => {
+  const { leadIds } = req.body;
+  if (!leadIds || leadIds.length === 0) {
+    return res.status(400).json({ error: 'No lead IDs provided' });
+  }
+
+  try {
+    const leads = await DB.getLeadsByIds(leadIds);
+    const excelBuffer = generateExcelBuffer(leads);
+    const encryptedBuffer = encryptBuffer(excelBuffer);
+    
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const filename = `Leads_Backup_${todayStr}_${leadIds.length}.xlsx`;
+    const filePath = path.join(BACKUPS_DIR, `${filename}.enc`);
+    
+    fs.writeFileSync(filePath, encryptedBuffer);
+    console.log(`Saved encrypted backup: ${filename}.enc`);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(excelBuffer);
+  } catch (error) {
+    console.error('Bulk backup failed:', error);
+    res.status(500).json({ error: 'Failed to generate bulk backup' });
   }
 });
 
@@ -3117,3 +3169,75 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT} (Bound to 0.0.0.0)`);
   await seedWhatsAppTemplatesAndCampaigns();
 });
+
+// --- SMART BULK DELETE SAFETY SYSTEM HELPERS ---
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const BACKUPS_DIR = path.join(__dirname, 'backups');
+const BACKUP_ENCRYPTION_KEY = process.env.BACKUP_ENCRYPTION_KEY || 'vrindavan_estates_sec_key_32bytes_!'; // 32 bytes key
+const IV_LENGTH = 16;
+
+function generateExcelBuffer(leads) {
+  const rows = leads.map(l => ({
+    'Lead ID': l.id,
+    'Name': l.name || '',
+    'Mobile': l.phone1 || '',
+    'Alternate Mobile': l.phone2 || '',
+    'Email': l.email || '',
+    'City': l.city || '',
+    'State': l.state || '',
+    'Source': l.source || '',
+    'Project': l.project || '',
+    'Budget': l.budget || '',
+    'Status': l.status || '',
+    'Priority': l.priority || '',
+    'Assigned Employee': l.assigned_employee_name || l.assigned_employee_id || '',
+    'Follow-up Date': l.follow_up_date || '',
+    'Last Call Date': l.last_call_date || '',
+    'Notes': l.comments || '',
+    'Created Date': l.created_at || '',
+    'Updated Date': l.updated_at || ''
+  }));
+
+  const worksheet = xlsx.utils.json_to_sheet(rows);
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Leads Backup');
+  
+  return xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function encryptBuffer(buffer) {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(BACKUP_ENCRYPTION_KEY.padEnd(32).slice(0, 32)), iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  return Buffer.concat([iv, encrypted]);
+}
+
+function purgeOldBackups() {
+  if (!fs.existsSync(BACKUPS_DIR)) return;
+
+  fs.readdir(BACKUPS_DIR, (err, files) => {
+    if (err) return console.error('Failed to read backups directory:', err);
+    const now = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+    files.forEach(file => {
+      if (!file.endsWith('.enc')) return;
+      const filePath = path.join(BACKUPS_DIR, file);
+      fs.stat(filePath, (err, stats) => {
+        if (err) return;
+        if (now - stats.mtimeMs > sevenDaysMs) {
+          fs.unlink(filePath, err => {
+            if (err) console.error('Failed to delete old backup:', file);
+            else console.log('Auto-purged 7-day-old backup:', file);
+          });
+        }
+      });
+    });
+  });
+}
+
+// Run cleanup on startup and then every 24 hours
+purgeOldBackups();
+setInterval(purgeOldBackups, 24 * 60 * 60 * 1000);

@@ -901,6 +901,41 @@ const DB = {
     }
   },
 
+  async getLeadsByIds(leadIds) {
+    if (this.isCloud()) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .in('id', leadIds);
+      if (error) throw error;
+      return data || [];
+    } else {
+      const db = loadLocalDb();
+      const idSet = new Set(leadIds);
+      return db.leads.filter(l => idSet.has(l.id));
+    }
+  },
+
+  async getBulkDeleteSettings() {
+    const filePath = path.join(__dirname, 'bulk_delete_settings.json');
+    if (!fs.existsSync(filePath)) {
+      const defaultSettings = { requireBackup: true, threshold: 20 };
+      fs.writeFileSync(filePath, JSON.stringify(defaultSettings, null, 2), 'utf8');
+      return defaultSettings;
+    }
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (e) {
+      return { requireBackup: true, threshold: 20 };
+    }
+  },
+
+  async updateBulkDeleteSettings(settings) {
+    const filePath = path.join(__dirname, 'bulk_delete_settings.json');
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf8');
+    return settings;
+  },
+
   async transferAllLeads(fromEmpId, toEmpId, adminUserId) {
     if (this.isCloud()) {
       // 1. Get all leads owned by fromEmpId
