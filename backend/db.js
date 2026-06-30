@@ -138,22 +138,7 @@ function generateUuid() {
 const DB = {
   isCloud: () => isSupabaseConfigured && supabase !== null,
 
-  hasDeletedAtColumn: null,
-  async checkDeletedAtColumn() {
-    if (this.hasDeletedAtColumn !== null) return this.hasDeletedAtColumn;
-    if (!this.isCloud()) {
-      this.hasDeletedAtColumn = true;
-      return true;
-    }
-    try {
-      const { error } = await supabase.from('leads').select('deleted_at').limit(1);
-      this.hasDeletedAtColumn = !error;
-      return this.hasDeletedAtColumn;
-    } catch (e) {
-      this.hasDeletedAtColumn = false;
-      return false;
-    }
-  },
+
 
   hasCpColumns: null,
   async checkCpColumns() {
@@ -172,17 +157,14 @@ const DB = {
     }
   },
 
-  async purgeOldTrashLeads() {
+  async purgeOldRecycleLeads() {
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const isoStr = thirtyDaysAgo.toISOString();
 
       if (this.isCloud()) {
-        const hasCol = await this.checkDeletedAtColumn();
-        if (hasCol) {
-          await supabase.from('leads').delete().lt('deleted_at', isoStr);
-        }
+        await supabase.from('leads').delete().lt('deleted_at', isoStr);
       } else {
         const db = loadLocalDb();
         const initialCount = db.leads.length;
@@ -192,7 +174,7 @@ const DB = {
         }
       }
     } catch (err) {
-      console.error('Background purge old trash leads failed:', err.message);
+      console.error('Background purge old recycle leads failed:', err.message);
     }
   },
 
@@ -369,21 +351,18 @@ const DB = {
   },
 
   async getLeads(filters = {}, userId, userRole) {
-    // Run background purge of expired trash
-    this.purgeOldTrashLeads().catch(() => {});
+    // Run background purge of expired recycle leads
+    this.purgeOldRecycleLeads().catch(() => {});
 
     if (this.isCloud()) {
       let query = supabase
         .from('leads')
         .select('*, assigned_employee:users!assigned_employee_id(*), assigned_by:users!assigned_by_id(*)', { count: 'exact' });
 
-      const hasCol = await this.checkDeletedAtColumn();
-      if (hasCol) {
-        if (filters.trash === 'true' || filters.trash === true) {
-          query = query.not('deleted_at', 'is', null);
-        } else {
-          query = query.is('deleted_at', null);
-        }
+      if (filters.recycleBin === 'true' || filters.recycleBin === true) {
+        query = query.not('deleted_at', 'is', null);
+      } else {
+        query = query.is('deleted_at', null);
       }
 
       if (userRole === 'employee') {
@@ -452,14 +431,16 @@ const DB = {
       const { data, error, count } = await query.order('created_at', { ascending: false });
       if (error) throw error;
 
-      if (!hasCp && data) {
+      if (data) {
         data.forEach(l => {
           if (l.comments) {
-            const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
-            if (match) {
-              l.cp_code = match[1];
-              l.broker_name = match[2] || null;
-              l.broker_mobile = match[3] || null;
+            if (!hasCp) {
+              const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+              if (match) {
+                l.cp_code = match[1];
+                l.broker_name = match[2] || null;
+                l.broker_mobile = match[3] || null;
+              }
             }
           }
         });
@@ -479,7 +460,7 @@ const DB = {
       const db = loadLocalDb();
       let results = [...db.leads];
 
-      if (filters.trash === 'true' || filters.trash === true) {
+      if (filters.recycleBin === 'true' || filters.recycleBin === true) {
         results = results.filter(l => l.deleted_at);
       } else {
         results = results.filter(l => !l.deleted_at);
@@ -589,12 +570,14 @@ const DB = {
       }
       const { data, error } = await query.maybeSingle();
       if (error) throw error;
-      if (data && !data.cp_code && data.comments) {
-        const match = data.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
-        if (match) {
-          data.cp_code = match[1];
-          data.broker_name = match[2] || null;
-          data.broker_mobile = match[3] || null;
+      if (data && data.comments) {
+        if (!data.cp_code) {
+          const match = data.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+          if (match) {
+            data.cp_code = match[1];
+            data.broker_name = match[2] || null;
+            data.broker_mobile = match[3] || null;
+          }
         }
       }
       return data;
@@ -794,14 +777,8 @@ const DB = {
       }
     } else {
       if (this.isCloud()) {
-        const hasCol = await this.checkDeletedAtColumn();
-        if (hasCol) {
-          const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from('leads').delete().eq('id', id);
-          if (error) throw error;
-        }
+        const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        if (error) throw error;
         return true;
       } else {
         const db = loadLocalDb();
@@ -819,7 +796,7 @@ const DB = {
 
     // Queue of index positions to process
     let currentIndex = 0;
-    let currentBatchSize = 200; // Start adaptively at 200
+    let currentBatchSize = 500; // Start at 500
 
     const workers = [];
 
@@ -838,12 +815,12 @@ const DB = {
           await operationFn(batch);
           succeededCount += batch.length;
 
-          // Adaptive batching: increase size if fast, decrease if slow
+          // Adaptive batching: increase size if fast, decrease if slow (bounded 500-1000)
           const elapsed = Date.now() - startTime;
           if (elapsed < 200) {
-            currentBatchSize = Math.min(currentBatchSize + 300, 2000);
+            currentBatchSize = Math.min(currentBatchSize + 250, 1000);
           } else if (elapsed > 800) {
-            currentBatchSize = Math.max(currentBatchSize - 300, 200);
+            currentBatchSize = Math.max(currentBatchSize - 250, 500);
           }
         } catch (err) {
           console.error(`Batch execution failed for range ${start}-${start + batch.length}:`, err.message);
@@ -901,14 +878,8 @@ const DB = {
         }
       } else {
         if (this.isCloud()) {
-          const hasCol = await this.checkDeletedAtColumn();
-          if (hasCol) {
-            const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', batchIds);
-            if (error) throw error;
-          } else {
-            const { error } = await supabase.from('leads').delete().in('id', batchIds);
-            if (error) throw error;
-          }
+          const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', batchIds);
+          if (error) throw error;
         } else {
           const db = loadLocalDb();
           const batchSet = new Set(batchIds);
@@ -934,11 +905,8 @@ const DB = {
 
     const operationFn = async (batchIds) => {
       if (this.isCloud()) {
-        const hasCol = await this.checkDeletedAtColumn();
-        if (hasCol) {
-          const { error } = await supabase.from('leads').update({ deleted_at: null }).in('id', batchIds);
-          if (error) throw error;
-        }
+        const { error } = await supabase.from('leads').update({ deleted_at: null }).in('id', batchIds);
+        if (error) throw error;
       } else {
         const db = loadLocalDb();
         const batchSet = new Set(batchIds);
@@ -983,19 +951,16 @@ const DB = {
     };
   },
 
-  async emptyTrash(userId, userRole) {
-    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can empty trash');
+  async emptyRecycleBin(userId, userRole) {
+    if (userRole !== 'admin') throw new Error('Unauthorized: Only Admin can empty recycle bin');
     
     if (this.isCloud()) {
-      const { data: trashedLeads, error: fetchErr } = await supabase
-        .from('leads')
-        .select('id')
-        .not('deleted_at', 'is', null);
+      const { data: recycleLeads, error: fetchErr } = await supabase.from('leads').select('id').not('deleted_at', 'is', null);
       
       if (fetchErr) throw fetchErr;
-      if (!trashedLeads || trashedLeads.length === 0) return { deletedCount: 0 };
+      if (!recycleLeads || recycleLeads.length === 0) return { deletedCount: 0 };
       
-      const ids = trashedLeads.map(l => l.id);
+      const ids = recycleLeads.map(l => l.id);
       const result = await this.deleteLeadsBulk(ids, userId, userRole, true);
       return { deletedCount: result.deletedCount };
     } else {
@@ -1017,14 +982,16 @@ const DB = {
       if (error) throw error;
       
       const hasCp = await this.checkCpColumns();
-      if (!hasCp && data) {
+      if (data) {
         data.forEach(l => {
           if (l.comments) {
-            const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
-            if (match) {
-              l.cp_code = match[1];
-              l.broker_name = match[2] || null;
-              l.broker_mobile = match[3] || null;
+            if (!hasCp) {
+              const match = l.comments.match(/\[CP:\s*([a-zA-Z0-9_-]+)(?:\s*\|\s*Broker:\s*(.*?)\s*\((.*?)\))?\]/);
+              if (match) {
+                l.cp_code = match[1];
+                l.broker_name = match[2] || null;
+                l.broker_mobile = match[3] || null;
+              }
             }
           }
         });

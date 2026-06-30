@@ -1,25 +1,146 @@
 {
   "users": [
     {
-      "id": "admin-id-1",
+      "id": "11111111-1111-1111-1111-111111111111",
       "username": "admin",
       "role": "admin",
-      "full_name": "Vrindavan Admin",
+      "full_name": "Admin User",
+      "password_hash": "123",
       "status": "active",
       "token_version": 1
     }
   ],
-  "leads": [],
+  "leads": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Abhishek CP Lead",
+      "phone1": "9876543210",
+      "cp_code": "LDS",
+      "broker_name": "Broker Raj",
+      "broker_mobile": "9999888877",
+      "status": "Booked",
+      "booking_token_amount": 50000
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Direct Lead",
+      "phone1": "8765432109",
+      "status": "New"
+    },
+    {
+      "id": "2uxldp2z2msg53mxw0jc3c",
+      "created_at": "2026-06-29T03:12:21.505Z",
+      "name": "Referral Client",
+      "city": "",
+      "phone1": "9988776655",
+      "phone2": "",
+      "budget": "",
+      "project": "",
+      "requirement": "",
+      "comments": "",
+      "status": "Warm",
+      "follow_up_date": null,
+      "assigned_employee_id": null,
+      "assigned_by_id": null,
+      "assigned_date": null,
+      "lead_source": "Website",
+      "site_visit_date": null,
+      "site_visit_status": "None",
+      "site_visit_remarks": "",
+      "booking_token_amount": 0,
+      "booking_date": null,
+      "booking_status": "None",
+      "last_call_date": null,
+      "last_response": null,
+      "cp_code": "VEX",
+      "broker_name": "Broker Dev",
+      "broker_mobile": "8888877777"
+    }
+  ],
+  "bookings": [
+    {
+      "id": "b1",
+      "lead_id": "22222222-2222-2222-2222-222222222222",
+      "token_amount": 50000,
+      "booking_amount": 100000
+    }
+  ],
   "call_logs": [],
   "lead_transfers": [],
   "audit_trails": [],
+  "device_sessions": [],
+  "reminders": [],
   "projects": [],
   "inventory": [],
-  "bookings": [],
   "payments": [],
   "payment_installments": [],
-  "whatsapp_templates": [],
-  "whatsapp_campaigns": [],
+  "whatsapp_templates": [
+    {
+      "id": "57llbgg6b2ub2x9nb8sr9",
+      "created_at": "2026-06-29T03:12:19.309Z",
+      "name": "welcome_message",
+      "category": "Utility",
+      "body_text": "Hello {customer_name}, thank you for inquiring about {project_name} with Vrindavan Estates. An executive will contact you shortly.",
+      "media_url": "",
+      "variables": [
+        "customer_name",
+        "project_name"
+      ]
+    },
+    {
+      "id": "z4x6xnjw9u7jfgeqhzfve",
+      "created_at": "2026-06-29T03:12:19.310Z",
+      "name": "followup_reminder",
+      "category": "Utility",
+      "body_text": "Hello {customer_name}, this is a reminder regarding your scheduled {type} today at {time} for {project_name}. Regards!",
+      "media_url": "",
+      "variables": [
+        "customer_name",
+        "type",
+        "time",
+        "project_name"
+      ]
+    },
+    {
+      "id": "324jokd0xpahu3kl28aatc",
+      "created_at": "2026-06-29T03:12:19.311Z",
+      "name": "site_visit_invite",
+      "category": "Marketing",
+      "body_text": "Hi {customer_name}, we would love to invite you for a site visit to {project_name} in {location}. Let us know your convenient time. - Vrindavan Estates",
+      "media_url": "",
+      "variables": [
+        "customer_name",
+        "project_name",
+        "location"
+      ]
+    },
+    {
+      "id": "nj7j5076qokt13l6712z5d",
+      "created_at": "2026-06-29T03:12:19.312Z",
+      "name": "booking_confirmation",
+      "category": "Utility",
+      "body_text": "Hi {customer_name}, congratulations! We have confirmed your booking for Unit {unit_number} in {project_name}. Token amount: ₹{token_amount}.",
+      "media_url": "",
+      "variables": [
+        "customer_name",
+        "unit_number",
+        "project_name",
+        "token_amount"
+      ]
+    }
+  ],
+  "whatsapp_campaigns": [
+    {
+      "id": "x2is5zkqgjj5pp9bxvacs",
+      "created_at": "2026-06-29T03:12:19.313Z",
+      "name": "Click-to-WhatsApp Messages",
+      "template_id": "57llbgg6b2ub2x9nb8sr9",
+      "filters_used": {
+        "system": "Click-to-WhatsApp fallback"
+      },
+      "status": "Completed"
+    }
+  ],
   "whatsapp_campaign_logs": [],
   "distribution_rules": [],
   "site_visits": [],

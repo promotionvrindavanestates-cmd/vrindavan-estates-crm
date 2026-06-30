@@ -525,8 +525,8 @@ export const api = {
   getBulkJobStatus: (jobId) =>
     request(`/api/leads/bulk/job/${jobId}`),
 
-  emptyTrash: () =>
-    request('/api/leads/trash/empty', {
+  emptyRecycleBin: () =>
+    request('/api/leads/recycle-bin/empty', {
       method: 'DELETE'
     }),
 

@@ -679,8 +679,8 @@ export default function App() {
 
           {currentUser.role === 'admin' && (
             <button 
-              className={`sidebar-item ${activeTab === 'trash' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('trash'); setSidebarOpen(false); }}
+              className={`sidebar-item ${activeTab === 'recycle-bin' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('recycle-bin'); setSidebarOpen(false); }}
             >
               <Trash2 size={18} /> Recycle Bin
             </button>
@@ -866,8 +866,8 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'trash' && currentUser.role === 'admin' && (
-              <LeadTable currentUser={currentUser} defaultShowTrash={true} />
+            {activeTab === 'recycle-bin' && currentUser.role === 'admin' && (
+              <LeadTable currentUser={currentUser} defaultShowRecycleBin={true} />
             )}
 
             {activeTab === 'settings' && (

@@ -16,7 +16,7 @@ export default function LeadTable({
   onLogCall,
   onAssignLead,
   onViewHistory,
-  defaultShowTrash = false
+  defaultShowRecycleBin = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
@@ -59,18 +59,17 @@ export default function LeadTable({
   const [bulkProjectMapping, setBulkProjectMapping] = useState({});
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
-  // Phase 9 Bulk Delete & Trash Bin States (Optimistic UI & Background Execution)
-  const [showTrash, setShowTrash] = useState(defaultShowTrash);
+  // Phase 9 Bulk Delete & Recycle Bin States (Optimistic UI & Background Execution)
+  const [showRecycleBin, setShowRecycleBin] = useState(defaultShowRecycleBin);
   const [deletingLeadIds, setDeletingLeadIds] = useState([]);
   const [toasts, setToasts] = useState([]);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isPermanentDelete, setIsPermanentDelete] = useState(false);
-  const [deleteType, setDeleteType] = useState('trash'); // 'trash' or 'permanent'
+  const [deleteType, setDeleteType] = useState('soft'); // 'soft' or 'permanent'
 
-  const [emptyTrashConfirmOpen, setEmptyTrashConfirmOpen] = useState(false);
-  const [emptyTrashInput, setEmptyTrashInput] = useState('');
-  const [emptyingTrash, setEmptyingTrash] = useState(false);
+  const [emptyRecycleBinConfirmOpen, setEmptyRecycleBinConfirmOpen] = useState(false);
+  const [emptyingRecycleBin, setEmptyingRecycleBin] = useState(false);
   
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [selectedBulkStatus, setSelectedBulkStatus] = useState('');
@@ -221,7 +220,7 @@ export default function LeadTable({
         cp_code: selectedCpCode,
         page: currentPage,
         limit: limit,
-        trash: showTrash
+        recycleBin: showRecycleBin
       });
 
       if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -258,7 +257,7 @@ export default function LeadTable({
     siteVisitCompleted,
     selectedCpCode,
     limit,
-    showTrash
+    showRecycleBin
   ]);
 
   // Load leads whenever pagination or filters change
@@ -280,7 +279,7 @@ export default function LeadTable({
     currentPage,
     limit,
     leads.length,
-    showTrash
+    showRecycleBin
   ]);
 
   // Server-side filtered and paginated leads (filtered optimistically for background deletions)
@@ -414,7 +413,7 @@ export default function LeadTable({
         calls_today: callsToday,
         site_visit_completed: siteVisitCompleted,
         limit: 999999,
-        trash: showTrash
+        recycleBin: showRecycleBin
       });
       const list = data && data.leads ? data.leads : (Array.isArray(data) ? data : []);
       setSelectedLeadIds(list.map(l => l.id));
@@ -425,9 +424,9 @@ export default function LeadTable({
     }
   };
 
-  const handleBulkDeleteTrigger = (permanent = false) => {
-    setIsPermanentDelete(permanent || showTrash);
-    setDeleteType(permanent || showTrash ? 'permanent' : 'trash');
+  const handleBulkDeleteTrigger = (permanent = true) => {
+    setIsPermanentDelete(true);
+    setDeleteType('permanent');
     
     const count = selectedLeadIds.length;
     const isAboveThreshold = bulkDeleteSettings.requireBackup && count > bulkDeleteSettings.threshold;
@@ -487,6 +486,28 @@ export default function LeadTable({
     return '< 15 seconds';
   };
 
+  const handleExecuteSoftDeleteBulk = async () => {
+    const targets = [...selectedLeadIds];
+    if (targets.length === 0) return;
+
+    setBulkDeleting(true);
+    setLeads(prev => prev.filter(l => !targets.includes(l.id)));
+    setTotalCount(prev => Math.max(0, prev - targets.length));
+    setSelectedLeadIds([]);
+
+    showToast(`✅ ${targets.length} Leads moved to Recycle Bin`, 'success');
+
+    try {
+      await api.deleteLeadsBulk(targets, false, false);
+      setBulkDeleting(false);
+      fetchLeads();
+    } catch (err) {
+      showToast('Failed to move leads to Recycle Bin', 'error');
+      setBulkDeleting(false);
+      fetchLeads();
+    }
+  };
+
   const handleExecuteBulkDelete = async () => {
     setDeleteConfirmOpen(false);
     
@@ -516,7 +537,7 @@ export default function LeadTable({
             setToasts(prev => prev.filter(t => t.id !== jobId));
             
             if (job.failed === 0) {
-              const isSoftDelete = deleteType === 'trash' && !showTrash;
+              const isSoftDelete = deleteType === 'soft' && !showRecycleBin;
               if (isSoftDelete) {
                 const undoAction = (
                   <button 
@@ -575,9 +596,9 @@ export default function LeadTable({
                     Undo (10s)
                   </button>
                 );
-                showToast(`✅ ${job.succeeded} Leads Deleted`, 'success', undoAction);
+                showToast(`✅ ${job.succeeded} Leads moved to Recycle Bin`, 'success', undoAction);
               } else {
-                showToast(`${job.succeeded} Leads deleted permanently`, 'success');
+                showToast(`🗑 ${job.succeeded} Leads permanently deleted`, 'success');
               }
               setSelectedLeadIds([]);
               setDeletingLeadIds([]);
@@ -617,20 +638,18 @@ export default function LeadTable({
     }
   };
 
-  const handleExecuteEmptyTrash = async () => {
-    if (emptyTrashInput !== 'DELETE') return;
-    setEmptyTrashConfirmOpen(false);
-    setEmptyingTrash(true);
-    showToast('⚡ Emptying trash bin in background...', 'info');
+  const handleExecuteEmptyRecycleBin = async () => {
+    setEmptyRecycleBinConfirmOpen(false);
+    setEmptyingRecycleBin(true);
+    showToast('⚡ Emptying Recycle Bin in background...', 'info');
     try {
-      const res = await api.emptyTrash();
-      showToast(`✅ Trash bin emptied: ${res.deletedCount} leads permanently purged.`, 'success');
-      setEmptyTrashInput('');
+      const res = await api.emptyRecycleBin();
+      showToast(`✅ Recycle Bin emptied: ${res.deletedCount} leads permanently purged.`, 'success');
       fetchLeads();
     } catch (err) {
-      showToast('Failed to empty trash bin', 'error');
+      showToast('Failed to empty Recycle Bin', 'error');
     } finally {
-      setEmptyingTrash(false);
+      setEmptyingRecycleBin(false);
     }
   };
 
@@ -639,7 +658,7 @@ export default function LeadTable({
     if (targets.length === 0) return;
 
     setBulkRestoring(true);
-    // Optimistic UI: instantly hide restored leads from Trash Bin view
+    // Optimistic UI: instantly hide restored leads from Recycle Bin view
     setDeletingLeadIds(prev => [...new Set([...prev, ...targets])]);
 
     try {
@@ -1141,33 +1160,11 @@ export default function LeadTable({
 
         <div class="table-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h3>{showTrash ? `Trash Bin (${totalCount})` : (employeeFilterHeading || `Leads Directory (${totalCount})`)}</h3>
+            <h3>{showRecycleBin ? `Recycle Bin (${totalCount})` : (employeeFilterHeading || `Leads Directory (${totalCount})`)}</h3>
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
-            {currentUser.role === 'admin' && (
-              <button 
-                type="button"
-                className={`btn ${showTrash ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px', 
-                  background: showTrash ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                  border: showTrash ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.06)',
-                  color: showTrash ? '#ef4444' : 'var(--text-muted)'
-                }}
-                onClick={() => {
-                  const targetTrash = !showTrash;
-                  setShowTrash(targetTrash);
-                  setSelectedLeadIds([]);
-                  setCurrentPage(1);
-                }}
-              >
-                🗑️ {showTrash ? 'View Active Leads' : 'View Trash Bin'}
-              </button>
-            )}
-            {showTrash && currentUser.role === 'admin' && (
+            {showRecycleBin && currentUser.role === 'admin' && (
               <button 
                 type="button"
                 className="btn"
@@ -1181,23 +1178,24 @@ export default function LeadTable({
                   fontWeight: 600
                 }}
                 onClick={() => {
-                  setEmptyTrashInput('');
-                  setEmptyTrashConfirmOpen(true);
+                  setEmptyRecycleBinConfirmOpen(true);
                 }}
               >
-                💀 Empty Trash
+                🗑 Empty Recycle Bin
               </button>
             )}
-            <button class="btn btn-primary" onClick={onAddLead}>
-              <Plus size={16} /> Add Lead
-            </button>
+            {!showRecycleBin && (
+              <button class="btn btn-primary" onClick={onAddLead}>
+                <Plus size={16} /> Add Lead
+              </button>
+            )}
           </div>
         </div>
 
         <div class="table-container">
           {filteredLeads.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-              No leads match the filters. {showTrash ? 'Trash bin is empty.' : 'Click "Add Lead" to create a new one.'}
+              No leads match the filters. {showRecycleBin ? 'Recycle Bin is empty.' : 'Click "Add Lead" to create a new one.'}
             </div>
           ) : (
             <table>
@@ -1400,7 +1398,7 @@ export default function LeadTable({
                       
                       <td data-label="Actions" style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '8px' }}>
-                          {!showTrash ? (
+                          {!showRecycleBin ? (
                             <>
                               <button 
                                 class="action-icon-btn" 
@@ -1420,10 +1418,16 @@ export default function LeadTable({
                                 <button 
                                   class="action-icon-btn" 
                                   style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
-                                  title="Move to Trash"
+                                  title="Move to Recycle Bin"
                                   onClick={async () => {
-                                    if (confirm('Are you sure you want to move this lead to the Trash Bin?')) {
+                                    setLeads(prev => prev.filter(item => item.id !== l.id));
+                                    setTotalCount(prev => Math.max(0, prev - 1));
+                                    showToast('✅ Lead moved to Recycle Bin', 'success');
+                                    try {
                                       await api.deleteLeadsBulk([l.id], false);
+                                      fetchLeads();
+                                    } catch (err) {
+                                      showToast('Failed to delete lead', 'error');
                                       fetchLeads();
                                     }
                                   }}
@@ -1439,8 +1443,16 @@ export default function LeadTable({
                                 title="Restore Lead"
                                 style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.15)', background: 'none' }}
                                 onClick={async () => {
-                                  await api.restoreLeadsBulk([l.id]);
-                                  fetchLeads();
+                                  setLeads(prev => prev.filter(item => item.id !== l.id));
+                                  setTotalCount(prev => Math.max(0, prev - 1));
+                                  showToast('✅ Lead restored to Leads Directory', 'success');
+                                  try {
+                                    await api.restoreLeadsBulk([l.id]);
+                                    fetchLeads();
+                                  } catch (err) {
+                                    showToast('Failed to restore lead', 'error');
+                                    fetchLeads();
+                                  }
                                 }}
                               >
                                 ♻️
@@ -1729,7 +1741,7 @@ export default function LeadTable({
           <div style={{ height: '32px', width: '1px', background: 'rgba(212, 175, 55, 0.25)' }}></div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {!showTrash ? (
+            {!showRecycleBin ? (
               <>
                 <button 
                   type="button" 
@@ -1746,9 +1758,9 @@ export default function LeadTable({
                     cursor: bulkDeleting ? 'not-allowed' : 'pointer'
                   }}
                   disabled={bulkDeleting || bulkRestoring || bulkUpdatingStatus || bulkUpdatingPriority}
-                  onClick={() => handleBulkDeleteTrigger(false)}
+                  onClick={handleExecuteSoftDeleteBulk}
                 >
-                  {bulkDeleting && !isPermanentDelete ? '⏳ Deleting...' : '🗑️ Move to Trash'}
+                  {bulkDeleting && !isPermanentDelete ? '⏳ Deleting...' : '🗑️ Move to Recycle Bin'}
                 </button>
 
                 <button 
@@ -1899,8 +1911,8 @@ export default function LeadTable({
       {deleteConfirmOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
           <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(212,175,55,0.25)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: deleteType === 'permanent' ? '#ef4444' : '#D4AF37', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {deleteType === 'permanent' ? '⚠️ Delete Permanently' : '🗑️ Move to Trash'}
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ⚠️ Delete Permanently
             </h3>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.15)' }}>
@@ -1908,67 +1920,9 @@ export default function LeadTable({
               <strong style={{ fontSize: '16px', color: '#f1f5f9' }}>{selectedLeadIds.length}</strong>
             </div>
 
-            {showTrash ? (
-              <p style={{ fontSize: '13px', color: '#ef4444', margin: 0, lineHeight: 1.5 }}>
-                These leads are already in the Trash Bin. Proceeding will permanently purge them and all cascading relational records. This cannot be undone.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '10px', 
-                    padding: '12px', 
-                    borderRadius: '8px', 
-                    background: deleteType === 'trash' ? 'rgba(212, 175, 55, 0.08)' : 'rgba(255,255,255,0.01)', 
-                    border: `1px solid ${deleteType === 'trash' ? 'rgba(212, 175, 55, 0.4)' : 'rgba(255,255,255,0.05)'}`, 
-                    cursor: 'pointer' 
-                  }}
-                  onClick={() => setDeleteType('trash')}
-                >
-                  <input 
-                    type="radio" 
-                    name="deleteType" 
-                    value="trash" 
-                    checked={deleteType === 'trash'} 
-                    onChange={() => setDeleteType('trash')} 
-                    style={{ accentColor: '#D4AF37' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#f1f5f9' }}>Move to Trash Bin (Recommended)</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Soft deletes records for 30 days. Restorable at any time.</span>
-                  </div>
-                </label>
-
-                <label 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '10px', 
-                    padding: '12px', 
-                    borderRadius: '8px', 
-                    background: deleteType === 'permanent' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.01)', 
-                    border: `1px solid ${deleteType === 'permanent' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.05)'}`, 
-                    cursor: 'pointer' 
-                  }}
-                  onClick={() => setDeleteType('permanent')}
-                >
-                  <input 
-                    type="radio" 
-                    name="deleteType" 
-                    value="permanent" 
-                    checked={deleteType === 'permanent'} 
-                    onChange={() => setDeleteType('permanent')} 
-                    style={{ accentColor: '#ef4444' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ef4444' }}>Delete Permanently (Risky)</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Purge records instantly. Cannot be recovered.</span>
-                  </div>
-                </label>
-              </div>
-            )}
+            <p style={{ fontSize: '13px', color: '#ef4444', margin: 0, lineHeight: 1.5 }}>
+              These leads are in the Recycle Bin. Proceeding will permanently purge them. This cannot be undone.
+            </p>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -2137,45 +2091,23 @@ export default function LeadTable({
         </div>
       )}
 
-      {/* Empty Trash Confirmation Modal */}
-      {emptyTrashConfirmOpen && (
+      {/* Empty Recycle Bin Confirmation Modal */}
+      {emptyRecycleBinConfirmOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
           <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239, 68, 68, 0.25)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              ⚠️ Empty Recycle Bin?
+              🗑 Empty Recycle Bin?
             </h3>
             
             <p style={{ fontSize: '13px', color: '#f1f5f9', margin: 0, lineHeight: 1.5 }}>
-              Are you sure you want to permanently purge all trash leads? This action will clean the entire Recycle Bin, cascade delete all call logs, reminders, and database connections. <strong>This action cannot be undone.</strong>
+              This action cannot be undone. Delete all recycle records permanently.
             </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Type <strong style={{ color: '#ef4444' }}>DELETE</strong> to confirm:</span>
-              <input 
-                type="text" 
-                value={emptyTrashInput} 
-                onChange={(e) => setEmptyTrashInput(e.target.value)} 
-                placeholder="DELETE"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)', 
-                  border: '1.5px solid rgba(239, 68, 68, 0.3)', 
-                  borderRadius: '8px', 
-                  padding: '10px', 
-                  color: '#f1f5f9', 
-                  fontSize: '14px', 
-                  textAlign: 'center', 
-                  fontWeight: 'bold',
-                  outline: 'none'
-                }} 
-              />
-            </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '6px' }}>
               <button 
                 className="btn btn-secondary" 
                 onClick={() => {
-                  setEmptyTrashConfirmOpen(false);
-                  setEmptyTrashInput('');
+                  setEmptyRecycleBinConfirmOpen(false);
                 }}
                 style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'none' }}
               >
@@ -2183,8 +2115,8 @@ export default function LeadTable({
               </button>
               <button 
                 className="btn btn-primary" 
-                onClick={handleExecuteEmptyTrash}
-                disabled={emptyTrashInput !== 'DELETE' || emptyingTrash}
+                onClick={handleExecuteEmptyRecycleBin}
+                disabled={emptyingRecycleBin}
                 style={{ 
                   padding: '8px 16px', 
                   borderRadius: '8px', 
@@ -2192,11 +2124,10 @@ export default function LeadTable({
                   color: '#ffffff', 
                   border: 'none', 
                   fontWeight: 600, 
-                  cursor: emptyTrashInput === 'DELETE' ? 'pointer' : 'not-allowed',
-                  opacity: emptyTrashInput === 'DELETE' ? 1 : 0.5
+                  cursor: 'pointer'
                 }}
               >
-                {emptyingTrash ? 'Purging...' : 'Purge All Permanently'}
+                {emptyingRecycleBin ? 'Purging...' : 'Confirm'}
               </button>
             </div>
           </div>

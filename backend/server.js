@@ -231,7 +231,7 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
       // Pagination parameters
       page: req.query.page,
       limit: req.query.limit,
-      trash: req.query.trash,
+      recycleBin: req.query.recycleBin,
       cp_code: req.query.cp_code
     };
 
@@ -2796,20 +2796,7 @@ app.get('/api/leads/:id/timeline', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/test-db', async (req, res) => {
-  try {
-    const hasCol = await DB.checkDeletedAtColumn();
-    const envKeys = Object.keys(process.env);
-    res.json({
-      supabaseUrl: process.env.SUPABASE_URL,
-      hasDeletedAtColumn: hasCol,
-      envKeys,
-      dbIsCloud: DB.isCloud()
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 // --- PHASE 2: ADVANCED ANALYTICS DASHBOARDS ---
 
