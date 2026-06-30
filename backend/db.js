@@ -1146,6 +1146,7 @@ const DB = {
         const { data: l, error } = await supabase
           .from('leads')
           .select('id, status, booking_status, booking_token_amount, comments')
+          .is('deleted_at', null)
           .not('comments', 'is', null)
           .like('comments', '%[CP:%');
         if (error) throw error;
@@ -1162,6 +1163,7 @@ const DB = {
         const { data: l } = await supabase
           .from('leads')
           .select('id, cp_code, status, booking_status, booking_token_amount')
+          .is('deleted_at', null)
           .not('cp_code', 'is', null)
           .not('cp_code', 'eq', '');
         leads = l || [];
@@ -1720,7 +1722,8 @@ const DB = {
       const { data: leads, error: lErr } = await supabase
         .from('leads')
         .select('status')
-        .eq('assigned_employee_id', employeeId);
+        .eq('assigned_employee_id', employeeId)
+        .is('deleted_at', null);
       if (lErr) throw lErr;
 
       const leadsCount = leads.length;
@@ -1788,8 +1791,9 @@ const DB = {
       // 6. Booking stats & values
       const { data: bookings, error: bErr } = await supabase
         .from('bookings')
-        .select('id, token_amount, booking_amount, created_at, payments(amount_received, balance, total_cost)')
-        .eq('executive_id', employeeId);
+        .select('id, token_amount, booking_amount, created_at, leads!inner(*), payments(amount_received, balance, total_cost)')
+        .eq('executive_id', employeeId)
+        .is('leads.deleted_at', null);
       if (bErr) throw bErr;
 
       const totalBookings = bookings.length;
@@ -1904,7 +1908,7 @@ const DB = {
       const profile = db.users.find(u => u.id === employeeId);
       if (!profile) throw new Error('Employee not found');
 
-      const empLeads = db.leads.filter(l => l.assigned_employee_id === employeeId);
+      const empLeads = db.leads.filter(l => l.assigned_employee_id === employeeId && !l.deleted_at);
       const leadsCount = empLeads.length;
 
       const statusCounts = { New: 0, Hot: 0, Warm: 0, Cold: 0, Booked: 0 };
@@ -1938,7 +1942,7 @@ const DB = {
 
       const visits = (db.site_visits || []).filter(v => {
         const lead = db.leads.find(l => l.id === v.lead_id);
-        return lead && lead.assigned_employee_id === employeeId;
+        return lead && lead.assigned_employee_id === employeeId && !lead.deleted_at;
       });
 
       let visitsScheduled = 0;
@@ -1954,7 +1958,10 @@ const DB = {
         }
       });
 
-      const bookings = db.bookings.filter(b => b.executive_id === employeeId);
+      const bookings = db.bookings.filter(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        return b.executive_id === employeeId && lead && !lead.deleted_at;
+      });
       const totalBookings = bookings.length;
       let bookingValue = 0;
       let collectionReceived = 0;
@@ -3372,7 +3379,7 @@ const DB = {
   // --- PHASE 3: REMINDERS ---
   async getReminders(employeeId = null, role = 'admin') {
     if (this.isCloud()) {
-      let query = supabase.from('reminders').select('*, leads(*)');
+      let query = supabase.from('reminders').select('*, leads!inner(*)').is('leads.deleted_at', null);
       if (role === 'employee' && employeeId) {
         query = query.eq('assigned_employee_id', employeeId);
       }
@@ -3387,9 +3394,10 @@ const DB = {
         list = list.filter(r => r.assigned_employee_id === employeeId);
       }
       return list.map(r => {
-        const lead = db.leads.find(l => l.id === r.lead_id);
+        const lead = db.leads.find(l => l.id === r.lead_id && !l.deleted_at);
         return { ...r, leads: lead || null };
-      }).sort((a, b) => a.reminder_date.localeCompare(b.reminder_date));
+      }).filter(r => r.leads !== null)
+        .sort((a, b) => a.reminder_date.localeCompare(b.reminder_date));
     }
   },
 
@@ -3474,7 +3482,8 @@ const DB = {
       let leadsQuery = supabase
         .from('leads')
         .select('*, assigned_employee:users!assigned_employee_id(*)')
-        .gt('created_at', sinceTimestamp);
+        .gt('created_at', sinceTimestamp)
+        .is('deleted_at', null);
       if (role === 'employee') {
         leadsQuery = leadsQuery.eq('assigned_employee_id', userId);
       }
@@ -3483,8 +3492,9 @@ const DB = {
 
       let bookingsQuery = supabase
         .from('bookings')
-        .select('*, leads(*), projects(*), inventory(*)')
-        .gt('created_at', sinceTimestamp);
+        .select('*, leads!inner(*), projects(*), inventory(*)')
+        .gt('created_at', sinceTimestamp)
+        .is('leads.deleted_at', null);
       const { data: newBookings, error: bookingsErr } = await bookingsQuery;
       if (bookingsErr) throw bookingsErr;
 
@@ -3496,9 +3506,10 @@ const DB = {
       const todayStr = new Date().toISOString().split('T')[0];
       let remindersQuery = supabase
         .from('reminders')
-        .select('*, leads(*)')
+        .select('*, leads!inner(*)')
         .eq('reminder_date', todayStr)
-        .eq('is_read', false);
+        .eq('is_read', false)
+        .is('leads.deleted_at', null);
       if (role === 'employee') {
         remindersQuery = remindersQuery.eq('assigned_employee_id', userId);
       }
@@ -3507,9 +3518,10 @@ const DB = {
 
       let missedQuery = supabase
         .from('reminders')
-        .select('*, leads(*)')
+        .select('*, leads!inner(*)')
         .lt('reminder_date', todayStr)
-        .eq('is_read', false);
+        .eq('is_read', false)
+        .is('leads.deleted_at', null);
       if (role === 'employee') {
         missedQuery = missedQuery.eq('assigned_employee_id', userId);
       }
@@ -3530,7 +3542,7 @@ const DB = {
       const newLeads = db.leads.filter(l => {
         const isNew = new Date(l.created_at) > sinceDate;
         const isMatch = role === 'employee' ? l.assigned_employee_id === userId : true;
-        return isNew && isMatch;
+        return isNew && isMatch && !l.deleted_at;
       }).map(l => {
         const emp = db.users.find(u => u.id === l.assigned_employee_id);
         return { ...l, assigned_employee: emp || null };
@@ -3538,10 +3550,11 @@ const DB = {
 
       const newBookings = db.bookings.filter(b => {
         const isNew = new Date(b.created_at) > sinceDate;
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        if (!lead || lead.deleted_at) return false;
         let isMatch = true;
         if (role === 'employee') {
-          const lead = db.leads.find(l => l.id === b.lead_id);
-          isMatch = b.executive_id === userId || (lead && lead.assigned_employee_id === userId);
+          isMatch = b.executive_id === userId || lead.assigned_employee_id === userId;
         }
         return isNew && isMatch;
       }).map(b => {
@@ -3555,7 +3568,8 @@ const DB = {
         const isToday = r.reminder_date === todayStr;
         const isActive = !r.is_read;
         const isMatch = role === 'employee' ? r.assigned_employee_id === userId : true;
-        return isToday && isActive && isMatch;
+        const lead = db.leads.find(l => l.id === r.lead_id);
+        return isToday && isActive && isMatch && lead && !lead.deleted_at;
       }).map(r => {
         const lead = db.leads.find(l => l.id === r.lead_id);
         return { ...r, leads: lead || null };
@@ -3565,7 +3579,8 @@ const DB = {
         const isPast = r.reminder_date < todayStr;
         const isActive = !r.is_read;
         const isMatch = role === 'employee' ? r.assigned_employee_id === userId : true;
-        return isPast && isActive && isMatch;
+        const lead = db.leads.find(l => l.id === r.lead_id);
+        return isPast && isActive && isMatch && lead && !lead.deleted_at;
       }).map(r => {
         const lead = db.leads.find(l => l.id === r.lead_id);
         return { ...r, leads: lead || null };
@@ -3985,12 +4000,14 @@ const DB = {
     if (this.isCloud()) {
       const { data: leads, error: errLeads } = await supabase
         .from('leads')
-        .select('id, lead_source, status');
+        .select('id, lead_source, status')
+        .is('deleted_at', null);
       if (errLeads) throw errLeads;
 
       const { data: bookings, error: errBookings } = await supabase
         .from('bookings')
-        .select('id, lead_id, token_amount, booking_amount');
+        .select('id, lead_id, token_amount, booking_amount, leads!inner(*)')
+        .is('leads.deleted_at', null);
       if (errBookings) throw errBookings;
 
       const leadMap = {};
@@ -4023,8 +4040,11 @@ const DB = {
       }));
     } else {
       const db = loadLocalDb();
-      const leads = db.leads || [];
-      const bookings = db.bookings || [];
+      const leads = (db.leads || []).filter(l => !l.deleted_at);
+      const bookings = (db.bookings || []).filter(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        return lead && !lead.deleted_at;
+      });
 
       const leadMap = {};
       leads.forEach(l => {
@@ -4064,7 +4084,7 @@ const DB = {
     let siteVisits = [];
 
     if (this.isCloud()) {
-      let leadQuery = supabase.from('leads').select('id, status, assigned_employee_id');
+      let leadQuery = supabase.from('leads').select('id, status, assigned_employee_id').is('deleted_at', null);
       if (employeeId) {
         leadQuery = leadQuery.eq('assigned_employee_id', employeeId);
       }
@@ -4083,7 +4103,7 @@ const DB = {
       }
     } else {
       const db = loadLocalDb();
-      leads = db.leads || [];
+      leads = (db.leads || []).filter(l => !l.deleted_at);
       if (employeeId) {
         leads = leads.filter(l => l.assigned_employee_id === employeeId);
       }
@@ -4119,7 +4139,7 @@ const DB = {
     let users = [];
 
     if (this.isCloud()) {
-      let query = supabase.from('bookings').select('*, leads(*), projects(*), users!executive_id(*)').order('booking_date', { ascending: false });
+      let query = supabase.from('bookings').select('*, leads!inner(*), projects(*), users!executive_id(*)').is('leads.deleted_at', null).order('booking_date', { ascending: false });
       if (employeeId) {
         query = query.eq('executive_id', employeeId);
       }
@@ -4131,7 +4151,10 @@ const DB = {
       users = u || [];
     } else {
       const db = loadLocalDb();
-      bookings = db.bookings || [];
+      bookings = (db.bookings || []).filter(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        return lead && !lead.deleted_at;
+      });
       if (employeeId) {
         bookings = bookings.filter(b => b.executive_id === employeeId);
       }
@@ -4186,7 +4209,7 @@ const DB = {
     if (this.isCloud()) {
       const { data: u } = await supabase.from('users').select('id, full_name, username, status, commission_percentage').eq('role', 'employee');
       users = u || [];
-      const { data: l } = await supabase.from('leads').select('id, assigned_employee_id, status');
+      const { data: l } = await supabase.from('leads').select('id, assigned_employee_id, status').is('deleted_at', null);
       leads = l || [];
       const { data: c } = await supabase.from('call_logs').select('caller_id, response');
       callLogs = c || [];
@@ -4194,18 +4217,21 @@ const DB = {
       reminders = r || [];
       const { data: v } = await supabase.from('site_visits').select('id, lead_id, outcome');
       siteVisits = v || [];
-      const { data: b } = await supabase.from('bookings').select('id, lead_id, executive_id');
+      const { data: b } = await supabase.from('bookings').select('id, lead_id, executive_id, leads!inner(*)').is('leads.deleted_at', null);
       bookings = b || [];
       const { data: p } = await supabase.from('payments').select('amount_received, booking_id');
       payments = p || [];
     } else {
       const db = loadLocalDb();
       users = (db.users || []).filter(u => u.role === 'employee');
-      leads = db.leads || [];
+      leads = (db.leads || []).filter(l => !l.deleted_at);
       callLogs = db.call_logs || [];
       reminders = db.reminders || [];
       siteVisits = db.site_visits || [];
-      bookings = db.bookings || [];
+      bookings = (db.bookings || []).filter(b => {
+        const lead = db.leads.find(l => l.id === b.lead_id);
+        return lead && !lead.deleted_at;
+      });
       payments = db.payments || [];
     }
 
@@ -4446,7 +4472,7 @@ const DB = {
     
     if (this.isCloud()) {
       const [lRes, cRes, wRes, sRes, bRes, pRes, eRes, rRes] = await Promise.all([
-        supabase.from('leads').select('*'),
+        supabase.from('leads').select('*').is('deleted_at', null),
         supabase.from('call_logs').select('*'),
         supabase.from('whatsapp_messages').select('*'),
         supabase.from('site_visits').select('*'),
@@ -4466,7 +4492,7 @@ const DB = {
       reminders = rRes.data || [];
     } else {
       const db = loadLocalDb();
-      leads = db.leads || [];
+      leads = (db.leads || []).filter(l => !l.deleted_at);
       callLogs = db.call_logs || [];
       whatsappMsgs = db.whatsapp_messages || [];
       siteVisits = db.site_visits || [];
@@ -4475,6 +4501,19 @@ const DB = {
       employees = db.users || [];
       reminders = db.reminders || [];
     }
+
+    const activeLeadIds = new Set(leads.map(l => l.id));
+    callLogs = callLogs.filter(c => activeLeadIds.has(c.lead_id));
+    whatsappMsgs = whatsappMsgs.filter(w => activeLeadIds.has(w.lead_id));
+    siteVisits = siteVisits.filter(v => activeLeadIds.has(v.lead_id));
+    bookings = bookings.filter(b => activeLeadIds.has(b.lead_id));
+    reminders = reminders.filter(r => activeLeadIds.has(r.lead_id));
+    const activeBookingIds = new Set(bookings.map(b => b.id));
+    payments = payments.filter(p => {
+      if (p.booking_id) return activeBookingIds.has(p.booking_id);
+      if (p.bookings) return activeBookingIds.has(p.bookings.id);
+      return false;
+    });
     
     // 1. Role filtering
     if (role === 'employee' && userId) {
@@ -4691,7 +4730,7 @@ const DB = {
       if (remError) throw remError;
 
       // 2. Fetch leads for virtual tasks
-      let leadsQuery = supabase.from('leads').select('*');
+      let leadsQuery = supabase.from('leads').select('*').is('deleted_at', null);
       if (role === 'employee' && userId) {
         leadsQuery = leadsQuery.eq('assigned_employee_id', userId);
       }
@@ -4704,15 +4743,18 @@ const DB = {
       if (milError) throw milError;
       
       let filteredMilestones = milestones || [];
+      filteredMilestones = filteredMilestones.filter(m => m.bookings?.leads && m.bookings.leads.deleted_at === null);
       if (role === 'employee' && userId) {
-        filteredMilestones = milestones.filter(m => m.bookings?.leads?.assigned_employee_id === userId);
+        filteredMilestones = filteredMilestones.filter(m => m.bookings?.leads?.assigned_employee_id === userId);
       }
 
-      return this.assembleTasks(reminders || [], leads || [], filteredMilestones);
+      const activeReminders = (reminders || []).filter(r => r.leads && r.leads.deleted_at === null);
+
+      return this.assembleTasks(activeReminders, leads || [], filteredMilestones);
     } else {
       const db = loadLocalDb();
       let reminders = db.reminders || [];
-      let leads = db.leads || [];
+      let leads = (db.leads || []).filter(l => !l.deleted_at);
       let bookings = db.bookings || [];
       let milestones = db.booking_milestones || [];
 
@@ -4724,7 +4766,7 @@ const DB = {
       const mappedReminders = reminders.map(r => {
         const lead = leads.find(l => l.id === r.lead_id);
         return { ...r, leads: lead || null };
-      });
+      }).filter(r => r.leads !== null);
 
       let mappedMilestones = milestones.filter(m => m.status !== 'Paid').map(m => {
         const booking = bookings.find(b => b.id === m.booking_id);
@@ -4736,7 +4778,7 @@ const DB = {
           ...m,
           bookings: booking ? { ...booking, leads: lead || null } : null
         };
-      });
+      }).filter(m => m.bookings?.leads !== null);
 
       if (role === 'employee' && userId) {
         mappedMilestones = mappedMilestones.filter(m => m.bookings?.leads?.assigned_employee_id === userId);
