@@ -1,5 +1,9 @@
 {
   "appId": "com.vrindavan.estates.crm",
   "appName": "VRINDAVAN ESTATES CRM",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "url": "https://vrindavan-estates-crm-frontend.vercel.app",
+    "cleartext": true
+  }
 }

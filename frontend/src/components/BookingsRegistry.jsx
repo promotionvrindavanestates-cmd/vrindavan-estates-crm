@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Plus, Check, X, ShieldAlert, BadgeCent, FileText, Calendar, Landmark, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
 
-export default function BookingsRegistry({ currentUser }) {
+export default function BookingsRegistry({ currentUser, lastUpdated }) {
   const [bookings, setBookings] = useState([]);
   const [payments, setPayments] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -46,7 +46,7 @@ export default function BookingsRegistry({ currentUser }) {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [lastUpdated]);
 
   const fetchInitialData = async () => {
     setLoading(true);

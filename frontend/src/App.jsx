@@ -26,6 +26,7 @@ import { FaWhatsapp } from 'react-icons/fa';
 import CommandCenter from './components/CommandCenter';
 import BulkDeleteSettings from './components/BulkDeleteSettings';
 import { requestNotificationPermission, showPushNotification } from './utils/pushNotifications';
+import { subscribeToRealtime } from './utils/supabaseRealtime';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -183,6 +184,55 @@ export default function App() {
     pollAlerts();
     const timerId = setInterval(pollAlerts, 60000);
     return () => clearInterval(timerId);
+  }, [currentUser]);
+
+  // Supabase Realtime Sync hook & Offline listeners
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log('[Realtime] Setting up database listeners...');
+    const tables = ['leads', 'reminders', 'bookings', 'payments', 'call_logs', 'site_visits'];
+    const channels = [];
+
+    tables.forEach(table => {
+      const channel = subscribeToRealtime(table, (payload) => {
+        console.log(`[Realtime Update] Table ${table} modified, reloading state.`);
+        setLastUpdated(Date.now());
+        fetchCRMData();
+      });
+      channels.push(channel);
+    });
+
+    const handleOfflineSyncComplete = () => {
+      console.log('[Offline Sync] Sync completed, reloading CRM data.');
+      setLastUpdated(Date.now());
+      fetchCRMData();
+      setActiveToast({
+        title: '📶 Connection Restored',
+        body: 'Your offline edits were successfully synchronized with the cloud!'
+      });
+    };
+
+    const handleOfflineMutationQueued = (e) => {
+      setActiveToast({
+        title: '📶 Offline Mode Active',
+        body: `You are currently offline. Your ${e.detail?.method || 'edit'} has been queued and will sync when connection returns.`
+      });
+    };
+
+    window.addEventListener('offline-sync-complete', handleOfflineSyncComplete);
+    window.addEventListener('offline-mutation-queued', handleOfflineMutationQueued);
+
+    return () => {
+      console.log('[Realtime] Cleaning up database listeners...');
+      channels.forEach(ch => {
+        if (ch && typeof ch.unsubscribe === 'function') {
+          ch.unsubscribe();
+        }
+      });
+      window.removeEventListener('offline-sync-complete', handleOfflineSyncComplete);
+      window.removeEventListener('offline-mutation-queued', handleOfflineMutationQueued);
+    };
   }, [currentUser]);
 
   // Toast Auto-Dismiss
@@ -751,6 +801,7 @@ export default function App() {
                 currentUser={currentUser}
                 onOpenLeadDrawer={handleOpenLeadDrawer}
                 onRefreshData={fetchCRMData}
+                lastUpdated={lastUpdated}
               />
             )}
 
@@ -792,6 +843,7 @@ export default function App() {
                   setSelectedLeadForHistory(lead);
                   setHistoryModalOpen(true);
                 }}
+                lastUpdated={lastUpdated}
               />
             )}
 
@@ -821,20 +873,21 @@ export default function App() {
                   setSelectedLeadForHistory(lead);
                   setHistoryModalOpen(true);
                 }}
+                lastUpdated={lastUpdated}
               />
             )}
 
             {activeTab === 'projects' && (
-              <ProjectMaster currentUser={currentUser} />
+              <ProjectMaster currentUser={currentUser} lastUpdated={lastUpdated} />
             )}
 
             {activeTab === 'bookings' && (
-              <BookingsRegistry currentUser={currentUser} />
+              <BookingsRegistry currentUser={currentUser} lastUpdated={lastUpdated} />
             )}
 
             {activeTab === 'payments' && (
               <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Payments...</div>}>
-                <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />
+                <CollectionDashboard currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} lastUpdated={lastUpdated} />
               </React.Suspense>
             )}
 
@@ -846,16 +899,16 @@ export default function App() {
                   <button className={`btn ${tasksSubTab === 'inventory-pipeline' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTasksSubTab('inventory-pipeline')} style={{ padding: '6px 12px', fontSize: '12px' }}>Inventory Pipeline</button>
                 </div>
                 <div>
-                  {tasksSubTab === 'leads-pipeline' && <LeadPipeline currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} />}
-                  {tasksSubTab === 'booking-pipeline' && <BookingPipeline currentUser={currentUser} />}
-                  {tasksSubTab === 'inventory-pipeline' && <InventoryPipeline currentUser={currentUser} />}
+                  {tasksSubTab === 'leads-pipeline' && <LeadPipeline currentUser={currentUser} onOpenLeadDrawer={handleOpenLeadDrawer} lastUpdated={lastUpdated} />}
+                  {tasksSubTab === 'booking-pipeline' && <BookingPipeline currentUser={currentUser} lastUpdated={lastUpdated} />}
+                  {tasksSubTab === 'inventory-pipeline' && <InventoryPipeline currentUser={currentUser} lastUpdated={lastUpdated} />}
                 </div>
               </div>
             )}
 
             {activeTab === 'reports' && (
               <React.Suspense fallback={<div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Loading Reports...</div>}>
-                <ReportsAnalytics currentUser={currentUser} onDrillDown={handleDrillDown} />
+                <ReportsAnalytics currentUser={currentUser} onDrillDown={handleDrillDown} lastUpdated={lastUpdated} />
               </React.Suspense>
             )}
 
@@ -863,11 +916,12 @@ export default function App() {
               <EmployeeMgmt 
                 employees={employees} 
                 onRefreshEmployees={fetchCRMData} 
+                lastUpdated={lastUpdated}
               />
             )}
 
             {activeTab === 'recycle-bin' && currentUser.role === 'admin' && (
-              <LeadTable currentUser={currentUser} defaultShowRecycleBin={true} />
+              <LeadTable currentUser={currentUser} defaultShowRecycleBin={true} lastUpdated={lastUpdated} />
             )}
 
             {activeTab === 'settings' && (

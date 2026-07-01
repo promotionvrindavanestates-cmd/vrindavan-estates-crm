@@ -16,7 +16,8 @@ export default function LeadTable({
   onLogCall,
   onAssignLead,
   onViewHistory,
-  defaultShowRecycleBin = false
+  defaultShowRecycleBin = false,
+  lastUpdated
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
@@ -224,7 +225,16 @@ export default function LeadTable({
       });
 
       if (data && typeof data === 'object' && !Array.isArray(data)) {
-        setLeadsState(data.leads || []);
+        const newLeads = data.leads || [];
+        if (currentPage === 1) {
+          setLeadsState(newLeads);
+        } else {
+          setLeadsState(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const uniqueNewLeads = newLeads.filter(item => !existingIds.has(item.id));
+            return [...prev, ...uniqueNewNewLeads];
+          });
+        }
         setTotalCount(data.total || 0);
         setTotalPages(data.pages || 1);
       } else {
@@ -279,8 +289,17 @@ export default function LeadTable({
     currentPage,
     limit,
     leads.length,
-    showRecycleBin
+    showRecycleBin,
+    lastUpdated
   ]);
+
+  const handleTableScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop - clientHeight < 80 && !loadingLeads && currentPage < totalPages) {
+      console.log(`[Infinite Scroll] Near bottom. Loading page ${currentPage + 1}...`);
+      setCurrentPage(prev => prev + 1);
+    }
+  };
 
   // Server-side filtered and paginated leads (filtered optimistically for background deletions)
   const filteredLeads = leadsState.filter(l => !deletingLeadIds.includes(l.id));
@@ -491,7 +510,7 @@ export default function LeadTable({
     if (targets.length === 0) return;
 
     setBulkDeleting(true);
-    setLeads(prev => prev.filter(l => !targets.includes(l.id)));
+    setLeadsState(prev => prev.filter(l => !targets.includes(l.id)));
     setTotalCount(prev => Math.max(0, prev - targets.length));
     setSelectedLeadIds([]);
 
@@ -525,8 +544,21 @@ export default function LeadTable({
       
       showToast(`⚡ Deletion queued. Job ID: ${jobId}`, 'info');
       
+      let pollCount = 0;
+      const timeoutSeconds = 10;
+      
       // Start polling background worker progress
       const interval = setInterval(async () => {
+        pollCount++;
+        if (pollCount > timeoutSeconds) {
+          clearInterval(interval);
+          setBulkDeleting(false);
+          setDeletingLeadIds([]);
+          showToast('Delete request timed out.', 'error');
+          fetchLeads();
+          return;
+        }
+
         try {
           const job = await api.getBulkJobStatus(jobId);
           if (job.status === 'completed' || job.status === 'failed' || job.status === 'completed_with_errors') {
@@ -625,6 +657,7 @@ export default function LeadTable({
           clearInterval(interval);
           setBulkDeleting(false);
           setDeletingLeadIds([]);
+          showToast(`Error polling delete job: ${pollErr.message || pollErr}`, 'error');
           fetchLeads();
         }
       }, 1000);
@@ -1192,7 +1225,7 @@ export default function LeadTable({
           </div>
         </div>
 
-        <div class="table-container">
+        <div class="table-container" onScroll={handleTableScroll} style={{ maxHeight: '70vh', overflowY: 'auto' }}>
           {filteredLeads.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
               No leads match the filters. {showRecycleBin ? 'Recycle Bin is empty.' : 'Click "Add Lead" to create a new one.'}
@@ -1227,256 +1260,53 @@ export default function LeadTable({
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map(l => {
-                  const isRowSelected = selectedLeadIds.includes(l.id);
-                  return (
-                    <tr key={l.id} style={{ background: isRowSelected ? 'rgba(219, 178, 93, 0.05)' : 'inherit' }}>
-                      {currentUser.role === 'admin' && (
-                        <td style={{ textAlign: 'center' }}>
-                          <button 
-                            type="button" 
-                            style={{ background: 'none', border: 'none', color: isRowSelected ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
-                            onClick={() => handleToggleSelectRow(l.id)}
-                          >
-                            {isRowSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                          </button>
-                        </td>
-                      )}
-                      
-                      <td data-label="Lead Info">
-                        <div 
-                          style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--primary)' }}
-                          onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
-                          title="Click to view details side drawer"
-                        >
-                          {l.cp_code && (
-                            <span 
-                              style={{ 
-                                padding: '2px 6px', 
-                                borderRadius: '4px', 
-                                border: '1px solid #D4AF37', 
-                                background: 'rgba(212,175,55,0.1)', 
-                                color: '#D4AF37', 
-                                fontSize: '10px', 
-                                fontWeight: 'bold', 
-                                marginRight: '6px',
-                                display: 'inline-block',
-                                letterSpacing: '0.5px',
-                                textShadow: '0 0 5px rgba(212,175,55,0.2)'
-                              }}
-                            >
-                              CP:{l.cp_code}
-                            </span>
-                          )}
-                          {l.name}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px' }}>Src: {l.lead_source || 'Website'}</div>
-                      </td>
-                      
-                      <td data-label="Contact Info">
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div><strong>P1:</strong> {l.phone1}</div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' }}>
-                            <button 
-                              className="call-action-btn" 
-                              onClick={() => handleCallClick(l.phone1, l)}
-                              title="Call Lead"
-                            >
-                              📞 Call
-                            </button>
-                            <button 
-                              className="whatsapp-action-btn" 
-                              onClick={() => handleWhatsAppClick(l.phone1, l)}
-                              title="WhatsApp Customer"
-                            >
-                              <FaWhatsapp size={14} /> WhatsApp
-                            </button>
-                            <button 
-                              className="open-action-btn" 
-                              onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
-                              title="Open Lead"
-                            >
-                              👁 Open
-                            </button>
-                          </div>
-                          
-                          {l.phone2 && (
-                            <>
-                              <div style={{ marginTop: '4px' }}><strong>P2:</strong> {l.phone2}</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                <button 
-                                  className="call-action-btn" 
-                                  onClick={() => handleCallClick(l.phone2, l)}
-                                  title="Call Lead Phone 2"
-                                >
-                                  📞 Call
-                                </button>
-                                <button 
-                                  className="whatsapp-action-btn" 
-                                  onClick={() => handleWhatsAppClick(l.phone2, l)}
-                                  title="WhatsApp Customer Phone 2"
-                                >
-                                  <FaWhatsapp size={14} /> WhatsApp
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {(l.last_call_date || l.last_response) && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                            Last: {l.last_response || 'Call'} ({l.last_call_date ? new Date(l.last_call_date).toLocaleDateString() : 'N/A'})
-                          </div>
-                        )}
-                      </td>
-                      
-                      <td data-label="Budget & Project">
-                        <div style={{ fontWeight: 500 }}>{l.project || 'Unspecified Project'}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Budget: {l.budget || 'N/A'}</div>
-                      </td>
-                      
-                      <td data-label="Requirement & Comments" style={{ maxWidth: '280px' }}>
-                        <div style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.requirement}>
-                          {l.requirement || <span style={{ color: 'var(--text-muted)' }}>No requirement notes</span>}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.comments}>
-                          Comment: {l.comments || 'None'}
-                        </div>
-                      </td>
-                      
-                      <td data-label="Status">
-                        <span class={getStatusBadgeClass(l.status)}>{l.status}</span>
-                        {l.site_visit_status && l.site_visit_status !== 'None' && (
-                          <div style={{ marginTop: '4px' }}>
-                            <span class="badge badge-info" style={{ fontSize: '9px', padding: '2px 6px' }}>Visit: {l.site_visit_status}</span>
-                          </div>
-                        )}
-                        {l.booking_status && l.booking_status !== 'None' && (
-                          <div style={{ marginTop: '4px' }}>
-                            <span class="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px' }}>Booked ({l.booking_status})</span>
-                          </div>
-                        )}
-                      </td>
-                      
-                      <td data-label="Follow Up">
-                        {l.follow_up_date ? (
-                          <span style={{ 
-                            color: l.follow_up_date < new Date().toLocaleDateString('en-CA') && l.booking_status !== 'Confirmed' ? 'var(--color-hot)' : 'inherit',
-                            fontWeight: 500
-                          }}>
-                            {l.follow_up_date}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>Not scheduled</span>
-                        )}
-                      </td>
-                      
-                      <td data-label="Assigned To">
-                        {l.assigned_employee ? (
-                          <span>{l.assigned_employee.full_name}</span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Unassigned</span>
-                        )}
-                        {currentUser.role === 'admin' && (
-                          <button 
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--primary)',
-                              cursor: 'pointer',
-                              marginLeft: '6px',
-                              verticalAlign: 'middle'
-                            }} 
-                            title="Reassign Employee"
-                            onClick={() => onAssignLead(l)}
-                          >
-                            <UserPlus size={14} />
-                          </button>
-                        )}
-                      </td>
-                      
-                      <td data-label="Actions" style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '8px' }}>
-                          {!showRecycleBin ? (
-                            <>
-                              <button 
-                                class="action-icon-btn" 
-                                title="WhatsApp Customer"
-                                onClick={() => handleWhatsAppClick(l.phone1 || l.phone2 || '', l)}
-                              >
-                                <FaWhatsapp size={14} style={{ color: '#25D366' }} />
-                              </button>
-                              <button 
-                                class="action-icon-btn" 
-                                title="Edit Lead"
-                                onClick={() => onEditLead(l)}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              {currentUser.role === 'admin' && (
-                                <button 
-                                  class="action-icon-btn" 
-                                  style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
-                                  title="Move to Recycle Bin"
-                                  onClick={async () => {
-                                    setLeads(prev => prev.filter(item => item.id !== l.id));
-                                    setTotalCount(prev => Math.max(0, prev - 1));
-                                    showToast('✅ Lead moved to Recycle Bin', 'success');
-                                    try {
-                                      await api.deleteLeadsBulk([l.id], false);
-                                      fetchLeads();
-                                    } catch (err) {
-                                      showToast('Failed to delete lead', 'error');
-                                      fetchLeads();
-                                    }
-                                  }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <button 
-                                class="action-icon-btn" 
-                                title="Restore Lead"
-                                style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.15)', background: 'none' }}
-                                onClick={async () => {
-                                  setLeads(prev => prev.filter(item => item.id !== l.id));
-                                  setTotalCount(prev => Math.max(0, prev - 1));
-                                  showToast('✅ Lead restored to Leads Directory', 'success');
-                                  try {
-                                    await api.restoreLeadsBulk([l.id]);
-                                    fetchLeads();
-                                  } catch (err) {
-                                    showToast('Failed to restore lead', 'error');
-                                    fetchLeads();
-                                  }
-                                }}
-                              >
-                                ♻️
-                              </button>
-                              <button 
-                                class="action-icon-btn" 
-                                title="Delete Permanently"
-                                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.15)', background: 'none' }}
-                                onClick={() => {
-                                  setSelectedLeadIds([l.id]);
-                                  setIsPermanentDelete(true);
-                                  setDeleteConfirmTypedText('');
-                                  setDeleteConfirmOpen(true);
-                                }}
-                              >
-                                💀
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredLeads.map(l => (
+                  <LeadRowKeyed
+                    key={l.id}
+                    lead={l}
+                    isRowSelected={selectedLeadIds.includes(l.id)}
+                    currentUser={currentUser}
+                    showRecycleBin={showRecycleBin}
+                    getStatusBadgeClass={getStatusBadgeClass}
+                    formatPhoneNumber={formatPhoneNumber}
+                    handleToggleSelectRow={handleToggleSelectRow}
+                    onOpenLeadDrawer={onOpenLeadDrawer}
+                    onAssignLead={onAssignLead}
+                    onEditLead={onEditLead}
+                    onDeleteLeadSingle={async () => {
+                      setLeadsState(prev => prev.filter(item => item.id !== l.id));
+                      setTotalCount(prev => Math.max(0, prev - 1));
+                      showToast('✅ Lead moved to Recycle Bin', 'success');
+                      try {
+                        await api.deleteLeadsBulk([l.id], false);
+                        fetchLeads();
+                      } catch (err) {
+                        showToast('Failed to delete lead', 'error');
+                        fetchLeads();
+                      }
+                    }}
+                    onRestoreLeadSingle={async () => {
+                      setLeadsState(prev => prev.filter(item => item.id !== l.id));
+                      setTotalCount(prev => Math.max(0, prev - 1));
+                      showToast('✅ Lead restored to Leads Directory', 'success');
+                      try {
+                        await api.restoreLeadsBulk([l.id]);
+                        fetchLeads();
+                      } catch (err) {
+                        showToast('Failed to restore lead', 'error');
+                        fetchLeads();
+                      }
+                    }}
+                    onPermanentDeleteSingle={() => {
+                      setSelectedLeadIds([l.id]);
+                      setIsPermanentDelete(true);
+                      setDeleteConfirmTypedText('');
+                      setDeleteConfirmOpen(true);
+                    }}
+                    handleWhatsAppClick={handleWhatsAppClick}
+                    handleCallClick={handleCallClick}
+                  />
+                ))}
               </tbody>
             </table>
           )}
@@ -2284,3 +2114,242 @@ export default function LeadTable({
     </div>
   );
 }
+
+const LeadRowKeyed = React.memo(({
+  lead: l,
+  isRowSelected,
+  currentUser,
+  showRecycleBin,
+  getStatusBadgeClass,
+  formatPhoneNumber,
+  handleToggleSelectRow,
+  onOpenLeadDrawer,
+  onAssignLead,
+  onEditLead,
+  onDeleteLeadSingle,
+  onRestoreLeadSingle,
+  onPermanentDeleteSingle,
+  handleWhatsAppClick,
+  handleCallClick
+}) => {
+  return (
+    <tr style={{ background: isRowSelected ? 'rgba(219, 178, 93, 0.05)' : 'inherit' }}>
+      {currentUser.role === 'admin' && (
+        <td style={{ textAlign: 'center' }}>
+          <button 
+            type="button" 
+            style={{ background: 'none', border: 'none', color: isRowSelected ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+            onClick={() => handleToggleSelectRow(l.id)}
+          >
+            {isRowSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </button>
+        </td>
+      )}
+      
+      <td data-label="Lead Info">
+        <div 
+          style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--primary)' }}
+          onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
+          title="Click to view details side drawer"
+        >
+          {l.cp_code && (
+            <span 
+              style={{ 
+                padding: '2px 6px', 
+                borderRadius: '4px', 
+                border: '1px solid #D4AF37', 
+                background: 'rgba(212,175,55,0.1)', 
+                color: '#D4AF37', 
+                fontSize: '10px', 
+                fontWeight: 'bold', 
+                marginRight: '6px',
+                display: 'inline-block',
+                letterSpacing: '0.5px',
+                textShadow: '0 0 5px rgba(212,175,55,0.2)'
+              }}
+            >
+              CP:{l.cp_code}
+            </span>
+          )}
+          {l.name}
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>City: {l.city || 'N/A'}</div>
+        <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '2px' }}>Src: {l.lead_source || 'Website'}</div>
+      </td>
+      
+      <td data-label="Contact Info">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div><strong>P1:</strong> {l.phone1}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' }}>
+            <button 
+              className="call-action-btn" 
+              onClick={() => handleCallClick(l.phone1, l)}
+              title="Call Lead"
+            >
+              📞 Call
+            </button>
+            <button 
+              className="whatsapp-action-btn" 
+              onClick={() => handleWhatsAppClick(l.phone1, l)}
+              title="WhatsApp Customer"
+            >
+              <FaWhatsapp size={14} /> WhatsApp
+            </button>
+            <button 
+              className="open-action-btn" 
+              onClick={() => onOpenLeadDrawer && onOpenLeadDrawer(l.id)}
+              title="Open Lead"
+            >
+              👁 Open
+            </button>
+          </div>
+          
+          {l.phone2 && (
+            <>
+              <div style={{ marginTop: '4px' }}><strong>P2:</strong> {l.phone2}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                <button 
+                  className="call-action-btn" 
+                  onClick={() => handleCallClick(l.phone2, l)}
+                  title="Call Lead Phone 2"
+                >
+                  📞 Call
+                </button>
+                <button 
+                  className="whatsapp-action-btn" 
+                  onClick={() => handleWhatsAppClick(l.phone2, l)}
+                  title="WhatsApp Customer Phone 2"
+                >
+                  <FaWhatsapp size={14} /> WhatsApp
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        
+        {(l.last_call_date || l.last_response) && (
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Last: {l.last_response || 'Call'} ({l.last_call_date ? new Date(l.last_call_date).toLocaleDateString() : 'N/A'})
+          </div>
+        )}
+      </td>
+      
+      <td data-label="Budget & Project">
+        <div style={{ fontWeight: 500 }}>{l.project || 'Unspecified Project'}</div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Budget: {l.budget || 'N/A'}</div>
+      </td>
+      
+      <td data-label="Requirement & Comments" style={{ maxWidth: '280px' }}>
+        <div style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.requirement}>
+          {l.requirement || <span style={{ color: 'var(--text-muted)' }}>No requirement notes</span>}
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.comments}>
+          Comment: {l.comments || 'None'}
+        </div>
+      </td>
+      
+      <td data-label="Status">
+        <span className={getStatusBadgeClass(l.status)}>{l.status}</span>
+        {l.site_visit_status && l.site_visit_status !== 'None' && (
+          <div style={{ marginTop: '4px' }}>
+            <span className="badge badge-info" style={{ fontSize: '9px', padding: '2px 6px' }}>Visit: {l.site_visit_status}</span>
+          </div>
+        )}
+        {l.booking_status && l.booking_status !== 'None' && (
+          <div style={{ marginTop: '4px' }}>
+            <span className="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px' }}>Booked ({l.booking_status})</span>
+          </div>
+        )}
+      </td>
+      
+      <td data-label="Follow Up">
+        {l.follow_up_date ? (
+          <span style={{ 
+            color: l.follow_up_date < new Date().toLocaleDateString('en-CA') && l.booking_status !== 'Confirmed' ? 'var(--color-hot)' : 'inherit',
+            fontWeight: 500
+          }}>
+            {l.follow_up_date}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--text-muted)' }}>Not scheduled</span>
+        )}
+      </td>
+      
+      <td data-label="Assigned To">
+        {l.assigned_employee ? (
+          <span>{l.assigned_employee.full_name}</span>
+        ) : (
+          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Unassigned</span>
+        )}
+        {currentUser.role === 'admin' && (
+          <button 
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--primary)',
+              cursor: 'pointer',
+              marginLeft: '6px',
+              verticalAlign: 'middle'
+            }} 
+            title="Reassign Employee"
+            onClick={() => onAssignLead(l)}
+          >
+            <UserPlus size={14} />
+          </button>
+        )}
+      </td>
+      
+      <td data-label="Actions" style={{ textAlign: 'right' }}>
+        <div style={{ display: 'inline-flex', gap: '8px' }}>
+          {!showRecycleBin ? (
+            <>
+              <button 
+                className="action-icon-btn" 
+                title="WhatsApp Customer"
+                onClick={() => handleWhatsAppClick(l.phone1 || l.phone2 || '', l)}
+              >
+                <FaWhatsapp size={14} style={{ color: '#25D366' }} />
+              </button>
+              <button 
+                className="action-icon-btn" 
+                title="Edit Lead"
+                onClick={() => onEditLead(l)}
+              >
+                <Edit2 size={14} />
+              </button>
+              {currentUser.role === 'admin' && (
+                <button 
+                  className="action-icon-btn" 
+                  style={{ color: 'var(--color-hot)', borderColor: 'rgba(255,94,94,0.1)' }}
+                  title="Move to Recycle Bin"
+                  onClick={onDeleteLeadSingle}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button 
+                className="action-icon-btn" 
+                title="Restore Lead"
+                style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.15)', background: 'none' }}
+                onClick={onRestoreLeadSingle}
+              >
+                ♻️
+              </button>
+              <button 
+                className="action-icon-btn" 
+                title="Delete Permanently"
+                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.15)', background: 'none' }}
+                onClick={onPermanentDeleteSingle}
+              >
+                💀
+              </button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});

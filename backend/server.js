@@ -334,7 +334,7 @@ app.delete('/api/leads/bulk', authenticateToken, requireAdmin, async (req, res) 
       await DB.createReminder({
         lead_id: null,
         title: 'Bulk Delete Completed',
-        type: 'System',
+        type: 'Follow-up',
         reminder_date: new Date().toLocaleDateString('en-CA'),
         reminder_time: new Date().toTimeString().split(' ')[0],
         notes: `Bulk deletion processed. ${result.deletedCount} leads deleted successfully. Failed: ${result.failed}.`,
@@ -397,7 +397,7 @@ app.post('/api/leads/bulk-restore', authenticateToken, requireAdmin, async (req,
       await DB.createReminder({
         lead_id: null,
         title: 'Bulk Restore Completed',
-        type: 'System',
+        type: 'Follow-up',
         reminder_date: new Date().toLocaleDateString('en-CA'),
         reminder_time: new Date().toTimeString().split(' ')[0],
         notes: `Bulk restoration processed. ${result.restoredCount} leads restored successfully. Failed: ${result.failed}.`,
@@ -464,7 +464,7 @@ app.put('/api/leads/bulk-status', authenticateToken, requireAdmin, async (req, r
       await DB.createReminder({
         lead_id: null,
         title: 'Bulk Status Update Completed',
-        type: 'System',
+        type: 'Follow-up',
         reminder_date: new Date().toLocaleDateString('en-CA'),
         reminder_time: new Date().toTimeString().split(' ')[0],
         notes: `Bulk status update processed. ${result.updatedCount} leads updated successfully. Failed: ${result.failed}.`,
@@ -503,7 +503,7 @@ app.delete('/api/leads/recycle-bin/empty', authenticateToken, requireAdmin, asyn
     await DB.createReminder({
       lead_id: null,
       title: 'Recycle Bin Emptied',
-      type: 'System',
+      type: 'Follow-up',
       reminder_date: new Date().toLocaleDateString('en-CA'),
       reminder_time: new Date().toTimeString().split(' ')[0],
       notes: `Recycle Bin emptied. ${result.deletedCount} leads permanently purged.`,

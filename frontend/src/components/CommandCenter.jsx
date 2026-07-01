@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 import { Phone, Clock, MessageSquare, Plus, CheckCircle, Calendar, RefreshCw, BarChart2, Award, Users, AlertTriangle, TrendingUp, Compass, Search, Filter, ArrowRight, User, MapPin, DollarSign, Award as Trophy, FolderOpen, MoreVertical, Bell, Sun, Moon } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 
-export default function CommandCenter({ leads = [], employees = [], currentUser, onOpenLeadDrawer, onRefreshData }) {
+export default function CommandCenter({ leads = [], employees = [], currentUser, onOpenLeadDrawer, onRefreshData, lastUpdated }) {
   const [tasks, setTasks] = useState([]);
   const [targets, setTargets] = useState(null);
   const [performance, setPerformance] = useState([]);
@@ -63,7 +63,7 @@ export default function CommandCenter({ leads = [], employees = [], currentUser,
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [lastUpdated]);
 
   // Format date headers: e.g. "02 July 2026 Wednesday"
   const formatDateHeader = (dateStr) => {

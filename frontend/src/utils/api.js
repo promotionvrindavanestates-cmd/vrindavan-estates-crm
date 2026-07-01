@@ -32,6 +32,85 @@ export const setAuthToken = (newToken) => {
 const cache = {};
 const CACHE_TTL = 60000; // 60 seconds
 
+// Offline sync queue and caching config
+const OFFLINE_QUEUE_KEY = 'offline_mutations_queue';
+const CACHE_PREFIX = 'offline_cache:';
+
+const getOfflineQueue = () => {
+  try {
+    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+};
+
+const saveOfflineQueue = (queue) => {
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+};
+
+const queueOfflineMutation = (url, options) => {
+  const queue = getOfflineQueue();
+  queue.push({
+    url,
+    options: {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      }
+    },
+    id: Date.now() + Math.random(),
+    timestamp: Date.now()
+  });
+  saveOfflineQueue(queue);
+  console.log(`[Offline Queue] Mutation queued: ${options.method || 'POST'} ${url}`);
+  
+  // Notify UI
+  window.dispatchEvent(new CustomEvent('offline-mutation-queued', { detail: { method: options.method || 'POST', url } }));
+};
+
+export const syncOfflineMutations = async () => {
+  if (!navigator.onLine) return;
+  const queue = getOfflineQueue();
+  if (queue.length === 0) return;
+
+  console.log(`[Offline Sync] Syncing ${queue.length} offline mutations...`);
+  saveOfflineQueue([]); // Clear temp
+
+  for (const item of queue) {
+    try {
+      console.log(`[Offline Sync] Sending queued mutation: ${item.options.method} ${item.url}`);
+      const headers = {
+        'Content-Type': 'application/json',
+        ...item.options.headers
+      };
+      
+      const response = await fetch(`${getBaseUrl()}${item.url}`, {
+        ...item.options,
+        headers
+      });
+
+      if (!response.ok) {
+        throw new Error(`Sync failed with status: ${response.status}`);
+      }
+      console.log(`[Offline Sync] Queued mutation succeeded: ${item.url}`);
+    } catch (err) {
+      console.error(`[Offline Sync] Failed to sync mutation: ${item.url}. Re-queueing.`, err);
+      const currentQueue = getOfflineQueue();
+      currentQueue.unshift(item); // Re-insert at front
+      saveOfflineQueue(currentQueue);
+      return; // Stop sync to keep order
+    }
+  }
+
+  console.log('[Offline Sync] Sync complete!');
+  window.dispatchEvent(new CustomEvent('offline-sync-complete'));
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', syncOfflineMutations);
+}
+
 const request = async (url, options = {}) => {
   const method = options.method || 'GET';
 
@@ -42,12 +121,19 @@ const request = async (url, options = {}) => {
     }
   }
 
+  // Offline capability check
+  if (!navigator.onLine && method !== 'GET') {
+    queueOfflineMutation(url, options);
+    return { success: true, offline: true, message: 'Action queued offline' };
+  }
+
   const cacheKey = `${method}:${url}:${options.body || ''}`;
   if (method === 'GET' && (
     url.includes('/api/dashboard/widgets') ||
     url.includes('/api/dashboard/advanced') ||
     url.includes('/api/notifications/alerts') ||
-    url.includes('/api/reminders')
+    url.includes('/api/reminders') ||
+    (url.includes('/api/leads') && !url.includes('/job/'))
   )) {
     const cached = cache[cacheKey];
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
@@ -68,19 +154,32 @@ const request = async (url, options = {}) => {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${getBaseUrl()}${url}`, {
-      ...options,
-      headers,
-    });
+    let response;
+    try {
+      response = await fetch(`${getBaseUrl()}${url}`, {
+        ...options,
+        headers,
+      });
+    } catch (fetchErr) {
+      if (method === 'GET') {
+        const localCacheData = localStorage.getItem(`${CACHE_PREFIX}${url}`);
+        if (localCacheData) {
+          console.log(`[Offline Cache Fallback] Serving cached data for: ${url}`);
+          return JSON.parse(localCacheData);
+        }
+      } else {
+        queueOfflineMutation(url, options);
+        return { success: true, offline: true, message: 'Action queued offline' };
+      }
+      throw fetchErr;
+    }
 
     if (response.status === 401 || response.status === 403) {
-      // Session expired or unauthorized, logout
       setAuthToken('');
       window.location.reload();
       throw new Error('Session expired. Please log in again.');
     }
 
-    // Handle binary downloads (xlsx/csv export)
     const contentType = response.headers.get('content-type');
     if (contentType && (contentType.includes('sheet') || contentType.includes('csv'))) {
       if (!response.ok) throw new Error('File download failed');
@@ -90,6 +189,15 @@ const request = async (url, options = {}) => {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || 'Request failed');
+    }
+
+    // Save to offline cache
+    if (method === 'GET' && !url.includes('/job/')) {
+      try {
+        localStorage.setItem(`${CACHE_PREFIX}${url}`, JSON.stringify(data));
+      } catch (cacheErr) {
+        console.warn('Failed to write to localStorage offline cache:', cacheErr);
+      }
     }
 
     // Cache the response
