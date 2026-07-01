@@ -238,9 +238,9 @@ export const api = {
     }),
 
   // Leads
-  getLeads: (params = {}) => {
+  getLeads: async (params = {}) => {
     const query = new URLSearchParams();
-    const limit = params.limit !== undefined ? params.limit : 20;
+    const limit = params.limit !== undefined ? params.limit : (params.page !== undefined ? 20 : 100000);
     query.append('limit', limit);
     Object.keys(params).forEach(key => {
       if (key !== 'limit' && params[key] !== undefined && params[key] !== null && params[key] !== '') {
@@ -248,7 +248,11 @@ export const api = {
       }
     });
     const queryString = query.toString();
-    return request(`/api/leads${queryString ? `?${queryString}` : ''}`);
+    const res = await request(`/api/leads${queryString ? `?${queryString}` : ''}`);
+    if (params.page !== undefined || params.limit !== undefined) {
+      return res;
+    }
+    return (res && res.leads) ? res.leads : res;
   },
 
   getLeadById: (id) => request(`/api/leads/${id}`),
